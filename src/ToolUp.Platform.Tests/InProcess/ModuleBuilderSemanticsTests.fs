@@ -72,8 +72,8 @@ let private flag (key: string) : FeatureFlag = {
 
 let private clientModule () =
     ClientModule.create {
-        Init = fun () -> (), Cmd.none
-        Update = fun () () -> (), Cmd.none
+        Init = fun () -> (), []
+        Update = fun () () -> (), []
         Name = "Builder"
         Icon = Unchecked.defaultof<ReactElement>
     }

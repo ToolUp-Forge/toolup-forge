@@ -4,6 +4,7 @@
 module ToolUp.Platform.ModuleEvents
 
 open System.Collections.Generic
+open Fuaran.MVU
 open ToolUp.Elmish
 
 let private log = Logger.forCategory "client.module-events"
@@ -18,10 +19,10 @@ let private log = Logger.forCategory "client.module-events"
 // publisher mutating its own state has no way to nudge a sibling
 // module whose already-loaded model has gone stale as a result.
 //
-// The bus closes that gap. A module publishes by returning a `Cmd`
-// from its `update` (so the publish stays MVU-pure — the side
-// effect runs in the Cmd-execution phase, never in the pure update
-// body); the shell subscribes to the bus once at boot and fans each
+// The bus closes that gap. A module publishes by returning the step
+// `publish` builds from its `update` (so the publish stays MVU-pure —
+// the side effect runs when the step is performed, never in the pure
+// update body); the shell subscribes to the bus once at boot and fans each
 // publication out to every module that declared a matching
 // subscription via `ClientModule.withEventSubscription`. Delivery
 // reaches a subscriber through its own normal `update` loop — the
@@ -39,7 +40,7 @@ let private log = Logger.forCategory "client.module-events"
 // startup and disposes it on program teardown (the boot effect is a
 // lifetime-aware `EffectHandle`). Subscriber exceptions are
 // swallowed (with a console warning where one exists) so a buggy
-// listener can never break the publishing module's Cmd execution.
+// listener can never break the publishing module's step.
 
 /// Listener invoked for every publication. Receives the event topic
 /// and its string payload. Registered by the shell at boot; consumer
@@ -60,12 +61,13 @@ let subscribe (callback: Listener) : unit -> unit =
     listeners.Add(callback)
     fun () -> listeners.Remove(callback) |> ignore
 
-/// Internal — fire every registered listener with the topic + payload.
-/// Invoked by the effect inside `publish`; not part of the consumer
-/// surface. Iterates a snapshot so a listener that (un)subscribes
-/// during delivery can't disturb the in-flight iteration. Swallows
-/// listener exceptions so one bad subscriber can't break the rest.
-let internal fire (topic: string) (payload: string) : unit =
+/// Fire every registered listener with the topic and payload, now: for
+/// an event handler in a view, which runs outside any `update`. An
+/// `update` returns `publish` instead. Iterates a snapshot so a listener
+/// that (un)subscribes during delivery can't disturb the in-flight
+/// iteration. Swallows listener exceptions so one bad subscriber can't
+/// break the rest.
+let publishNow (topic: string) (payload: string) : unit =
     for cb in listeners.ToArray() do
         try
             cb topic payload
@@ -75,13 +77,12 @@ let internal fire (topic: string) (payload: string) : unit =
             with _ ->
                 ()
 
-/// Publish a named event from a module's `update`. Returns a `Cmd`
-/// that fires the bus when the Elmish runtime executes it — the
-/// publishing module's own dispatch is intentionally ignored, so the
-/// publication never re-enters the publisher's update directly
-/// (delivery reaches subscribers through the shell). Keeping publish
-/// a `Cmd` rather than a direct call preserves MVU purity: the update
-/// body stays a pure `Model -> Model * Cmd` transition.
+/// Publish a named event from a module's `update`. Returns one step, a
+/// signal that fires the bus when it is performed and answers nothing,
+/// so the publication never re-enters the publisher's update directly
+/// (delivery reaches subscribers through the shell). Keeping publish a
+/// step rather than a direct call keeps the update pure. The signal's
+/// label carries the topic and the payload, so a test can state it.
 ///
 /// `topic` is a plain string namespaced by convention (`"<app>/<event>"`
 /// or bare); `payload` carries any string the subscriber needs (pass
@@ -93,6 +94,6 @@ let internal fire (topic: string) (payload: string) : unit =
 /// // in a module's update:
 /// | BatchCompleted -> { model with Pending = 0 }, ModuleEvents.publish "myapp/batch-done" ""
 /// ```
-let publish (topic: string) (payload: string) : Cmd<'msg> = [
-    fun (_: Dispatch<'msg>) -> fire topic payload
+let publish (topic: string) (payload: string) : Step<'msg, RemoteEffect<'msg>> list = [
+    Do(RemoteEffect.signal ("ModuleEvents.publish " + topic + " " + payload) (fun () -> publishNow topic payload))
 ]

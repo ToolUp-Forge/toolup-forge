@@ -156,7 +156,7 @@ let private policyDescription (msgs: DataSubjectRequestAdminMessages) =
 
 // ─── Init / update ───────────────────────────────────────────────────
 
-let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list =
     let model = {
         ActiveTab = ExportTab
         SubjectInput = ""
@@ -173,7 +173,7 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Messages = ctx.Messages.DataSubjectRequestAdmin
     }
 
-    model, Cmd.none
+    model, []
 
 type internal Steps = Step<Msg, RemoteEffect<Msg>> list
 
@@ -411,7 +411,7 @@ let private stepBackgroundExport (msg: Msg) (model: Model) : Model * Steps =
     | _ -> model, []
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Steps =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     // The catalog is a pure input carried on the model from `init`.
     let msgs = model.Messages
 
@@ -586,9 +586,6 @@ let internal step (msg: Msg) (model: Model) : Model * Steps =
         []
 
     | DismissBanner -> { model with Banner = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ────────────────────────────────────────────────────────────
 

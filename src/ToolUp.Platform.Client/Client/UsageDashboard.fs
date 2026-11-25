@@ -71,7 +71,7 @@ let internal exportCsv (range: UsageDateRange option) : Step<Msg, RemoteEffect<M
     )
 ]
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     let now = DateTime.UtcNow
     let monthStart = DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc)
 
@@ -83,7 +83,7 @@ let init () : Model * Cmd<Msg> =
         Exporting = false
     }
 
-    (model, loadAggregate model.Grouping) |> RemoteEffect.run
+    (model, loadAggregate model.Grouping)
 
 let private downloadCsv (bytes: byte[]) =
     // Build a Blob, attach an <a download>, click it, revoke the URL.
@@ -107,7 +107,7 @@ let internal download (bytes: byte[]) : Step<Msg, RemoteEffect<Msg>> list = [
 ]
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SetGrouping g ->
         let m = {
@@ -144,9 +144,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
     | ExportComplete(Ok bytes) -> { model with Exporting = false }, download bytes
 
     | ExportComplete(Error _) -> { model with Exporting = false }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ────────────────────────────────────────────────────────
 

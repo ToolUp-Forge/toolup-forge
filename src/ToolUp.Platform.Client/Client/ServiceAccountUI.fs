@@ -148,7 +148,7 @@ let internal revokeToken (tokenId: string) : Step<Msg, RemoteEffect<Msg>> list =
 
 // ─── Init / update ───────────────────────────────────────────────────
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         Accounts = []
         SelectedAccountId = None
@@ -159,10 +159,9 @@ let init () : Model * Cmd<Msg> =
         Error = None
      },
      loadAccounts ())
-    |> RemoteEffect.run
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadAccounts -> { model with Busy = true; Error = None }, loadAccounts ()
 
@@ -297,9 +296,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
         []
 
     | DismissError -> { model with Error = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 

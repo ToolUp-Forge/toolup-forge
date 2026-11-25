@@ -49,7 +49,7 @@ let private userDirectoryTests =
     testList "UserDirectory" [
         testCase "a lookup names the ids not held yet, once each"
         <| fun () ->
-            let steps = UserDirectory.resolveSteps [ "u1"; ""; "u1"; "u2" ] UserDirectory.empty
+            let steps = UserDirectory.resolve [ "u1"; ""; "u1"; "u2" ] UserDirectory.empty
 
             same
                 (effects steps)
@@ -57,7 +57,7 @@ let private userDirectoryTests =
                 "one call, blanks and repeats dropped"
 
         testCase "nothing to resolve asks for nothing"
-        <| fun () -> same (effects (UserDirectory.resolveSteps [ "" ] UserDirectory.empty)) [] "no call"
+        <| fun () -> same (effects (UserDirectory.resolve [ "" ] UserDirectory.empty)) [] "no call"
     ]
 
 let private noActiveTeamTests =
@@ -70,7 +70,7 @@ let private noActiveTeamTests =
             }
 
             let checking, steps =
-                NoActiveTeamLandingUI.step NoActiveTeamLandingUI.CheckInvites model
+                NoActiveTeamLandingUI.update NoActiveTeamLandingUI.CheckInvites model
 
             same checking.State NoActiveTeamLandingUI.CheckState.Checking "the page says it is checking"
             same (effects steps) [ call "ITeamInviteApi.CheckMyInvites" () ] "one call"
@@ -81,11 +81,11 @@ let private notificationPreferencesTests =
         testCase "a reload reads the caller's preferences; dismissing an error asks for nothing"
         <| fun () ->
             let model = fst (NotificationPreferencesUI.init ())
-            let _, load = NotificationPreferencesUI.step NotificationPreferencesUI.Load model
+            let _, load = NotificationPreferencesUI.update NotificationPreferencesUI.Load model
             same (effects load) [ call "INotificationPreferenceApi.GetMyPreferences" () ] "one read"
 
             let _, dismissed =
-                NotificationPreferencesUI.step NotificationPreferencesUI.DismissError model
+                NotificationPreferencesUI.update NotificationPreferencesUI.DismissError model
 
             same (effects dismissed) [] "no call"
     ]
@@ -95,11 +95,14 @@ let private sessionSecurityTests =
         testCase "a confirmed revoke names its session, and its success reloads the list"
         <| fun () ->
             let model = fst (SessionSecurityUI.init ClientModuleContext.empty)
-            let _, revoke = SessionSecurityUI.step (SessionSecurityUI.ConfirmRevoke "s-1") model
+
+            let _, revoke =
+                SessionSecurityUI.update (SessionSecurityUI.ConfirmRevoke "s-1") model
+
             same (effects revoke) [ call "ISessionApi.RevokeSession" "s-1" ] "the revoke"
 
             let _, reload =
-                SessionSecurityUI.step (SessionSecurityUI.RevokeCompleted(Ok())) model
+                SessionSecurityUI.update (SessionSecurityUI.RevokeCompleted(Ok())) model
 
             same (effects reload) [ call "ISessionApi.ListMySessions" () ] "the reload"
     ]
@@ -109,7 +112,7 @@ let private homeTests =
         testCase "a refresh with recents on reads the overview, then the pinning"
         <| fun () ->
             let model = fst (Home.init true ())
-            let _, steps = Home.step Home.Refresh model
+            let _, steps = Home.update Home.Refresh model
 
             same
                 (effects steps)
@@ -122,10 +125,10 @@ let private homeTests =
         testCase "a refresh with recents off reads the overview alone; a pin names its module"
         <| fun () ->
             let model = fst (Home.init false ())
-            let _, steps = Home.step Home.Refresh model
+            let _, steps = Home.update Home.Refresh model
             same (effects steps) [ call "IHomeOverviewApi.GetOverview" () ] "one read"
 
-            let _, pin = Home.step (Home.TogglePin("files", true)) model
+            let _, pin = Home.update (Home.TogglePin("files", true)) model
 
             let request: PinRequest = { ModuleId = "files"; Pinned = true }
             same (effects pin) [ call "IHomeOverviewApi.SetPinned" request ] "the pin"
@@ -138,12 +141,12 @@ let private dataIngestionTests =
             let model = fst (DataIngestionUI.init ())
 
             let _, connect =
-                DataIngestionUI.step (DataIngestionUI.ConnectClicked("src-1", "oauth")) model
+                DataIngestionUI.update (DataIngestionUI.ConnectClicked("src-1", "oauth")) model
 
             same (effects connect) [ call "IDataIngestionApi.BeginOAuth" ("src-1", "oauth") ] "the OAuth start"
 
             let _, refreshed =
-                DataIngestionUI.step (DataIngestionUI.DisconnectComplete("src-1", Ok())) model
+                DataIngestionUI.update (DataIngestionUI.DisconnectComplete("src-1", Ok())) model
 
             same
                 (effects refreshed)
@@ -158,7 +161,7 @@ let private dataIngestionTests =
             let model = fst (DataIngestionUI.init ())
 
             let _, steps =
-                DataIngestionUI.step (DataIngestionUI.ConnectUrlReady("src-1", Ok "https://idp.test/authorize")) model
+                DataIngestionUI.update (DataIngestionUI.ConnectUrlReady("src-1", Ok "https://idp.test/authorize")) model
 
             same
                 (effects steps)
@@ -175,12 +178,12 @@ let private externalContactTests =
             let model = fst (ExternalContactManagerUI.init ())
 
             let _, delete =
-                ExternalContactManagerUI.step (ExternalContactManagerUI.DeleteContact "c-1") model
+                ExternalContactManagerUI.update (ExternalContactManagerUI.DeleteContact "c-1") model
 
             same (effects delete) [ call "IExternalContactApi.DeleteContact" "c-1" ] "the delete"
 
             let _, reload =
-                ExternalContactManagerUI.step (ExternalContactManagerUI.ContactDeleted(Ok())) model
+                ExternalContactManagerUI.update (ExternalContactManagerUI.ContactDeleted(Ok())) model
 
             same (effects reload) [ call "IExternalContactApi.ListContacts" () ] "the reload"
     ]
@@ -192,11 +195,12 @@ let private fileManagerTests =
             let model = fst (FileManagerUI.init ClientModuleContext.empty)
 
             let _, delete =
-                FileManagerUI.step (FileManagerUI.DeleteFile(Start "sales.csv")) model
+                FileManagerUI.update (FileManagerUI.DeleteFile(Start "sales.csv")) model
 
             same (effects delete) [ call "FileManagementApi.DeleteFile" "sales.csv" ] "the delete"
 
-            let _, deleted = FileManagerUI.step (FileManagerUI.DeleteFile(Finished(Ok()))) model
+            let _, deleted =
+                FileManagerUI.update (FileManagerUI.DeleteFile(Finished(Ok()))) model
 
             same (effects deleted) [] "no call of its own"
 
@@ -209,7 +213,7 @@ let private fileManagerTests =
             let model = fst (FileManagerUI.init ClientModuleContext.empty)
 
             let _, steps =
-                FileManagerUI.step (FileManagerUI.SelectFile(Start(Unchecked.defaultof<Browser.Types.File>))) model
+                FileManagerUI.update (FileManagerUI.SelectFile(Start(Unchecked.defaultof<Browser.Types.File>))) model
 
             same (effects steps) [ legacy "FileManagerUI.readFile" ] "the read"
     ]
@@ -219,11 +223,11 @@ let private teamConfigTests =
         testCase "a clear names its module; a flag's success reloads the flags boot"
         <| fun () ->
             let model = fst (TeamConfigUI.init ())
-            let _, clear = TeamConfigUI.step (TeamConfigUI.SubmitClear "_platform") model
+            let _, clear = TeamConfigUI.update (TeamConfigUI.SubmitClear "_platform") model
             same (effects clear) [ call "IConfigApi.ClearModuleConfig" "_platform" ] "the clear"
 
             let _, reload =
-                TeamConfigUI.step (TeamConfigUI.SetFlagCompleted("beta", Ok())) model
+                TeamConfigUI.update (TeamConfigUI.SetFlagCompleted("beta", Ok())) model
 
             same (effects reload) [ call "TeamConfigUI.loadFlagsBoot" () ] "the flags boot"
     ]
@@ -267,12 +271,12 @@ let private providerProfileTests =
             let model = fst (ProviderProfileUI.init config)
 
             let _, remove =
-                ProviderProfileUI.step config (ProviderProfileUI.Remove "work") model
+                ProviderProfileUI.update config (ProviderProfileUI.Remove "work") model
 
             same (effects remove) [ call "IProviderProfileApi.RemoveEntry" "work" ] "the remove"
 
             let _, fallback =
-                ProviderProfileUI.step config (ProviderProfileUI.SetFallback [ "work"; "home" ]) model
+                ProviderProfileUI.update config (ProviderProfileUI.SetFallback [ "work"; "home" ]) model
 
             same (effects fallback) [ call "IProviderProfileApi.SetFallback" [ "work"; "home" ] ] "the fallback"
 
@@ -293,24 +297,24 @@ let private providerProfileTests =
             }
 
             let _, steps =
-                ProviderProfileUI.step verifying (ProviderProfileUI.Verify candidate) model
+                ProviderProfileUI.update verifying (ProviderProfileUI.Verify candidate) model
 
             same (effects steps) [ await "ProviderProfileUI.verify" candidate ] "the delegate"
 
         testCase "a rename's save sends only the save, never the old label's removal"
         <| fun () ->
             let _, save =
-                ProviderProfileUI.step config (ProviderProfileUI.Save(candidate "office")) (editingStored "work")
+                ProviderProfileUI.update config (ProviderProfileUI.Save(candidate "office")) (editingStored "work")
 
             same (effects save) [ call "IProviderProfileApi.SaveEntry" (input "office") ] "the save alone"
 
         testCase "a rename's good save then removes the old label, before the reload"
         <| fun () ->
             let saving, _ =
-                ProviderProfileUI.step config (ProviderProfileUI.Save(candidate "office")) (editingStored "work")
+                ProviderProfileUI.update config (ProviderProfileUI.Save(candidate "office")) (editingStored "work")
 
             let _, saved =
-                ProviderProfileUI.step config (ProviderProfileUI.SaveCompleted(Ok())) saving
+                ProviderProfileUI.update config (ProviderProfileUI.SaveCompleted(Ok())) saving
 
             same (effects saved) [ call "IProviderProfileApi.RemoveEntry" "work" ] "the old label's removal"
 
@@ -321,10 +325,10 @@ let private providerProfileTests =
         testCase "a rename whose save fails removes nothing at either step"
         <| fun () ->
             let saving, save =
-                ProviderProfileUI.step config (ProviderProfileUI.Save(candidate "office")) (editingStored "work")
+                ProviderProfileUI.update config (ProviderProfileUI.Save(candidate "office")) (editingStored "work")
 
             let _, failed =
-                ProviderProfileUI.step config (ProviderProfileUI.SaveCompleted(Error "refused")) saving
+                ProviderProfileUI.update config (ProviderProfileUI.SaveCompleted(Error "refused")) saving
 
             same
                 (effects (save @ failed))
@@ -336,12 +340,12 @@ let private providerProfileTests =
             let editing = editingStored "work"
 
             let saving, save =
-                ProviderProfileUI.step config (ProviderProfileUI.Save(candidate "work")) editing
+                ProviderProfileUI.update config (ProviderProfileUI.Save(candidate "work")) editing
 
             same (effects save) [ call "IProviderProfileApi.SaveEntry" (input "work") ] "the save alone"
 
             let _, saved =
-                ProviderProfileUI.step config (ProviderProfileUI.SaveCompleted(Ok())) saving
+                ProviderProfileUI.update config (ProviderProfileUI.SaveCompleted(Ok())) saving
 
             same (effects saved) [] "no removal after the save"
 
@@ -351,12 +355,12 @@ let private providerProfileTests =
             }
 
             let added, addSave =
-                ProviderProfileUI.step config (ProviderProfileUI.Save(candidate "home")) adding
+                ProviderProfileUI.update config (ProviderProfileUI.Save(candidate "home")) adding
 
             same (effects addSave) [ call "IProviderProfileApi.SaveEntry" (input "home") ] "a new entry's save"
 
             let _, addSaved =
-                ProviderProfileUI.step config (ProviderProfileUI.SaveCompleted(Ok())) added
+                ProviderProfileUI.update config (ProviderProfileUI.SaveCompleted(Ok())) added
 
             same (effects addSaved) [] "no removal after a new entry's save"
     ]
@@ -366,19 +370,21 @@ let private teamManagerTests =
         testCase "opening a team asks for its members as a follow-up; loading them reads them"
         <| fun () ->
             let model = fst (TeamManagerUI.init ClientModuleContext.empty)
-            let _, select = TeamManagerUI.step (TeamManagerUI.SelectTeam "t1") model
+            let _, select = TeamManagerUI.update (TeamManagerUI.SelectTeam "t1") model
 
             match followUps select with
             | [ TeamManagerUI.LoadMembers "t1" ] -> ()
             | other -> failwithf "expected one LoadMembers follow-up, got %A" other
 
-            let _, load = TeamManagerUI.step (TeamManagerUI.LoadMembers "t1") model
+            let _, load = TeamManagerUI.update (TeamManagerUI.LoadMembers "t1") model
             same (effects load) [ call "TeamApi.GetTeamMembers" "t1" ] "the members read"
 
         testCase "the pending-invites view reloads both invite lists, pending first"
         <| fun () ->
             let model = fst (TeamManagerUI.init ClientModuleContext.empty)
-            let _, steps = TeamManagerUI.step (TeamManagerUI.NavigatePendingInvites "t1") model
+
+            let _, steps =
+                TeamManagerUI.update (TeamManagerUI.NavigatePendingInvites "t1") model
 
             match followUps steps with
             | [ TeamManagerUI.LoadPendingByEmail "t1"; TeamManagerUI.LoadExpiredInvites "t1" ] -> ()
@@ -387,15 +393,17 @@ let private teamManagerTests =
         testCase "a transfer submitted in the modal reaches the parent's step list as the child's call"
         <| fun () ->
             let model = fst (TeamManagerUI.init ClientModuleContext.empty)
-            let opened, _ = TeamManagerUI.step (TeamManagerUI.OpenTransferOwnership "t1") model
+
+            let opened, _ =
+                TeamManagerUI.update (TeamManagerUI.OpenTransferOwnership "t1") model
 
             let picked, _ =
-                TeamManagerUI.step
+                TeamManagerUI.update
                     (TeamManagerUI.TransferMsg(TeamManagerUI.TransferOwnership.SelectCandidate "u2"))
                     opened
 
             let _, steps =
-                TeamManagerUI.step (TeamManagerUI.TransferMsg TeamManagerUI.TransferOwnership.Submit) picked
+                TeamManagerUI.update (TeamManagerUI.TransferMsg TeamManagerUI.TransferOwnership.Submit) picked
 
             same (effects steps) [ call "TeamApi.TransferOwnership" ("t1", "u2") ] "the transfer, lifted"
     ]
@@ -405,7 +413,7 @@ let private mappingDataManagerTests =
         testCase "a load reads the files, the conversion records and the catalog, in that order"
         <| fun () ->
             let model = fst (MappingDataManagerUI.init ClientModuleContext.empty)
-            let _, steps = MappingDataManagerUI.step [] MappingDataManagerUI.LoadFiles model
+            let _, steps = MappingDataManagerUI.update [] MappingDataManagerUI.LoadFiles model
 
             same
                 (effects steps)
@@ -421,7 +429,7 @@ let private mappingDataManagerTests =
             let model = fst (MappingDataManagerUI.init ClientModuleContext.empty)
 
             let _, steps =
-                MappingDataManagerUI.step [] (MappingDataManagerUI.DeleteFile "sales.csv") model
+                MappingDataManagerUI.update [] (MappingDataManagerUI.DeleteFile "sales.csv") model
 
             same (effects steps) [ await "MappingDataManagerUI.deleteFiles" [ "sales.csv" ] ] "the cascade"
     ]

@@ -11,6 +11,7 @@ module ToolUp.AI.Client.Tests.ModuleHostTests
 // module first reached by an event runs its init command, and an inbound
 // action is admitted by the navigation decision and nothing else.
 
+open Fuaran.MVU
 open Feliz
 open ToolUp.Elmish
 open ToolUp.Platform
@@ -37,11 +38,12 @@ let private asker
     (configure: ClientModule<AskModel, AskMsg> -> ClientModule<AskModel, AskMsg>)
     (id: string)
     =
-    let ask question : Cmd<AskMsg> =
-        Cmd.ofEffect (fun dispatch -> pending.Add(question, dispatch))
+    let ask question : Step<AskMsg, RemoteEffect<AskMsg>> list = [
+        Do(RemoteEffect.legacy ("ask " + question) (fun dispatch -> pending.Add(question, dispatch)))
+    ]
 
     ClientModule.create {
-        Init = fun () -> { Answer = "none"; Updates = 0 }, (if bootAsk then ask "boot" else Cmd.none)
+        Init = fun () -> { Answer = "none"; Updates = 0 }, (if bootAsk then ask "boot" else [])
         Update =
             fun msg m ->
                 match msg with
@@ -51,7 +53,7 @@ let private asker
                         Answer = answer
                         Updates = m.Updates + 1
                     },
-                    Cmd.none
+                    []
         Name = id
         Icon = Html.none
     }
@@ -262,7 +264,7 @@ let tests =
             let throwing =
                 ClientModule.create {
                     Init = fun () -> failwith "Init exploded"
-                    Update = fun (_: AskMsg) (m: AskModel) -> m, Cmd.none
+                    Update = fun (_: AskMsg) (m: AskModel) -> m, []
                     Name = askerId
                     Icon = Html.none
                 }

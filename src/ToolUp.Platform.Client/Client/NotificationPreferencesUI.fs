@@ -96,7 +96,7 @@ let private save (draft: UserNotificationPreferences) : Step<Msg, RemoteEffect<M
 // ─── Init / update ───────────────────────────────────────────────────
 
 /// Initial model + the first load.
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         View = None
         Draft = UserNotificationPreferences.empty
@@ -106,10 +106,9 @@ let init () : Model * Cmd<Msg> =
         Error = None
      },
      load ())
-    |> RemoteEffect.run
 
 /// Pure state transitions; every remote call is an effect value.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Load -> { model with Busy = true; Error = None }, load ()
 
@@ -177,9 +176,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
         []
 
     | DismissError -> { model with Error = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Wire tokens for the cell picker ─────────────────────────────────
 

@@ -3,6 +3,7 @@
 
 module MixedMode.Client
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open ToolUp.Platform
@@ -30,8 +31,8 @@ module private Landing =
     type Model = unit
     type Msg = NoOp
 
-    let init () : Model * Cmd<Msg> = (), Cmd.none
-    let update (_: Msg) (m: Model) : Model * Cmd<Msg> = m, Cmd.none
+    let init () : Model * Step<Msg, RemoteEffect<Msg>> list = (), []
+    let update (_: Msg) (m: Model) : Model * Step<Msg, RemoteEffect<Msg>> list = m, []
 
     let view (_: Model) (_: RenderContext<Msg>) : PageContent =
         let left =
@@ -64,8 +65,8 @@ module private TeamDashboard =
     type Model = unit
     type Msg = NoOp
 
-    let init () : Model * Cmd<Msg> = (), Cmd.none
-    let update (_: Msg) (m: Model) : Model * Cmd<Msg> = m, Cmd.none
+    let init () : Model * Step<Msg, RemoteEffect<Msg>> list = (), []
+    let update (_: Msg) (m: Model) : Model * Step<Msg, RemoteEffect<Msg>> list = m, []
 
     let view (_: Model) (_: RenderContext<Msg>) : PageContent =
         let left =
@@ -98,8 +99,8 @@ module private SharePortal =
     type Model = unit
     type Msg = NoOp
 
-    let init () : Model * Cmd<Msg> = (), Cmd.none
-    let update (_: Msg) (m: Model) : Model * Cmd<Msg> = m, Cmd.none
+    let init () : Model * Step<Msg, RemoteEffect<Msg>> list = (), []
+    let update (_: Msg) (m: Model) : Model * Step<Msg, RemoteEffect<Msg>> list = m, []
 
     let view (_: Model) (_: RenderContext<Msg>) : PageContent =
         let left =
@@ -132,17 +133,17 @@ module private SharePortal =
 // Demonstrates the `ModuleEvents` seam. `Notifier` broadcasts a
 // `"mixedmode/ping"` event from its `update` whenever its button is
 // clicked; it neither imports nor references the subscriber below.
-// Publishing is a `Cmd` (`ModuleEvents.publish`), so the update
-// stays a pure `Model -> Model * Cmd` transition — the broadcast
-// runs in the Cmd-execution phase, not the update body.
+// Publishing is a step (`ModuleEvents.publish`), so the update
+// stays a pure transition — the broadcast runs when the step is
+// performed, not in the update body.
 
 module private Notifier =
     type Model = { Sent: int }
     type Msg = Ping
 
-    let init () : Model * Cmd<Msg> = { Sent = 0 }, Cmd.none
+    let init () : Model * Step<Msg, RemoteEffect<Msg>> list = { Sent = 0 }, []
 
-    let update (msg: Msg) (m: Model) : Model * Cmd<Msg> =
+    let update (msg: Msg) (m: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
         match msg with
         // Bump local state AND broadcast — the subscriber learns about
         // the ping through the shell, never through a direct reference.
@@ -185,9 +186,9 @@ module private Listener =
     type Model = { Count: int; Last: string }
     type Msg = Received of string
 
-    let init () : Model * Cmd<Msg> = { Count = 0; Last = "" }, Cmd.none
+    let init () : Model * Step<Msg, RemoteEffect<Msg>> list = { Count = 0; Last = "" }, []
 
-    let update (msg: Msg) (m: Model) : Model * Cmd<Msg> =
+    let update (msg: Msg) (m: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
         match msg with
         | Received payload ->
             {
@@ -195,7 +196,7 @@ module private Listener =
                     Count = m.Count + 1
                     Last = payload
             },
-            Cmd.none
+            []
 
     let view (model: Model) (_: RenderContext<Msg>) : PageContent =
         let left =

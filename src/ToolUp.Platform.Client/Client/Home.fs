@@ -80,17 +80,16 @@ let private load (recents: bool) : Step<Msg, RemoteEffect<Msg>> list =
 
 /// `recents` is partially applied at module creation from
 /// `ClientConfig.Shell.HomeRecents`.
-let init (recents: bool) () : Model * Cmd<Msg> =
+let init (recents: bool) () : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         Overview = Remote.Loading
         Recents = recents
         Pinning = HomePinningState.empty
      },
      load recents)
-    |> RemoteEffect.run
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Refresh -> { model with Overview = Remote.Loading }, load model.Recents
     | OverviewLoaded result ->
@@ -127,9 +126,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
                     (pinningOr model.Pinning)
             )
         ]
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ────────────────────────────────────────────────────────
 

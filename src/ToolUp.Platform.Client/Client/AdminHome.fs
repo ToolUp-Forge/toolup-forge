@@ -78,11 +78,11 @@ let internal loadWidgetData () : Step<Msg, RemoteEffect<Msg>> list = [
     )
 ]
 
-let init () : Model * Cmd<Msg> =
-    ({ Data = Map.empty }, loadWidgetData ()) |> RemoteEffect.run
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
+    ({ Data = Map.empty }, loadWidgetData ())
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Refresh -> model, loadWidgetData ()
     | WidgetDataLoaded data -> { model with Data = data }, []
@@ -92,9 +92,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
         // so the route guard and the area derivation both apply.
         NavigationRequest.request ownerModuleId
         model, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ────────────────────────────────────────────────────────
 

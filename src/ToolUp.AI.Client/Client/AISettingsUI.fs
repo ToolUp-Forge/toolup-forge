@@ -127,7 +127,7 @@ let private refetchConfig () =
 
 // ─── Init ─────────────────────────────────────────────────────────
 
-let internal initSteps () : Model * Steps =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     {
         Available = []
         PlatformDescriptors = []
@@ -142,12 +142,10 @@ let internal initSteps () : Model * Steps =
     @ loadPlatformKeyStatuses ()
     @ refetchConfig ()
 
-let init () : Model * Cmd<Msg> = initSteps () |> RemoteEffect.run
-
 // ─── Update ───────────────────────────────────────────────────────
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Steps =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadAvailable(Start()) -> { model with Loading = true }, loadAvailable ()
 
@@ -333,9 +331,6 @@ let internal step (msg: Msg) (model: Model) : Model * Steps =
         []
 
     | DismissStatus -> { model with Status = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Provider form (add + edit modes) ───────────────────────────
 //

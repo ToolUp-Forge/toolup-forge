@@ -214,7 +214,7 @@ let private loadContacts () : Step<Msg, RemoteEffect<Msg>> list = [
 
 // ─── Init / update ───────────────────────────────────────────────────
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         Contacts = []
         CurrentView = ContactList
@@ -225,7 +225,6 @@ let init () : Model * Cmd<Msg> =
         Error = None
      },
      loadContacts ())
-    |> RemoteEffect.run
 
 /// The owner a newly filed contact is created under, as the CLIENT
 /// guesses it. The server derives the real one from the caller's own
@@ -235,7 +234,7 @@ let init () : Model * Cmd<Msg> =
 let private clientOwnerPlaceholder = ContactOwner.Team ""
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadContacts -> { model with Busy = true; Error = None }, loadContacts ()
 
@@ -441,9 +440,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
         []
 
     | DismissError -> { model with Error = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 

@@ -178,7 +178,7 @@ let internal exportCsv (filters: Filters) : Step<Msg, RemoteEffect<Msg>> list = 
     )
 ]
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     let model = {
         Draft = emptyFilters
         Applied = emptyFilters
@@ -192,7 +192,7 @@ let init () : Model * Cmd<Msg> =
         Exporting = false
     }
 
-    (model, loadPage emptyFilters @ loadEventTypes ()) |> RemoteEffect.run
+    (model, loadPage emptyFilters @ loadEventTypes ())
 
 // ─── CSV download ────────────────────────────────────────────────────
 
@@ -238,7 +238,7 @@ let internal download (bytes: byte[]) : Step<Msg, RemoteEffect<Msg>> list = [
 ]
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SetFrom v ->
         {
@@ -341,9 +341,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
                 Status = Remote.Failed err
         },
         []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ────────────────────────────────────────────────────────────
 

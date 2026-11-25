@@ -3,6 +3,7 @@
 
 module TeamProviderUI
 
+open Fuaran.MVU
 open Feliz
 open Toolup.UIToolkit
 open ToolUp.Elmish
@@ -122,20 +123,22 @@ let private isMutating (msg: ProviderProfileUI.Msg) =
     | ProviderProfileUI.SetFallback _ -> true
     | _ -> false
 
-let init (config: TeamProviderConfig) : ProviderProfileUI.Model * Cmd<ProviderProfileUI.Msg> =
+let init
+    (config: TeamProviderConfig)
+    : ProviderProfileUI.Model * Step<ProviderProfileUI.Msg, RemoteEffect<ProviderProfileUI.Msg>> list =
     ProviderProfileUI.init config.Profile
 
 let update
     (config: TeamProviderConfig)
     (msg: ProviderProfileUI.Msg)
     (model: ProviderProfileUI.Model)
-    : ProviderProfileUI.Model * Cmd<ProviderProfileUI.Msg> =
+    : ProviderProfileUI.Model * Step<ProviderProfileUI.Msg, RemoteEffect<ProviderProfileUI.Msg>> list =
     if isMutating msg && not (canEdit config) then
         // Dropped, not refused-with-an-error: the read-only notice is
         // already on screen saying why, and a second message would be
         // telling the caller something the surface has been telling
         // them the whole time.
-        model, Cmd.none
+        model, []
     else
         ProviderProfileUI.update config.Profile msg model
 

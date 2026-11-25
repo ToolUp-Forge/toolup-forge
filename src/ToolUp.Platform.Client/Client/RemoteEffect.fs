@@ -3,75 +3,42 @@
 
 namespace ToolUp.Elmish
 
-// ─── Remote calls as effect values, until the runtime moves ──────────
+// ─── Effects as values ───────────────────────────────────────────────
 //
-// A module's `update` names its remote calls as VALUES here and returns
-// them in a `Fuaran.MVU` step list, instead of building `Cmd.OfRemoting`
-// commands. Three things, each small:
+// A module's `init` and `update` return a `Fuaran.MVU` step list: `Do` an
+// effect, or `Then` a follow-up message. The effects are the values here,
+// each compared by its identity, so a test can state the steps an
+// `update` should return:
 //
-//   * **The effect shape.** `RemoteEffect.call` names one call: the
-//     method, its argument and the constructor that turns its one reply
-//     into the module's message. It has equality, so a test can state the
-//     effect an `update` should return. Two calls are equal when they name
-//     the same method with an equal argument and the same retry numbers;
-//     the proxy and the reply are functions and take no part, exactly as a
-//     `Fuaran.MVU.LegacyEffect` compares by its site label alone.
-//   * **The performer.** `RemoteEffect.perform` sends that value's call
-//     through the interceptor chain (`RemoteEffect.Interceptors`), its
-//     retry policy and the declared read policy, all of which live here.
-//     It answers once: a declared read served from the cache delivers the
-//     cached value, and its refresh only refills the cache.
-//   * **The adapter.** `RemoteEffect.run` / `RemoteEffect.toCmd` hand each
-//     `Do` to the performer and dispatch its one reply, and turn each `Then`
-//     into the follow-up message `Cmd.ofMsg` would dispatch. They exist so a
-//     module can move before the runtime does; the runtime's own loop
-//     replaces them.
+//   * `RemoteEffect.call` / `callWithRetry` — one remote call: the method,
+//     its argument and the constructor that turns its one reply into the
+//     module's message. Two calls are equal when they name the same method
+//     with an equal argument and the same retry numbers; the proxy and the
+//     reply are functions and take no part. Name the method as the API
+//     record and its field: interceptors route on it.
+//   * `RemoteEffect.await` — a named one-shot operation that is not a
+//     remote call (a plain HTTP read, a delay, a resolver).
+//   * `RemoteEffect.legacy` — code with no value form yet; it must
+//     dispatch exactly once.
+//   * `RemoteEffect.signal` — code that answers nothing (a redirect, a
+//     download, a beacon).
 //
-// **Where the adapter attaches: in the ported file, at its own `init` and
-// `update`.** Each ported file keeps the function its callers use today,
-// returning `Cmd`, and gains the pure step function beside it:
+// A long-lived source of messages is a `Subscription` the model lists as a
+// resource, never an effect: an effect answers once.
 //
-//     let stepWith api msg model : Model * Step<Msg, RemoteEffect<Msg>> list = ...
-//     let updateWith api msg model = stepWith api msg model |> RemoteEffect.run
+// **The performer.** `RemoteEffect.perform` sends a call through the
+// interceptor chain (`RemoteEffect.Interceptors`), its retry policy and the
+// declared read policy, all of which live here. It answers once: a declared
+// read served from the cache delivers the cached value, and its refresh
+// only refills the cache. `RemoteEffect.interpreter` registers one kind per
+// effect case and one for subscriptions; the runtime refuses any other.
 //
-// Nothing shared changes. A registered module (`ClientModule.create {
-// Init; Update; ... }`) and a screen the shell embeds (a `BuiltIn` record
-// that `ShellSlots.builtIn` turns into the same `ClientModule`) both read
-// `update` returning `Cmd`, so both keep reading it, and the module
-// contract (`ErasedModule`) is untouched. An `update` of another shape (a
-// child returning `Model * Cmd<Msg> * Outcome` to its parent) uses
-// `toCmd` on its step list and keeps its tuple; a parent lifting a ported
-// child's steps maps them with `Step.map` and `RemoteEffect.map`.
+// **Lifting a child.** A parent maps a child's steps with
+// `Step.mapAll ChildMsg (RemoteEffect.map ChildMsg)`.
 //
-// **Porting one file, in order.**
-//
-//   1. `open Fuaran.MVU` FIRST among the file's opens, so the file's own
-//      and forge's names shadow the runtime's.
-//   2. Rewrite each command helper to return a `RemoteEffect<Msg>`:
-//      `Cmd.OfRemoting.call api.M arg ofOk ofErr` becomes
-//      `RemoteEffect.call "Api.M" api.M arg reply`, where `reply` takes the
-//      call's `Result<'r, exn>`. A call already answering
-//      `Result<'t, string>` replies through `RemoteEffect.flatten`, which
-//      folds a thrown exception into that call's own `Error` branch. Name
-//      the method as the API record and its field: interceptors route on it.
-//   3. Rename `update` to the step function and make it return a step
-//      list: `Cmd.none` is `[]`, `Cmd.batch` is list concatenation,
-//      `Cmd.ofMsg m` is `Then m`, and each call is `Do effect`.
-//   4. Define `update` (and `init`) again as the step function piped to
-//      `RemoteEffect.run`, with the signature it had.
-//   5. Build, then run the file's existing tests unchanged: they call the
-//      old `update` and see the same commands.
-//
-// **Two cases to leave alone, on `Cmd.OfRemoting` / `Cmd.ofEffect`.**
-//
-//   * **A call that answers twice.** A site that relies on a declared read
-//     delivering its cached value and then the fresh one, and every
-//     streaming call (`Cmd.OfRemoting.callStreaming*`). These are resources,
-//     which the runtime's move brings; a one-shot effect answers once.
-//   * **A body that dispatches more than once.** The adapter delivers one
-//     message per effect and drops any later one. A `RemoteEffect.legacy`
-//     body (code with no value form yet, a timer say) must dispatch exactly
-//     once; one that dispatches more stays where it is.
+// **The adapter** (`toCmd` / `asCmd` / `run`) turns a step list into the
+// shell's command while the shell still runs its own loop; nothing outside
+// the shell uses it.
 
 open Fuaran.MVU
 
@@ -200,6 +167,19 @@ type RemoteEffect<'msg> =
     | Legacy of LegacyEffect<'msg>
     /// Code that dispatches nothing, performed as a signal.
     | Fire of SignalEffect
+
+/// A long-lived source of messages the model lists as a resource (a
+/// browser event listener, a notification stream, a heartbeat): the runtime
+/// starts it when its key appears in the model's resources and stops it when
+/// the key goes. Compared by its site label, as a `LegacyEffect` is, so a
+/// relisted subscription under the same label keeps running.
+[<Sealed>]
+type Subscription<'msg>(site: string, start: ('msg -> unit) -> System.IDisposable) =
+    inherit LegacySite(site)
+
+    /// Start the source; every message it emits goes through the callback,
+    /// and the returned handle stops it.
+    member _.Start: ('msg -> unit) -> System.IDisposable = start
 
 /// The effect shape's constructors, the interceptor registry and the
 /// performer.
@@ -488,6 +468,78 @@ module RemoteEffect =
         | Await call -> Reply(fun deliver -> call.Send(once deliver))
         | Legacy legacy -> Reply(fun deliver -> legacy.Run(once deliver))
         | Fire signal -> Performance.Signal signal.Run
+
+    /// The kind of a remote call.
+    [<Literal>]
+    let CallKind = "toolup.remote.call"
+
+    /// The kind of a named one-shot operation that is not a remote call.
+    [<Literal>]
+    let AwaitKind = "toolup.await"
+
+    /// The kind of code with no value form yet.
+    [<Literal>]
+    let LegacyKind = "toolup.legacy"
+
+    /// The kind of code that answers nothing.
+    [<Literal>]
+    let SignalKind = "toolup.signal"
+
+    /// The kind of a subscription the model lists.
+    [<Literal>]
+    let SubscriptionKind = "toolup.subscription"
+
+    let private kind (id: string) (shape: Shape) (determinism: DeterminismSource list) : EffectKind = {
+        Id = id
+        Shape = shape
+        Classes = Set.empty
+        Determinism = Set.ofList determinism
+        Answers = FirstParty
+        Replies = []
+    }
+
+    /// The kinds the performer registers: one per effect case, and one for
+    /// subscriptions. The runtime refuses a step naming any other.
+    let kinds: EffectKind list = [
+        kind CallKind Call [ Network ]
+        kind AwaitKind Call [ Network; Clock ]
+        kind LegacyKind Call [ Network; Clock; Random ]
+        kind SignalKind Shape.Signal []
+        kind SubscriptionKind Stream [ Network; Clock ]
+    ]
+
+    let private local (kindId: string) (args: string) : Invocation = {
+        Kind = kindId
+        Args = Some args
+        Destination = Local
+    }
+
+    /// An effect as the runtime sees it: its kind, the method or site label
+    /// as its argument text, and the performer.
+    let handle (effect: RemoteEffect<'msg>) : Handled<'msg> =
+        let invocation =
+            match effect with
+            | Invoke call -> local CallKind call.Method
+            | Await call -> local AwaitKind call.Method
+            | Legacy legacy -> local LegacyKind legacy.Site
+            | Fire signal -> local SignalKind signal.Site
+
+        {
+            Invocation = invocation
+            Perform = fun () -> perform effect
+        }
+
+    /// A subscription as the runtime sees it: its kind, its site label and
+    /// how to start it.
+    let start (_: ResourceKey) (subscription: Subscription<'msg>) : Started<'msg> = {
+        Invocation = local SubscriptionKind subscription.Site
+        Start = subscription.Start
+    }
+
+    /// The interpreter a component whose effects are `RemoteEffect` values
+    /// and whose resources are `Subscription` values mounts with.
+    let interpreter<'msg> : Interpreter<'msg, RemoteEffect<'msg>, Subscription<'msg>> =
+        Interpreter.create kinds handle start
 
     let private ofStep (step: Step<'msg, RemoteEffect<'msg>>) : Effect<'msg> =
         match step with

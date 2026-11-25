@@ -79,7 +79,7 @@ let private tenantApi: IPlatformTenantApi =
 
 // ─── Init ────────────────────────────────────────────────────────────
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     {
         QueriedScope = None
         Summary = None
@@ -87,7 +87,7 @@ let init () : Model * Cmd<Msg> =
         Loading = false
         Error = None
     },
-    Cmd.none
+    []
 
 // ─── Update ──────────────────────────────────────────────────────────
 
@@ -102,7 +102,7 @@ let internal getSummary (scopeId: string) : Step<Msg, RemoteEffect<Msg>> list = 
 ]
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SubmitScope scopeId ->
         let scopeId = scopeId.Trim()
@@ -141,9 +141,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
         []
 
     | DismissError -> { model with Error = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ──────────────────────────────────────────────────────
 

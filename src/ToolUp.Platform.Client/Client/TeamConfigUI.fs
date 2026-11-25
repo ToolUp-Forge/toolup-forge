@@ -130,7 +130,7 @@ let private loadModules () : Step<Msg, RemoteEffect<Msg>> =
             | Error e -> ListFailed e.Message)
     )
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         ActiveTab = ConfigTab
         Modules = []
@@ -146,7 +146,6 @@ let init () : Model * Cmd<Msg> =
         FlagsLoaded = false
      },
      [ loadModules (); loadFlags () ])
-    |> RemoteEffect.run
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -163,7 +162,7 @@ let private loadValues (moduleKey: string) : Step<Msg, RemoteEffect<Msg>> list =
 // ─── Update ──────────────────────────────────────────────────────────
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadModules -> model, [ loadModules () ]
 
@@ -361,9 +360,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
                 FlagStatus = model.FlagStatus |> Map.remove key
         },
         []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── JSON helpers ────────────────────────────────────────────────────
 

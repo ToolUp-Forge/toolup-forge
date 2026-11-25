@@ -131,7 +131,7 @@ let private revokeAll () : Step<Msg, RemoteEffect<Msg>> list = [
 
 // ─── Init ────────────────────────────────────────────────────────────
 
-let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         Sessions = []
         Loaded = false
@@ -143,12 +143,11 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Messages = ctx.Messages.SessionSecurity
      },
      load ())
-    |> RemoteEffect.run
 
 // ─── Update ──────────────────────────────────────────────────────────
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Load -> { model with Error = None }, load ()
 
@@ -262,9 +261,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
     | DismissError -> { model with Error = None }, []
 
     | DismissStatus -> { model with Status = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 

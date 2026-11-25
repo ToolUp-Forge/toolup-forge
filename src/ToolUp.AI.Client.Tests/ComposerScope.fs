@@ -186,11 +186,11 @@ let private composition (counters: Counters) =
 
     let counter =
         ClientModule.create {
-            Init = fun () -> { Count = 0 }, Cmd.none
+            Init = fun () -> { Count = 0 }, []
             Update =
                 fun msg (m: ProbeModel) ->
                     match msg with
-                    | Increment -> { m with Count = m.Count + 1 }, Cmd.none
+                    | Increment -> { m with Count = m.Count + 1 }, []
             Name = CountedRow
             Icon = Html.none
         }
@@ -212,8 +212,8 @@ let private composition (counters: Counters) =
 
     let other =
         ClientModule.create {
-            Init = fun () -> { Count = 0 }, Cmd.none
-            Update = fun (_: ProbeMsg) (m: ProbeModel) -> m, Cmd.none
+            Init = fun () -> { Count = 0 }, []
+            Update = fun (_: ProbeMsg) (m: ProbeModel) -> m, []
             Name = "Composer other"
             Icon = Html.none
         }

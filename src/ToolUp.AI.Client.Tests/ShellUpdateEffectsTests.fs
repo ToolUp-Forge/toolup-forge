@@ -79,11 +79,11 @@ type private CounterModel = { Count: int }
 
 let private counterModule (id: string) =
     ClientModule.create {
-        Init = fun () -> { Count = 0 }, Cmd.none
+        Init = fun () -> { Count = 0 }, []
         Update =
             fun msg m ->
                 match msg with
-                | Increment -> { m with Count = m.Count + 1 }, Cmd.none
+                | Increment -> { m with Count = m.Count + 1 }, []
         Name = id
         Icon = Html.none
     }
@@ -191,16 +191,17 @@ let private readingModuleWith
     (bootRead: bool)
     (inFlight: ReadsInFlight)
     =
-    let read table : Cmd<ReadMsg> =
-        Cmd.ofEffect (fun dispatch -> inFlight.Add(table, dispatch))
+    let read table : Fuaran.MVU.Step<ReadMsg, RemoteEffect<ReadMsg>> list = [
+        Fuaran.MVU.Do(RemoteEffect.legacy ("read " + table) (fun dispatch -> inFlight.Add(table, dispatch)))
+    ]
 
     ClientModule.create {
-        Init = fun () -> { Detail = "none" }, (if bootRead then read "boot" else Cmd.none)
+        Init = fun () -> { Detail = "none" }, (if bootRead then read "boot" else [])
         Update =
             fun msg m ->
                 match msg with
                 | OpenTable table -> { Detail = "Loading" }, read table
-                | TableAnswered table -> { Detail = table }, Cmd.none
+                | TableAnswered table -> { Detail = table }, []
         Name = readId
         Icon = Html.none
     }
@@ -218,17 +219,17 @@ let private readingModule bootRead inFlight = readingModuleWith id bootRead inFl
 
 let private homeModule () =
     ClientModule.create {
-        Init = fun () -> { Title = "home"; Updates = 0 }, Cmd.none
+        Init = fun () -> { Title = "home"; Updates = 0 }, []
         Update =
             fun msg m ->
                 match msg with
-                | HomeRefreshed -> { m with Updates = m.Updates + 1 }, Cmd.none
+                | HomeRefreshed -> { m with Updates = m.Updates + 1 }, []
                 | HomeRenamed title ->
                     {
                         Title = title
                         Updates = m.Updates + 1
                     },
-                    Cmd.none
+                    []
         Name = homeId
         Icon = Html.none
     }
@@ -250,12 +251,12 @@ let private catalogTopic = "test1072.wake"
 
 let private catalogModule () =
     ClientModule.create {
-        Init = fun () -> { Seen = MessageCatalog.english }, Cmd.none
-        Update = fun Woken m -> m, Cmd.none
+        Init = fun () -> { Seen = MessageCatalog.english }, []
+        Update = fun Woken m -> m, []
         Name = catalogId
         Icon = Html.none
     }
-    |> ClientModule.withContextInit (fun ctx -> { Seen = ctx.Messages }, Cmd.none)
+    |> ClientModule.withContextInit (fun ctx -> { Seen = ctx.Messages }, [])
     |> ClientModule.withView (fun _ _ -> PageContent.SplitPanel(Html.none, Html.none))
     |> ClientModule.withId catalogId
     |> ClientModule.withEventSubscription catalogTopic (fun (_: string) -> Woken)

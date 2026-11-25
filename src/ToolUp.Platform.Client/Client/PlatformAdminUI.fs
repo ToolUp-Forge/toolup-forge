@@ -76,7 +76,7 @@ module AssignConfirm =
     }
 
     /// The transitions, with the call as a value.
-    let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+    let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
         match msg with
         | Confirm when model.InFlight -> model, []
         | Confirm ->
@@ -99,9 +99,6 @@ module AssignConfirm =
                     Outcome = Done result
             },
             []
-
-    /// The transitions, on today's loop.
-    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
     let view (msgs: PlatformAdminMessages) (directory: UserDirectory.Model) (model: Model) (dispatch: Msg -> unit) =
         let label = UserDirectory.email directory model.TargetUserId
@@ -183,7 +180,7 @@ module ConfirmDeleteTeam =
     }
 
     /// The transitions, with the call as a value.
-    let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+    let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
         match msg with
         | Confirm when model.InFlight -> model, []
         | Confirm ->
@@ -206,9 +203,6 @@ module ConfirmDeleteTeam =
                     Outcome = Done result
             },
             []
-
-    /// The transitions, on today's loop.
-    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
     let view (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
         Modal.confirm
@@ -408,7 +402,7 @@ let private lift (steps: Step<UserDirectory.Msg, RemoteEffect<UserDirectory.Msg>
 
 /// Ask the directory for `ids`; it skips blank and already-known ids.
 let internal resolve (ids: string list) (model: Model) : Steps =
-    UserDirectory.resolveSteps ids model.Directory |> lift
+    UserDirectory.resolve ids model.Directory |> lift
 
 /// Every user id the loaded admin list + teams table reference (Owners +
 /// Admins) — what the directory should hold.
@@ -422,7 +416,7 @@ let private referencedUserIds (model: Model) =
 
     adminIds @ teamIds
 
-let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list =
     let model = {
         ActiveTab = AdminsTab
         Admins = Remote.Loading
@@ -445,7 +439,6 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
     }
 
     (model, loadAdmins () @ loadTeams () @ loadPlatformKnowledgeBase ())
-    |> RemoteEffect.run
 
 // ─── Update ──────────────────────────────────────────────────────────
 
@@ -454,7 +447,7 @@ let private assignConfirmStep (msg: AssignConfirm.Msg) (model: Model) : Model * 
     match model.AssignConfirm with
     | None -> model, []
     | Some sub ->
-        let sub, subSteps = AssignConfirm.step msg sub
+        let sub, subSteps = AssignConfirm.update msg sub
 
         let subSteps =
             Step.mapAll AssignConfirmMsg (RemoteEffect.map AssignConfirmMsg) subSteps
@@ -484,7 +477,7 @@ let private deleteTeamStep (msg: ConfirmDeleteTeam.Msg) (model: Model) : Model *
     match model.ConfirmDeleteTeam with
     | None -> model, []
     | Some sub ->
-        let sub, subSteps = ConfirmDeleteTeam.step msg sub
+        let sub, subSteps = ConfirmDeleteTeam.update msg sub
         let subSteps = Step.mapAll DeleteTeamMsg (RemoteEffect.map DeleteTeamMsg) subSteps
 
         match sub.Outcome with
@@ -511,7 +504,7 @@ let private deleteTeamStep (msg: ConfirmDeleteTeam.Msg) (model: Model) : Model *
             subSteps
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Steps =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SwitchTab tab -> { model with ActiveTab = tab }, []
 
@@ -735,11 +728,8 @@ let internal step (msg: Msg) (model: Model) : Model * Steps =
         []
 
     | DirectoryMsg subMsg ->
-        let directory, steps = UserDirectory.step subMsg model.Directory
+        let directory, steps = UserDirectory.update subMsg model.Directory
         { model with Directory = directory }, lift steps
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 

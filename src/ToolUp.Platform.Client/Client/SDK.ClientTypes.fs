@@ -3,6 +3,7 @@
 
 namespace ToolUp.Platform
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open Fable.SimpleJson
@@ -311,8 +312,8 @@ module UiStateReport =
 /// All box/unbox is contained here — modules never see it.
 type ErasedModule = {
     Definition: ModuleDefinition
-    Init: ClientModuleContext -> obj * Cmd<obj>
-    Update: obj -> obj -> obj * Cmd<obj>
+    Init: ClientModuleContext -> obj * Step<obj, RemoteEffect<obj>> list
+    Update: obj -> obj -> obj * Step<obj, RemoteEffect<obj>> list
     /// Single-page view function. `Some` for single-page modules,
     /// `None` for multi-page modules (which use `PageViews` instead).
     /// At least one of `View` or `PageViews` must be set; `register`
@@ -594,8 +595,8 @@ module Visibility =
 /// Typed module record — modules construct this, then erase via register.
 type ClientModule<'Model, 'Msg> = {
     Definition: ModuleDefinition
-    Init: ClientModuleContext -> 'Model * Cmd<'Msg>
-    Update: 'Msg -> 'Model -> 'Model * Cmd<'Msg>
+    Init: ClientModuleContext -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list
+    Update: 'Msg -> 'Model -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list
     /// Single-page view function. `Some` for single-page modules,
     /// `None` for multi-page modules (which use `PageViews` instead).
     /// At least one of `View` or `PageViews` must be set; `register`
@@ -2516,14 +2517,14 @@ module ClientModule =
             Definition = m.Definition
             Init =
                 fun ctx ->
-                    let model, cmd = m.Init ctx
-                    box model, Cmd.map box cmd
+                    let model, steps = m.Init ctx
+                    box model, Step.mapAll box (RemoteEffect.map box) steps
             Update =
                 fun msg state ->
                     let typedMsg = unbox<'Msg> msg
                     let typedModel = unbox<'Model> state
-                    let newModel, cmd = m.Update typedMsg typedModel
-                    box newModel, Cmd.map box cmd
+                    let newModel, steps = m.Update typedMsg typedModel
+                    box newModel, Step.mapAll box (RemoteEffect.map box) steps
             View =
                 m.View
                 |> Option.map (fun v ->
@@ -2570,12 +2571,15 @@ module ClientModule =
         }
 
     /// Adapter for modules that do not need a `ClientModuleContext`.
-    /// Lets an existing `unit -> 'Model * Cmd<'Msg>` init slot into the
-    /// new `ClientModuleContext -> 'Model * Cmd<'Msg>` shape without
+    /// Lets an existing `unit -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list` init slot into the
+    /// new `ClientModuleContext -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list` shape without
     /// forcing every module to thread the context through its init.
     /// Modules that read config or platform identity should take the
     /// context directly instead of using this adapter.
-    let withUnitInit (init: unit -> 'Model * Cmd<'Msg>) : ClientModuleContext -> 'Model * Cmd<'Msg> = fun _ -> init ()
+    let withUnitInit
+        (init: unit -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list)
+        : ClientModuleContext -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list =
+        fun _ -> init ()
 
     /// Record-shaped specification for `ClientModule.create`. Four
     /// fields, all required. Every other capability (View / PageViews /
@@ -2584,8 +2588,8 @@ module ClientModule =
     /// from `Name` with spaces stripped; chain `withId` to override
     /// (SDK built-ins do this with `_sdk.*` / `_ai.*` prefixes).
     type ClientModuleSpec<'Model, 'Msg> = {
-        Init: unit -> 'Model * Cmd<'Msg>
-        Update: 'Msg -> 'Model -> 'Model * Cmd<'Msg>
+        Init: unit -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list
+        Update: 'Msg -> 'Model -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list
         Name: string
         Icon: ReactElement
     }
@@ -3117,7 +3121,7 @@ module ClientModule =
     /// `create`'s default unit init isn't enough — e.g. modules that
     /// read team-config or platform identity at startup.
     let withContextInit
-        (init: ClientModuleContext -> 'Model * Cmd<'Msg>)
+        (init: ClientModuleContext -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list)
         (m: ClientModule<'Model, 'Msg>)
         : ClientModule<'Model, 'Msg> =
         { m with Init = init }
@@ -3152,9 +3156,9 @@ type BuiltIn<'Model, 'Msg> = {
     /// Which subjects see the entry.
     Visibility: SubjectKind -> bool
     /// The module's `init`, over the shell's context.
-    Init: ClientModuleContext -> 'Model * Cmd<'Msg>
+    Init: ClientModuleContext -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list
     /// The module's `update`.
-    Update: 'Msg -> 'Model -> 'Model * Cmd<'Msg>
+    Update: 'Msg -> 'Model -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list
     /// The module's view.
     View: BuiltInView<'Model, 'Msg>
     /// The module's further declarations (processed data, inspectable

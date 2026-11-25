@@ -185,10 +185,8 @@ module Badges =
                     prop.onClick (fun e ->
                         e.stopPropagation ()
 
-                        // The publish is a Cmd; run it here, outside any
-                        // update loop, with a dispatch that is never called.
-                        for effect in ModuleEvents.publish VectorKnowledgeTypes.FactBrowseLinks.OpenMetricTopic metric do
-                            effect ignore
+                        // Outside any update loop, so it publishes now.
+                        ModuleEvents.publishNow VectorKnowledgeTypes.FactBrowseLinks.OpenMetricTopic metric
 
                         NavigationRequest.request (
                             VectorKnowledgeTypes.FactBrowseLinks.sidebarId

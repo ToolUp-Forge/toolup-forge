@@ -72,7 +72,7 @@ module IssueByEmail =
     }
 
     /// The transitions, with the remote call as a value.
-    let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list * Outcome =
+    let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list * Outcome =
         match msg with
         | SetEmail email -> { model with Email = email }, [], Stay
         | SetRole role -> { model with Role = role }, [], Stay
@@ -125,11 +125,6 @@ module IssueByEmail =
             Stay
         | Close -> model, [], Closed
 
-    /// The transitions, on today's loop.
-    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> * Outcome =
-        let model, steps, outcome = step msg model
-        model, RemoteEffect.toCmd steps, outcome
-
 /// The two-step ownership transfer. Step one picks the incoming Owner from
 /// the team's current members through a filter; step two confirms, naming
 /// the outgoing and the incoming Owner, before the API fires.
@@ -175,7 +170,7 @@ module TransferOwnership =
     }
 
     /// The transitions, with the remote call as a value.
-    let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list * Outcome =
+    let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list * Outcome =
         match msg with
         | SetQuery query -> { model with Query = query }, [], Stay
         | SelectCandidate userId ->
@@ -225,11 +220,6 @@ module TransferOwnership =
             Stay
         | Close -> model, [], Closed
 
-    /// The transitions, on today's loop.
-    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> * Outcome =
-        let model, steps, outcome = step msg model
-        model, RemoteEffect.toCmd steps, outcome
-
 /// The confirmation before a pending email invite is revoked.
 module RevokeByEmail =
     type Model = {
@@ -259,7 +249,7 @@ module RevokeByEmail =
     }
 
     /// The transitions, with the remote call as a value.
-    let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list * Outcome =
+    let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list * Outcome =
         match msg with
         | Confirm when model.Submitting -> model, [], Stay
         | Confirm ->
@@ -277,11 +267,6 @@ module RevokeByEmail =
         | Done(Ok()) -> model, [], Revoked model.TeamId
         | Done(Error e) -> model, [], Failed e
         | Cancel -> model, [], Closed
-
-    /// The transitions, on today's loop.
-    let update (msg: Msg) (model: Model) : Model * Cmd<Msg> * Outcome =
-        let model, steps, outcome = step msg model
-        model, RemoteEffect.toCmd steps, outcome
 
 // ─── Model ───────────────────────────────────────────────────────────
 
@@ -424,7 +409,7 @@ let private loadMembers (teamId: string) : Step<Msg, RemoteEffect<Msg>> =
             (orApiError (fun members -> MembersLoaded(teamId, members)))
     )
 
-let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list =
     let model = {
         Teams = []
         ActiveTeamId = None
@@ -461,7 +446,7 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
                 (orApiError IsPlatformAdminLoaded)
         )
 
-    (model, [ loadTeams; loadActiveTeam; loadAdminStatus ]) |> RemoteEffect.run
+    (model, [ loadTeams; loadActiveTeam; loadAdminStatus ])
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -547,7 +532,7 @@ let private routeTransfer (subMsg: TransferOwnership.Msg) (model: Model) : Model
     match model.Transfer with
     | None -> model, []
     | Some transfer ->
-        let transfer, steps, outcome = TransferOwnership.step subMsg transfer
+        let transfer, steps, outcome = TransferOwnership.update subMsg transfer
         let steps = lift TransferMsg steps
 
         match outcome with
@@ -566,7 +551,7 @@ let private routeIssueByEmail (subMsg: IssueByEmail.Msg) (model: Model) : Model 
     match model.IssueByEmail with
     | None -> model, []
     | Some issue ->
-        let issue, steps, outcome = IssueByEmail.step subMsg issue
+        let issue, steps, outcome = IssueByEmail.update subMsg issue
         let steps = lift IssueByEmailMsg steps
 
         match outcome with
@@ -585,7 +570,7 @@ let private routeRevokeByEmail (subMsg: RevokeByEmail.Msg) (model: Model) : Mode
     match model.RevokeByEmail with
     | None -> model, []
     | Some revoke ->
-        let revoke, steps, outcome = RevokeByEmail.step subMsg revoke
+        let revoke, steps, outcome = RevokeByEmail.update subMsg revoke
         let steps = lift RevokeByEmailMsg steps
 
         match outcome with
@@ -609,7 +594,7 @@ let private routeRevokeByEmail (subMsg: RevokeByEmail.Msg) (model: Model) : Mode
 // ─── Update ──────────────────────────────────────────────────────────
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadTeams -> model, [ loadTeams ]
 
@@ -632,7 +617,7 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
                 Members = model.Members |> Map.add teamId members
                 RoleInTeam = roleMap
         },
-        UserDirectory.resolveSteps (members |> List.map _.UserId) model.Directory
+        UserDirectory.resolve (members |> List.map _.UserId) model.Directory
         |> lift DirectoryMsg
 
     | SelectTeam teamId ->
@@ -864,7 +849,7 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
             []
 
     | DirectoryMsg subMsg ->
-        let directory, steps = UserDirectory.step subMsg model.Directory
+        let directory, steps = UserDirectory.update subMsg model.Directory
         { model with Directory = directory }, lift DirectoryMsg steps
 
     | ActiveTeamSwitched(_, Error e)
@@ -878,9 +863,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
         []
 
     | DismissError -> { model with Error = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ────────────────────────────────────────────────────────────
 

@@ -39,12 +39,12 @@ let private project (m: CounterModel) : UiStateReport =
 
 let private counterModule (id: string) =
     ClientModule.create {
-        Init = fun () -> { Count = 0; Selected = None }, Cmd.none
+        Init = fun () -> { Count = 0; Selected = None }, []
         Update =
             fun msg m ->
                 match msg with
-                | Increment -> { m with Count = m.Count + 1 }, Cmd.none
-                | Select key -> { m with Selected = Some key }, Cmd.none
+                | Increment -> { m with Count = m.Count + 1 }, []
+                | Select key -> { m with Selected = Some key }, []
         Name = id
         Icon = Html.none
     }

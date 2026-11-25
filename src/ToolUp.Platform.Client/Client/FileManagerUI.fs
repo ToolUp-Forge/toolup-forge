@@ -106,7 +106,7 @@ let private orApiError (ofAnswer: 'result -> Msg) (reply: Result<'result, exn>) 
 [<Literal>]
 let private ReadFileSite = "FileManagerUI.readFile"
 
-let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         UploadedFiles = Map.empty
         CurrentUpload = NotStarted
@@ -118,10 +118,9 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Messages = ctx.Messages.FileManager
      },
      [ Then(LoadFiles(Start())) ])
-    |> RemoteEffect.run
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SelectFile action ->
         match action with
@@ -373,9 +372,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
         []
 
     | DismissError -> { model with ErrorMessage = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ─────────────────────────────────────────────────────────
 

@@ -317,7 +317,7 @@ let internal saveMember
         )
     ]
 
-let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list =
     let model = {
         ActiveTab = TeamDefaultsTab
         Snapshot = Remote.Loading
@@ -330,7 +330,7 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Messages = ctx.Messages.PermissionsAdmin
     }
 
-    (model, loadSnapshot model.Messages) |> RemoteEffect.run
+    (model, loadSnapshot model.Messages)
 
 // ─── Update ──────────────────────────────────────────────────────────
 
@@ -371,7 +371,7 @@ let private setLevel (level: ModulePermission) (add: bool) (current: ModulePermi
         current
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SwitchTab tab ->
         {
@@ -625,9 +625,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
         []
 
     | DismissBanner -> { model with Banner = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 

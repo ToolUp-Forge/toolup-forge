@@ -16,8 +16,8 @@ open ToolUp.AI.Client.Tests.NodeTest
 
 let private module' (id: string) (name: string) : ErasedModule =
     ClientModule.create {
-        Init = fun () -> 0, Cmd.none
-        Update = fun (_: int) (m: int) -> m, Cmd.none
+        Init = fun () -> 0, []
+        Update = fun (_: int) (m: int) -> m, []
         Name = name
         Icon = Html.none
     }

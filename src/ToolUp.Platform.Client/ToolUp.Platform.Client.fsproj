@@ -575,8 +575,8 @@
     <PackageReference Include="Fable.SimpleHttp" />
     <PackageReference Include="Feliz" />
     <PackageReference Include="Fuaran.UI.Renderer" />
-    <!-- The published runtime's step and performance types, which a ported
-         module's remote calls are written in (Client/RemoteEffect.fs). -->
+    <!-- The published runtime the shell mounts on, and its React adapter. -->
     <PackageReference Include="Fuaran.MVU" />
+    <PackageReference Include="Fuaran.MVU.React" />
   </ItemGroup>
 </Project>

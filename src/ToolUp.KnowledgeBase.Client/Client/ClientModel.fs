@@ -215,7 +215,7 @@ let private knowledgeApi =
 let private platformKnowledgeApi =
     Api.makeProxy<IPlatformKnowledgeApi> (customOptions = UserSession.withRequestHeaders)
 
-let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         Documents = []
         Uploading = false
@@ -247,7 +247,6 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Messages = ctx.Messages.KnowledgeBase
      },
      [ Then(LoadDocuments(Start())); Then(LoadAIContext(Start())) ])
-    |> RemoteEffect.run
 
 let private hasNonTerminal (docs: KnowledgeDocument list) =
     docs |> List.exists (fun d -> not (IngestionStatus.isTerminal d.Status))
@@ -365,7 +364,7 @@ let private deliverOriginal (msgs: KnowledgeErrorMessages) (docId: string) : Asy
 }
 
 /// The transitions, with their remote calls as values.
-let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadDocuments(Start()) ->
         model,
@@ -961,9 +960,6 @@ let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
                 PlatformDocsLoadError = Some reason
         },
         []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Narrative → KB commit handler ─────────────────────
 //

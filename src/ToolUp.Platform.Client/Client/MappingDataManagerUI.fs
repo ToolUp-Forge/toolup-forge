@@ -477,7 +477,7 @@ module Wizard =
     }
 
     /// The transitions, with their remote calls as values.
-    let internal step
+    let update
         (msgs: MappingDataManagerMessages)
         (displays: DataTypeDisplay list)
         (msg: Msg)
@@ -644,16 +644,6 @@ module Wizard =
             },
             [],
             Errored e
-
-    /// The transitions, on today's loop.
-    let update
-        (msgs: MappingDataManagerMessages)
-        (displays: DataTypeDisplay list)
-        (msg: Msg)
-        (model: Model)
-        : Model * Cmd<Msg> * Outcome =
-        let model, steps, outcome = step msgs displays msg model
-        model, RemoteEffect.toCmd steps, outcome
 
     // ─── View ─────────────────────────────────────────────────────────
 
@@ -1430,7 +1420,7 @@ type Msg =
 
 // ─── Update ───────────────────────────────────────────────────────
 
-let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         UploadedFiles = []
         ProcessedData = []
@@ -1444,7 +1434,6 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Messages = ctx.Messages.MappingDataManager
      },
      [ Then LoadFiles ])
-    |> RemoteEffect.run
 
 /// A call's reply, with a failure sent to the screen's one error branch.
 let private orApiError (ofAnswer: 'result -> Msg) (reply: Result<'result, exn>) : Msg =
@@ -1522,7 +1511,7 @@ let private updateWizard
     | None -> model, []
     | Some wizard ->
         let wizard, wizardSteps, outcome =
-            Wizard.step model.Messages displays wizardMsg wizard
+            Wizard.update model.Messages displays wizardMsg wizard
 
         let cmd = wizardSteps |> Step.mapAll WizardMsg (RemoteEffect.map WizardMsg)
 
@@ -1552,11 +1541,7 @@ let private updateWizard
             cmd @ [ Then LoadFiles ]
 
 /// The transitions, with their remote calls as values.
-let internal step
-    (displays: DataTypeDisplay list)
-    (msg: Msg)
-    (model: Model)
-    : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadFiles ->
         model,
@@ -1809,10 +1794,6 @@ let internal step
         []
 
     | DismissError -> { model with Error = None }, []
-
-/// The transitions, on today's loop.
-let update (displays: DataTypeDisplay list) (msg: Msg) (model: Model) : Model * Cmd<Msg> =
-    step displays msg model |> RemoteEffect.run
 
 // ─── View ─────────────────────────────────────────────────────────
 

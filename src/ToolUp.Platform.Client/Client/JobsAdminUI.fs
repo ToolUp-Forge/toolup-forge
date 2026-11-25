@@ -297,7 +297,7 @@ let internal poll (jobId: Guid) : Step<Msg, RemoteEffect<Msg>> list = [
     )
 ]
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         Jobs = Remote.Loading
         Confirming = None
@@ -307,7 +307,6 @@ let init () : Model * Cmd<Msg> =
         LastError = None
      },
      loadJobs ())
-    |> RemoteEffect.run
 
 let private findJob (model: Model) (jobId: Guid) : JobDefinition option =
     model.Jobs
@@ -322,7 +321,7 @@ let private replaceJob (job: JobDefinition) (model: Model) : Model = {
 }
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Refresh -> { model with Jobs = Remote.Loading }, loadJobs ()
 
@@ -457,9 +456,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
         | _ -> model, []
 
     | DismissError -> { model with LastError = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ───────────────────────────────────────────────────────────
 

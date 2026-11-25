@@ -96,7 +96,7 @@ let internal trigger (dataTypeId: string) : Step<Msg, RemoteEffect<Msg>> list = 
     )
 ]
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     let model = {
         DataTypes = Remote.Loading
         Statuses = Map.empty
@@ -105,10 +105,10 @@ let init () : Model * Cmd<Msg> =
         LastError = None
     }
 
-    (model, refresh ()) |> RemoteEffect.run
+    (model, refresh ())
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Refresh ->
         {
@@ -166,9 +166,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
         { model with ExpandedFailures = next }, []
 
     | DismissError -> { model with LastError = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ───────────────────────────────────────────────────────────
 

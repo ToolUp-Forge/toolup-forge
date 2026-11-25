@@ -225,7 +225,7 @@ let profileInput (note: string) (model: Model) : ModuleVisibilityProfileInput =
 
 // ─── Init ────────────────────────────────────────────────────────────
 
-let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         RegisteredModuleIds = []
         StoredProfile = None
@@ -242,12 +242,11 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Messages = ctx.Messages.ModuleVisibilityAdmin
      },
      loadAll ())
-    |> RemoteEffect.run
 
 // ─── Update ──────────────────────────────────────────────────────────
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Load -> { model with Error = None }, loadAll ()
 
@@ -379,9 +378,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
     | DismissError -> { model with Error = None }, []
 
     | DismissStatus -> { model with Status = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 

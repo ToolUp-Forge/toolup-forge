@@ -1,6 +1,7 @@
 module Chat.ClientModel
 
 open System
+open Fuaran.MVU
 open ToolUp.Elmish
 open ToolUp.Platform
 open Chat.SharedTypes
@@ -75,7 +76,7 @@ let private sendRetryPolicy: RetryPolicy = {
     ShouldRetry = fun _ -> true
 }
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     let model = {
         DisplayName = ""
         InputDraft = ""
@@ -88,27 +89,26 @@ let init () : Model * Cmd<Msg> =
         RemoteEffect.call "ChatApi.ListMessages" chatApi.ListMessages () (function
             | Ok messages -> MessagesLoaded messages
             | Error ex -> MessagesLoadFailed ex)
-        |> RemoteEffect.asCmd
 
-    model, initialLoad
+    model, [ Do initialLoad ]
 
 let private classifyServerError (result: Result<Message, ChatError>) (localId: Guid) =
     match result with
     | Ok confirmed -> SendSucceeded(localId, confirmed)
     | Error err -> SendFailed(localId, Some err, "Server rejected the message.")
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | NameChanged name -> { model with DisplayName = name }, Cmd.none
+    | NameChanged name -> { model with DisplayName = name }, []
 
-    | DraftChanged draft -> { model with InputDraft = draft }, Cmd.none
+    | DraftChanged draft -> { model with InputDraft = draft }, []
 
     | SendRequested ->
         let trimmed = model.InputDraft.Trim()
         let name = model.DisplayName.Trim()
 
         if trimmed = "" || name = "" then
-            model, Cmd.none
+            model, []
         else
             let localId = Guid.NewGuid()
 
@@ -120,11 +120,10 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
             let request = { SenderName = name; Body = trimmed }
 
-            let sendCmd =
+            let send =
                 RemoteEffect.callWithRetry "ChatApi.SendMessage" sendRetryPolicy chatApi.SendMessage request (function
                     | Ok result -> classifyServerError result localId
                     | Error ex -> SendFailed(localId, None, ex.Message))
-                |> RemoteEffect.asCmd
 
             let model' = {
                 model with
@@ -133,7 +132,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                     LastError = None
             }
 
-            model', sendCmd
+            model', [ Do send ]
 
     | SendSucceeded(localId, confirmed) ->
         let model' = {
@@ -142,7 +141,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 ServerMessages = (confirmed :: model.ServerMessages) |> List.sortBy _.SentAt
         }
 
-        model', Cmd.none
+        model', []
 
     | SendFailed(localId, reason, detail) ->
         let banner = {
@@ -157,7 +156,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 LastError = Some banner
         }
 
-        model', Cmd.none
+        model', []
 
     | MessagesLoaded fresh ->
         let model' = {
@@ -165,17 +164,16 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 ServerMessages = fresh |> List.sortBy _.SentAt
         }
 
-        model', Cmd.none
+        model', []
 
-    | MessagesLoadFailed _ -> model, Cmd.none
+    | MessagesLoadFailed _ -> model, []
 
     | PollTick ->
-        let cmd =
+        let call =
             RemoteEffect.call "ChatApi.ListMessages" chatApi.ListMessages () (function
                 | Ok messages -> MessagesLoaded messages
                 | Error ex -> MessagesLoadFailed ex)
-            |> RemoteEffect.asCmd
 
-        model, cmd
+        model, [ Do call ]
 
-    | DismissError -> { model with LastError = None }, Cmd.none
+    | DismissError -> { model with LastError = None }, []

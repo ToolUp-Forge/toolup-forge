@@ -216,19 +216,16 @@ let isFactBrowseComposed () : bool =
     FactBrowseLinks.isComposed (RegisteredModules.snapshot () |> List.map _.ModuleId)
 
 /// Open one fact's row and provenance in the fact browse module: the
-/// citation opener the panel's fact sources use. The publish is
-/// a Cmd; it runs here, outside any update loop, with a message sink that
-/// is never called.
+/// citation opener the panel's fact sources use. It runs outside any
+/// update loop, so it publishes now.
 let openFact (factId: string) : unit =
-    for effect in ModuleEvents.publish FactBrowseLinks.OpenFactTopic factId do
-        effect ignore
+    ModuleEvents.publishNow FactBrowseLinks.OpenFactTopic factId
 
     NavigationRequest.request (FactBrowseLinks.sidebarId FactBrowseLinks.RowsRoute)
 
 /// Open one fact table's detail page in the fact browse module.
 let openTable (tableId: string) : unit =
-    for effect in ModuleEvents.publish FactBrowseLinks.OpenTableTopic tableId do
-        effect ignore
+    ModuleEvents.publishNow FactBrowseLinks.OpenTableTopic tableId
 
     NavigationRequest.request (FactBrowseLinks.sidebarId FactBrowseLinks.TableRoute)
 

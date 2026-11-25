@@ -29,7 +29,7 @@ module ToolUp.Facts.Client.FactBrowseModel
 // they replaced) stay server reads: neither answer is in a slice of
 // current heads.
 //
-// `stepWith` takes the API record as a parameter so the transitions are
+// `updateWith` takes the API record as a parameter so the transitions are
 // testable against a fake, and returns the remote calls as effect values
 // (`RemoteEffect`); `updateWith` runs them on the loop and `update` binds
 // the real proxy.
@@ -248,12 +248,12 @@ let private dropStaleSlice (api: IFactBrowseApi) (listing: FactTableListing) (mo
     | _ -> model, []
 
 /// Initial state: load the table list.
-let initWith (api: IFactBrowseApi) () : Model * Cmd<Msg> =
-    ({ empty with Tables = Loading }, loadTables api) |> RemoteEffect.run
+let initWith (api: IFactBrowseApi) () : Model * Step<Msg, RemoteEffect<Msg>> list =
+    { empty with Tables = Loading }, loadTables api
 
 /// The transitions, over an explicit API, with their remote calls as
 /// values.
-let stepWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | RefreshTables ->
         let reloadSelected =
@@ -470,10 +470,6 @@ let stepWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Step<Msg,
         else
             model, loadTables api
 
-/// The transitions, over an explicit API, on today's loop.
-let updateWith (api: IFactBrowseApi) (msg: Msg) (model: Model) : Model * Cmd<Msg> =
-    stepWith api msg model |> RemoteEffect.run
-
 // ─── The proxy ───────────────────────────────────────────────────────
 
 // Header freshness is the CsrfClient request-guard's job — see
@@ -485,7 +481,7 @@ let private factBrowseApi: IFactBrowseApi =
     )
 
 /// Initial state over the real proxy.
-let init () : Model * Cmd<Msg> = initWith factBrowseApi ()
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list = initWith factBrowseApi ()
 
 /// The transitions over the real proxy.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = updateWith factBrowseApi msg model
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list = updateWith factBrowseApi msg model

@@ -29,6 +29,7 @@ module ToolUp.AI.Client.Tests.TreeViewParityTests
 // import, which a synchronous mount cannot wait for, and which has tests of
 // its own.
 
+open Fuaran.MVU
 open Fable.Core
 open Fable.Core.JsInterop
 open Fuaran.UI
@@ -408,13 +409,13 @@ type private ToyMsg =
     | Save
     | Cancel
 
-let private toyInit () : ToyModel * Cmd<ToyMsg> = { Text = ""; Saved = 0 }, Cmd.none
+let private toyInit () : ToyModel * Step<ToyMsg, RemoteEffect<ToyMsg>> list = { Text = ""; Saved = 0 }, []
 
-let private toyUpdate (msg: ToyMsg) (model: ToyModel) : ToyModel * Cmd<ToyMsg> =
+let private toyUpdate (msg: ToyMsg) (model: ToyModel) : ToyModel * Step<ToyMsg, RemoteEffect<ToyMsg>> list =
     match msg with
-    | SetText t -> { model with Text = t }, Cmd.none
-    | Save -> { model with Saved = model.Saved + 1 }, Cmd.none
-    | Cancel -> model, Cmd.none
+    | SetText t -> { model with Text = t }, []
+    | Save -> { model with Saved = model.Saved + 1 }, []
+    | Cancel -> model, []
 
 let private toyTree (label: string) (model: ToyModel) : Node<ToyMsg> =
     Nodes.Layout.column "toy" [

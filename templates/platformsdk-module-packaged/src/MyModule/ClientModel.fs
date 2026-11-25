@@ -1,5 +1,6 @@
 module MODULE_NAMESPACE_ROOT.ClientModel
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open ToolUp.Platform
 open MODULE_NAMESPACE_ROOT.SharedTypes
@@ -24,8 +25,7 @@ type Msg =
     | EchoSucceeded of EchoResponse
     | EchoFailed of string
 
-let init () : Model * Cmd<Msg> =
-    { Input = ""; LastResponse = None }, Cmd.none
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list = { Input = ""; LastResponse = None }, []
 
 /// The remoting proxy, behind a `lazy`.
 ///
@@ -38,26 +38,25 @@ let init () : Model * Cmd<Msg> =
 let private api =
     lazy (Api.makeProxy<ModuleApi> (customOptions = UserSession.withRequestHeaders))
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | InputChanged text -> { model with Input = text }, Cmd.none
+    | InputChanged text -> { model with Input = text }, []
     | SubmitEcho ->
-        let cmd =
+        let call =
             RemoteEffect.call "ModuleApi.Echo" api.Value.Echo { Text = model.Input } (function
                 | Ok response -> EchoSucceeded response
                 | Error ex -> EchoFailed ex.Message)
-            |> RemoteEffect.asCmd
 
-        model, cmd
+        model, [ Do call ]
     | EchoSucceeded response ->
         {
             model with
                 LastResponse = Some response.Echoed
         },
-        Cmd.none
+        []
     | EchoFailed err ->
         {
             model with
                 LastResponse = Some $"Error: {err}"
         },
-        Cmd.none
+        []

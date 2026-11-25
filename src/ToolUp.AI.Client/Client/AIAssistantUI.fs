@@ -238,7 +238,7 @@ let private loadPage (query: ConversationListQuery) : Steps =
 
 // ─── Init ─────────────────────────────────────────────────────────
 
-let internal initSteps () : Model * Steps =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     {
         Conversations = []
         ActiveConversation = None
@@ -264,12 +264,10 @@ let internal initSteps () : Model * Steps =
 // (below), whose `useEffectOnce` disposer closes the stream on unmount.
 // See `AIClientConfig.fs` for the matching shell-side lifetime-aware handle.
 
-let init () : Model * Cmd<Msg> = initSteps () |> RemoteEffect.run
-
 // ─── Update ───────────────────────────────────────────────────────
 
 /// The transitions, with their effects as values.
-let internal step (msg: Msg) (model: Model) : Model * Steps =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadConversations action ->
         match action with
@@ -546,9 +544,6 @@ let internal step (msg: Msg) (model: Model) : Model * Steps =
     | WatchdogFired token -> model |> reduceStream (ChatStream.fire token)
 
     | TaskStatusPolled(token, status) -> model |> reduceStream (ChatStream.polled token status)
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ─────────────────────────────────────────────────────────
 

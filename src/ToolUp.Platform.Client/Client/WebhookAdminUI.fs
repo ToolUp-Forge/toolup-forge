@@ -93,7 +93,7 @@ let internal loadSubscriptions () : Steps = [
     )
 ]
 
-let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list =
     let model = {
         Subscriptions = []
         SelectedId = None
@@ -106,7 +106,7 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Messages = ctx.Messages.WebhookAdmin
     }
 
-    (model, loadSubscriptions ()) |> RemoteEffect.run
+    (model, loadSubscriptions ())
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -161,7 +161,7 @@ let private sortByCreatedDesc (subs: WebhookSubscription list) =
 // ─── Update ──────────────────────────────────────────────────────────
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Steps =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadSubscriptions -> model, loadSubscriptions ()
 
@@ -369,9 +369,6 @@ let internal step (msg: Msg) (model: Model) : Model * Steps =
                 Status = model.Status |> Map.remove id
         },
         []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Helpers (display) ───────────────────────────────────────────────
 

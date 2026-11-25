@@ -95,11 +95,11 @@ let private hmrTests =
                 let readerB = reader (2 * (index - 1) + 1) snd
 
                 Program.mkProgram
-                    (fun () -> (0, 0), Cmd.none)
+                    (fun () -> (0, 0), [])
                     (fun msg (a, b) ->
                         match msg with
-                        | BumpA -> (a + 1, b), Cmd.none
-                        | BumpB -> (a, b + 1), Cmd.none)
+                        | BumpA -> (a + 1, b), []
+                        | BumpB -> (a, b + 1), [])
                     (fun _ d ->
                         capture d
 
@@ -235,7 +235,7 @@ let private hydrate (sliced: bool) (report: Hydrated -> unit) : unit =
 
         Client.programOver
             config
-            (fun () -> model0, Cmd.none)
+            (fun () -> model0, [])
             update
             Client.dispatchers
             (capture (Client.viewSliced store config modules Client.emptyChrome))
@@ -244,7 +244,7 @@ let private hydrate (sliced: bool) (report: Hydrated -> unit) : unit =
     else
         Client.programOver
             config
-            (fun () -> model0, Cmd.none)
+            (fun () -> model0, [])
             update
             Client.dispatchers
             (capture (Client.viewWithSignIn config modules Client.emptyChrome))
@@ -363,8 +363,8 @@ let private composerTests =
             let view =
                 Client.programOver
                     ClientConfig.defaults
-                    (fun () -> (), Cmd.none)
-                    (fun (_: AIClientConfig.OuterMsg) () -> (), Cmd.none)
+                    (fun () -> (), [])
+                    (fun (_: AIClientConfig.OuterMsg) () -> (), [])
                     AIClientConfig.composerDispatchersFor
                     (fun () dispatchers ->
                         seen.Add dispatchers
@@ -551,14 +551,14 @@ let private runAIShell (report: CallbackRun -> unit) : unit =
 
     let probe =
         ClientModule.create {
-            Init = fun () -> { Seen = 0 }, Cmd.none
-            Update = fun (_: CallbackMsg) (m: CallbackModel) -> m, Cmd.none
+            Init = fun () -> { Seen = 0 }, []
+            Update = fun (_: CallbackMsg) (m: CallbackModel) -> m, []
             Name = "Callback probe"
             Icon = Html.none
         }
         |> ClientModule.withContextInit (fun ctx ->
             context <- Some ctx
-            { Seen = 0 }, Cmd.none)
+            { Seen = 0 }, [])
         |> ClientModule.withView (fun (_: CallbackModel) _ ->
             PageContent.FullWidth(Html.div [ prop.id "callback-probe" ]))
         |> ClientModule.withId "_scope931.probe"

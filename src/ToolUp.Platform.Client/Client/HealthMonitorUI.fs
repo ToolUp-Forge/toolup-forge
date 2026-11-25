@@ -117,7 +117,7 @@ let internal loadAIDenials () : Step<Msg, RemoteEffect<Msg>> list = [
     )
 ]
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     let model = {
         ActiveTab = LiveHealthTab
         Live = Remote.Loading
@@ -134,7 +134,6 @@ let init () : Model * Cmd<Msg> =
      @ loadSchedulerTelemetry ()
      @ loadDegraded ()
      @ loadAIDenials ())
-    |> RemoteEffect.run
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -158,7 +157,7 @@ let private flippedNames (prev: HealthSnapshot option) (next: HealthSnapshot) : 
 // ─── Update ──────────────────────────────────────────────────────────
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SwitchTab tab -> { model with ActiveTab = tab }, []
 
@@ -221,9 +220,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
                 AIDenials = Remote.ofResult result
         },
         []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Status-pill renderers ───────────────────────────────────────────
 

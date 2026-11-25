@@ -118,8 +118,8 @@ let private singlePage (id: string) (inits: ResizeArray<string>) =
         Init =
             fun () ->
                 inits.Add id
-                0, Cmd.none
-        Update = fun (_: unit) m -> m, Cmd.none
+                0, []
+        Update = fun (_: unit) m -> m, []
         Name = id
         Icon = Html.none
     }
@@ -137,8 +137,8 @@ let private page (route: string) : PageConfig * (int -> RenderContext<unit> -> P
 
 let private multiPage (id: string) =
     ClientModule.create {
-        Init = fun () -> 0, Cmd.none
-        Update = fun (_: unit) m -> m, Cmd.none
+        Init = fun () -> 0, []
+        Update = fun (_: unit) m -> m, []
         Name = id
         Icon = Html.none
     }
@@ -151,8 +151,8 @@ let private adminOnly (id: string) (inits: ResizeArray<string>) =
         Init =
             fun () ->
                 inits.Add id
-                0, Cmd.none
-        Update = fun (_: unit) m -> m, Cmd.none
+                0, []
+        Update = fun (_: unit) m -> m, []
         Name = id
         Icon = Html.none
     }
@@ -264,8 +264,8 @@ let tests =
                 let refused =
                     try
                         ClientModule.create {
-                            Init = fun () -> 0, Cmd.none
-                            Update = fun (_: unit) m -> m, Cmd.none
+                            Init = fun () -> 0, []
+                            Update = fun (_: unit) m -> m, []
                             Name = "unaddressable"
                             Icon = Html.none
                         }
@@ -284,8 +284,8 @@ let tests =
             testCase "a lone page may keep a bare route, which nothing has to address" (fun () ->
                 let registered =
                     ClientModule.create {
-                        Init = fun () -> 0, Cmd.none
-                        Update = fun (_: unit) m -> m, Cmd.none
+                        Init = fun () -> 0, []
+                        Update = fun (_: unit) m -> m, []
                         Name = "lone"
                         Icon = Html.none
                     }

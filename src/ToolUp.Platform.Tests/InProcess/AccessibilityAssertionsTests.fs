@@ -26,7 +26,7 @@ module A11y = ToolUp.Platform.Testing.Accessibility
 //      consolidated finding list, and the message names both rule and
 //      element path.
 //   5. `ModuleHarness.AssertAccessible` chains fluently alongside
-//      `AssertModel` / `AssertCmd`, and fails a defective view.
+//      `AssertModel` / `AssertSteps`, and fails a defective view.
 //   6. The SDK's OWN stock components — the `ToolUp.BrandKit` SSR
 //      primitives, the only forge-shipped components a .NET runner can
 //      actually render — pass `Minimal` through the `ofHtml` seam.
@@ -398,13 +398,16 @@ type private PanelMsg =
     | Rename of string
     | HideIcon
 
-let private panelInit () : PanelModel * Cmd<PanelMsg> =
-    { Label = "Export"; ShowIcon = false }, Cmd.none
+let private panelInit () : PanelModel * Fuaran.MVU.Step<PanelMsg, ToolUp.Elmish.RemoteEffect<PanelMsg>> list =
+    { Label = "Export"; ShowIcon = false }, []
 
-let private panelUpdate (msg: PanelMsg) (model: PanelModel) : PanelModel * Cmd<PanelMsg> =
+let private panelUpdate
+    (msg: PanelMsg)
+    (model: PanelModel)
+    : PanelModel * Fuaran.MVU.Step<PanelMsg, ToolUp.Elmish.RemoteEffect<PanelMsg>> list =
     match msg with
-    | Rename label -> { model with Label = label }, Cmd.none
-    | HideIcon -> { model with ShowIcon = false }, Cmd.none
+    | Rename label -> { model with Label = label }, []
+    | HideIcon -> { model with ShowIcon = false }, []
 
 /// A well-behaved render: the button is named by its label text.
 let private panelRender (model: PanelModel) (_: PanelMsg -> unit) : A11y.A11yNode =
@@ -424,7 +427,7 @@ let private panelRenderHtml (model: PanelModel) (_: PanelMsg -> unit) : string =
 
 let private harnessTests =
     testList "ModuleHarness.AssertAccessible" [
-        testCase "chains fluently alongside AssertModel / AssertCmd"
+        testCase "chains fluently alongside AssertModel / AssertSteps"
         <| fun _ ->
             let final =
                 (ModuleHarness.fromUnitInit panelInit panelUpdate)
@@ -433,7 +436,7 @@ let private harnessTests =
                     .Dispatch(Rename "Download")
                     .AssertAccessible(panelRender)
                     .AssertModel(fun m -> m.Label = "Download")
-                    .AssertNoCmd()
+                    .AssertNoSteps()
 
             Expect.equal final.Model.Label "Download" "the chain returns a harness carrying the updated model"
 
@@ -470,9 +473,9 @@ let private harnessTests =
                 (ModuleHarness.fromUnitInit panelInit panelUpdate)
                     .Dispatch(Rename "A")
                     .AssertModelWith("renamed", (fun m -> m.Label = "A"))
-                    .AssertCmd(List.isEmpty)
+                    .AssertSteps(List.isEmpty)
                     .DispatchAll([ HideIcon ])
-                    .AssertNoCmd()
+                    .AssertNoSteps()
 
             Expect.isFalse final.Model.ShowIcon "the pre-existing fluent chain is untouched"
     ]

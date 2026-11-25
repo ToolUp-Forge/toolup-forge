@@ -3,6 +3,7 @@
 
 module ToolUp.Platform.Testing.ModuleHarness
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open ToolUp.Platform
 
@@ -10,7 +11,7 @@ open ToolUp.Platform
 //
 // Tests a module's `init` / `update` cycle without dragging the rest
 // of the Elmish shell in. The harness holds the current model + most
-// recent `Cmd` and provides a fluent `Dispatch` → assertions →
+// recent step list and provides a fluent `Dispatch` → assertions →
 // `Dispatch` chain so multi-message flows can be exercised with
 // state assertions between each step.
 //
@@ -23,26 +24,30 @@ open ToolUp.Platform
 //         .Dispatch(MyModule.DataLoaded sample)
 //         .AssertModel(fun m -> not m.IsLoading)
 //
-// `Cmds` are captured for inspection but not executed — the harness
-// is a pure-`update` harness. Tests that want to simulate command
-// effects pull messages out of the captured `Cmd` and feed them back
-// via `Dispatch`.
+// Steps are captured for inspection but not performed — the harness
+// is a pure-`update` harness. Tests that want to simulate an effect's
+// reply build the reply message and feed it back via `Dispatch`.
 
-/// Holds the current `'Model` plus the most recent `Cmd<'Msg>`. The
+/// Holds the current `'Model` plus the most recent step list. The
 /// fluent API returns a new harness on every `Dispatch`, mirroring
 /// Elmish's pure-`update` semantics — assertions can be chained
 /// without re-binding.
-type ModuleHarness<'Model, 'Msg>(model: 'Model, cmd: Cmd<'Msg>, update: 'Msg -> 'Model -> 'Model * Cmd<'Msg>) =
+type ModuleHarness<'Model, 'Msg>
+    (
+        model: 'Model,
+        steps: Step<'Msg, RemoteEffect<'Msg>> list,
+        update: 'Msg -> 'Model -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list
+    ) =
     /// Current model.
     member _.Model = model
-    /// Last `Cmd<'Msg>` emitted by `init` or `update`.
-    member _.Cmd = cmd
+    /// The last step list `init` or `update` returned.
+    member _.Steps = steps
 
     /// Dispatch a message through `update`; returns a new harness with
-    /// the updated model + emitted Cmd.
+    /// the updated model and the steps it returned.
     member _.Dispatch(msg: 'Msg) =
-        let model', cmd' = update msg model
-        ModuleHarness<'Model, 'Msg>(model', cmd', update)
+        let model', steps' = update msg model
+        ModuleHarness<'Model, 'Msg>(model', steps', update)
 
     /// Dispatch several messages in sequence; equivalent to chaining
     /// `Dispatch` calls.
@@ -66,19 +71,18 @@ type ModuleHarness<'Model, 'Msg>(model: 'Model, cmd: Cmd<'Msg>, update: 'Msg -> 
 
         this
 
-    /// Assert a predicate over the last emitted `Cmd<'Msg>`. The
-    /// predicate is invoked on the Cmd value itself — typically used
-    /// to assert it is `Cmd.none` or to count the queued sub-cmds.
-    member this.AssertCmd(predicate: Cmd<'Msg> -> bool) =
-        if not (predicate cmd) then
-            failwithf "ModuleHarness.AssertCmd: predicate failed on cmd %A" cmd
+    /// Assert a predicate over the last step list. Effects compare by
+    /// value, so a test can state the steps it expects.
+    member this.AssertSteps(predicate: Step<'Msg, RemoteEffect<'Msg>> list -> bool) =
+        if not (predicate steps) then
+            failwithf "ModuleHarness.AssertSteps: predicate failed on steps %A" steps
 
         this
 
-    /// Convenience assertion for the common "no further effects" case.
-    member this.AssertNoCmd() =
-        if not (List.isEmpty cmd) then
-            failwithf "ModuleHarness.AssertNoCmd: expected Cmd.none but got %d sub-cmd(s)" (List.length cmd)
+    /// Convenience assertion for the common "no further steps" case.
+    member this.AssertNoSteps() =
+        if not (List.isEmpty steps) then
+            failwithf "ModuleHarness.AssertNoSteps: expected no steps but got %d" (List.length steps)
 
         this
 
@@ -103,7 +107,7 @@ type ModuleHarness<'Model, 'Msg>(model: 'Model, cmd: Cmd<'Msg>, update: 'Msg -> 
     /// profile (default `Minimal`). Throws with the consolidated
     /// `A11yFinding` list — rule + element path + message — on any
     /// finding fatal for that profile. Returns the same harness so it
-    /// chains alongside `AssertModel` / `AssertCmd`.
+    /// chains alongside `AssertModel` / `AssertSteps`.
     member this.AssertAccessible
         (render: 'Model -> ('Msg -> unit) -> Accessibility.A11yNode, ?profile: Accessibility.A11yProfile)
         =
@@ -173,7 +177,7 @@ type ModuleHarness<'Model, 'Msg>(model: 'Model, cmd: Cmd<'Msg>, update: 'Msg -> 
     /// profile (default `Minimal`). Throws with the consolidated
     /// `A11yFinding` list — rule + element path + message — on any
     /// finding fatal for that profile. Returns the same harness so it
-    /// chains alongside `AssertModel` / `AssertCmd`.
+    /// chains alongside `AssertModel` / `AssertSteps`.
     member this.AssertAccessibleView
         (mount: 'View -> string, view: 'Model -> ('Msg -> unit) -> 'View, ?profile: Accessibility.A11yProfile)
         =
@@ -258,11 +262,11 @@ let lowered (lower: ('Msg -> unit) -> 'Node -> 'View) (tree: 'Model -> 'Node) : 
 
 /// Build a harness from a `unit`-shaped `init`.
 let fromUnitInit
-    (init: unit -> 'Model * Cmd<'Msg>)
-    (update: 'Msg -> 'Model -> 'Model * Cmd<'Msg>)
+    (init: unit -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list)
+    (update: 'Msg -> 'Model -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list)
     : ModuleHarness<'Model, 'Msg> =
-    let model, cmd = init ()
-    ModuleHarness<'Model, 'Msg>(model, cmd, update)
+    let model, steps = init ()
+    ModuleHarness<'Model, 'Msg>(model, steps, update)
 
 /// Build a harness from a context-shaped `init`. Pass
 /// `ClientModuleContext.empty` for the default "anonymous user, no
@@ -270,11 +274,11 @@ let fromUnitInit
 /// `Config`/`Flags`/`UserId` to exercise context-sensitive init.
 let fromContextInit
     (ctx: ClientModuleContext)
-    (init: ClientModuleContext -> 'Model * Cmd<'Msg>)
-    (update: 'Msg -> 'Model -> 'Model * Cmd<'Msg>)
+    (init: ClientModuleContext -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list)
+    (update: 'Msg -> 'Model -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list)
     : ModuleHarness<'Model, 'Msg> =
-    let model, cmd = init ctx
-    ModuleHarness<'Model, 'Msg>(model, cmd, update)
+    let model, steps = init ctx
+    ModuleHarness<'Model, 'Msg>(model, steps, update)
 
 /// Build a harness from a strongly-typed `ClientModule<'Model,'Msg>`
 /// before `register` erasure. Uses `ClientModuleContext.empty` for the

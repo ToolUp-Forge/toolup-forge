@@ -1,5 +1,6 @@
 module HelloWorld.Module.ClientModel
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open ToolUp.Platform
 open HelloWorld.Module.SharedTypes
@@ -27,7 +28,7 @@ type Msg =
     | TriggerThrow
 #endif
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     {
         Input = ""
         LastResponse = None
@@ -35,7 +36,7 @@ let init () : Model * Cmd<Msg> =
         ShouldThrow = false
 #endif
     },
-    Cmd.none
+    []
 
 /// ToolUp.Remoting proxy. `UserSession.withRequestHeaders` attaches the
 /// auth header (Bearer token in authenticated modes; X-User-Id in
@@ -43,28 +44,29 @@ let init () : Model * Cmd<Msg> =
 let private helloWorldApi: HelloWorldApi =
     Api.makeProxy<HelloWorldApi> (customOptions = UserSession.withRequestHeaders)
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SubmitEcho text ->
-        let cmd =
-            RemoteEffect.call "HelloWorldApi.Echo" helloWorldApi.Echo { Text = text } (function
-                | Ok response -> EchoSucceeded response
-                | Error ex -> EchoFailed ex.Message)
-            |> RemoteEffect.asCmd
-
-        { model with Input = text }, cmd
+        { model with Input = text },
+        [
+            Do(
+                RemoteEffect.call "HelloWorldApi.Echo" helloWorldApi.Echo { Text = text } (function
+                    | Ok response -> EchoSucceeded response
+                    | Error ex -> EchoFailed ex.Message)
+            )
+        ]
     | EchoSucceeded response ->
         {
             model with
                 LastResponse = Some response.Echoed
         },
-        Cmd.none
+        []
     | EchoFailed err ->
         {
             model with
                 LastResponse = Some(sprintf "Error: %s" err)
         },
-        Cmd.none
+        []
 #if DEBUG
-    | TriggerThrow -> { model with ShouldThrow = true }, Cmd.none
+    | TriggerThrow -> { model with ShouldThrow = true }, []
 #endif

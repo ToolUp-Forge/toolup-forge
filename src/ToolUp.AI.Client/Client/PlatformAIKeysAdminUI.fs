@@ -97,7 +97,7 @@ let private refreshTeam (teamId: string) =
 
 // ─── Init ───────────────────────────────────────────────────────
 
-let internal initSteps () : Model * Steps =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     {
         Descriptors = []
         PlatformStatuses = []
@@ -109,12 +109,10 @@ let internal initSteps () : Model * Steps =
     },
     loadDescriptors () @ refreshPlatform () @ loadTeams ()
 
-let init () : Model * Cmd<Msg> = initSteps () |> RemoteEffect.run
-
 // ─── Update ─────────────────────────────────────────────────────
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Steps =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadDescriptors(Start()) -> { model with Loading = true }, loadDescriptors ()
     | LoadDescriptors(Finished ds) ->
@@ -238,9 +236,6 @@ let internal step (msg: Msg) (model: Model) : Model * Steps =
         []
 
     | DismissBanner -> { model with Banner = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ───────────────────────────────────────────────────────
 

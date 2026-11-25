@@ -3,6 +3,7 @@
 
 module ProviderProfileBYOK.Client
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 
@@ -40,15 +41,19 @@ type Model = { Providers: ProviderProfileUI.Model }
 
 type Msg = ProviderMsg of ProviderProfileUI.Msg
 
-let init () : Model * Cmd<Msg> =
-    let providers, cmd = ProviderProfileUI.init config
-    { Providers = providers }, Cmd.map ProviderMsg cmd
+/// A child's steps as the host's.
+let private lift steps =
+    Step.mapAll ProviderMsg (RemoteEffect.map ProviderMsg) steps
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
+    let providers, steps = ProviderProfileUI.init config
+    { Providers = providers }, lift steps
+
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | ProviderMsg inner ->
-        let providers, cmd = ProviderProfileUI.update config inner model.Providers
-        { model with Providers = providers }, Cmd.map ProviderMsg cmd
+        let providers, steps = ProviderProfileUI.update config inner model.Providers
+        { model with Providers = providers }, lift steps
 
 let view (model: Model) (dispatch: Msg -> unit) =
     Html.div [

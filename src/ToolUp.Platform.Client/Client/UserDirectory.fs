@@ -5,9 +5,8 @@
 /// admin modules render ids through, as one sub-model. A parent holds
 /// `Directory: UserDirectory.Model`, routes `DirectoryMsg of
 /// UserDirectory.Msg` to `UserDirectory.update`, and asks for ids with
-/// `UserDirectory.resolve ids model.Directory |> Cmd.map DirectoryMsg`
-/// (or, from a ported parent, `resolveSteps` with `Step.map` and
-/// `RemoteEffect.map`).
+/// `UserDirectory.resolve ids model.Directory`, lifted with `Step.mapAll
+/// DirectoryMsg (RemoteEffect.map DirectoryMsg)`.
 ///
 /// A failed lookup (no directory companion wired, a provider hiccup) leaves
 /// the entries as they were, so the ids keep rendering raw: the directory
@@ -39,7 +38,7 @@ let unresolved (ids: string list) (model: Model) =
 
 /// The lookup of the ids `model` does not hold yet, as an effect value;
 /// no step when there are none.
-let internal resolveSteps (ids: string list) (model: Model) : Step<Msg, RemoteEffect<Msg>> list =
+let resolve (ids: string list) (model: Model) : Step<Msg, RemoteEffect<Msg>> list =
     match unresolved ids model with
     | [] -> []
     | pending -> [
@@ -52,12 +51,8 @@ let internal resolveSteps (ids: string list) (model: Model) : Step<Msg, RemoteEf
         )
       ]
 
-/// Resolve the ids `model` does not hold yet; `Cmd.none` when there are none.
-let resolve (ids: string list) (model: Model) : Cmd<Msg> =
-    resolveSteps ids model |> RemoteEffect.toCmd
-
 /// The transitions; a reply asks for nothing further.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Resolved(Ok summaries) ->
         {
@@ -65,9 +60,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
         },
         []
     | Resolved(Error _) -> model, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 let private nonBlank (value: string option) =
     value |> Option.filter (String.IsNullOrWhiteSpace >> not)

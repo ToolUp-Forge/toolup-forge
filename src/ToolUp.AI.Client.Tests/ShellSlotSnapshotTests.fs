@@ -136,8 +136,8 @@ let private renderTiles (tiles: AdminTile list) =
 
 let private module' (id: string) (name: string) (group: string) : ErasedModule =
     ClientModule.create {
-        Init = fun () -> 0, Cmd.none
-        Update = fun (_: int) (m: int) -> m, Cmd.none
+        Init = fun () -> 0, []
+        Update = fun (_: int) (m: int) -> m, []
         Name = name
         Icon = Html.none
     }

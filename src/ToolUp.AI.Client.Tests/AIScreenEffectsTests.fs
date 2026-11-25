@@ -60,7 +60,7 @@ let private platformKeysTests =
     testList "PlatformAIKeysAdminUI" [
         testCase "init reads descriptors, platform statuses and teams, in that order"
         <| fun () ->
-            let _, steps = PlatformAIKeysAdminUI.initSteps ()
+            let _, steps = PlatformAIKeysAdminUI.init ()
 
             same
                 (effects steps)
@@ -73,13 +73,13 @@ let private platformKeysTests =
 
         testCase "a finished action with a team selected refreshes platform, then team"
         <| fun () ->
-            let m0, _ = PlatformAIKeysAdminUI.initSteps ()
+            let m0, _ = PlatformAIKeysAdminUI.init ()
 
             let m1, _ =
-                PlatformAIKeysAdminUI.step (PlatformAIKeysAdminUI.SelectTeam(Some "t1")) m0
+                PlatformAIKeysAdminUI.update (PlatformAIKeysAdminUI.SelectTeam(Some "t1")) m0
 
             let _, steps =
-                PlatformAIKeysAdminUI.step (PlatformAIKeysAdminUI.ActionFinished(Ok(), "done")) m1
+                PlatformAIKeysAdminUI.update (PlatformAIKeysAdminUI.ActionFinished(Ok(), "done")) m1
 
             same
                 (effects steps)
@@ -91,10 +91,10 @@ let private platformKeysTests =
 
         testCase "a team key delete names the team and provider"
         <| fun () ->
-            let m0, _ = PlatformAIKeysAdminUI.initSteps ()
+            let m0, _ = PlatformAIKeysAdminUI.init ()
 
             let _, steps =
-                PlatformAIKeysAdminUI.step (PlatformAIKeysAdminUI.DeleteTeamKey("t1", "anthropic")) m0
+                PlatformAIKeysAdminUI.update (PlatformAIKeysAdminUI.DeleteTeamKey("t1", "anthropic")) m0
 
             same (effects steps) [ call "PlatformAIKeysApi.DeleteTeamKey" ("t1", "anthropic") ] "one delete"
     ]
@@ -103,7 +103,7 @@ let private settingsTests =
     testList "AISettingsUI" [
         testCase "init reads the four settings sources in order"
         <| fun () ->
-            let _, steps = AISettingsUI.initSteps ()
+            let _, steps = AISettingsUI.init ()
 
             same
                 (effects steps)
@@ -117,11 +117,11 @@ let private settingsTests =
 
         testCase "a delete names its label; a finished save re-reads the config"
         <| fun () ->
-            let m0, _ = AISettingsUI.initSteps ()
-            let _, deleted = AISettingsUI.step (AISettingsUI.DeleteInstance "work") m0
+            let m0, _ = AISettingsUI.init ()
+            let _, deleted = AISettingsUI.update (AISettingsUI.DeleteInstance "work") m0
             same (effects deleted) [ call "AISettingsApi.DeleteInstance" "work" ] "one delete"
 
-            let _, saved = AISettingsUI.step (AISettingsUI.SaveFinished(Ok())) m0
+            let _, saved = AISettingsUI.update (AISettingsUI.SaveFinished(Ok())) m0
             same (effects saved) [ call "AISettingsApi.GetMyConfig" () ] "one config read"
     ]
 
@@ -129,15 +129,15 @@ let private narrativeTests =
     testList "NarrativePromptAdminUI" [
         testCase "init lists the narratives"
         <| fun () ->
-            let _, steps = NarrativePromptAdminUI.initSteps ()
+            let _, steps = NarrativePromptAdminUI.init ()
             same (effects steps) [ call "NarrativePromptApi.ListNarratives" () ] "one list read"
 
         testCase "opening a narrative reads it, its versions and its proposals, in order"
         <| fun () ->
-            let m0, _ = NarrativePromptAdminUI.initSteps ()
+            let m0, _ = NarrativePromptAdminUI.init ()
 
             let _, steps =
-                NarrativePromptAdminUI.step (NarrativePromptAdminUI.OpenNarrative "summary") m0
+                NarrativePromptAdminUI.update (NarrativePromptAdminUI.OpenNarrative "summary") m0
 
             same
                 (effects steps)
@@ -150,7 +150,7 @@ let private narrativeTests =
 
         testCase "a dismissal names its decision"
         <| fun () ->
-            let m0, _ = NarrativePromptAdminUI.initSteps ()
+            let m0, _ = NarrativePromptAdminUI.init ()
 
             let decision: NarrativeProposalDecision = {
                 RunKey = "summary"
@@ -158,7 +158,7 @@ let private narrativeTests =
             }
 
             let _, steps =
-                NarrativePromptAdminUI.step (NarrativePromptAdminUI.DismissProposal decision) m0
+                NarrativePromptAdminUI.update (NarrativePromptAdminUI.DismissProposal decision) m0
 
             same (effects steps) [ call "NarrativePromptApi.DismissProposal" decision ] "one dismissal"
     ]
@@ -184,7 +184,7 @@ let private assistantTests =
     testList "AIAssistantUI" [
         testCase "init reads the first page, the tools and the providers, in order"
         <| fun () ->
-            let _, steps = AIAssistantUI.initSteps ()
+            let _, steps = AIAssistantUI.init ()
 
             same
                 (effects steps)
@@ -197,16 +197,16 @@ let private assistantTests =
 
         testCase "a submission reads its ids and clock in one legacy body"
         <| fun () ->
-            let m0, _ = AIAssistantUI.initSteps ()
-            let _, steps = AIAssistantUI.step (AIAssistantUI.SubmitMessage "hello") m0
+            let m0, _ = AIAssistantUI.init ()
+            let _, steps = AIAssistantUI.update (AIAssistantUI.SubmitMessage "hello") m0
             same (effects steps) [ legacy "AIAssistantUI.prepareSubmission" ] "one body, by its site"
 
         testCase "a prepared submission arms the watchdog, then asks the fast path"
         <| fun () ->
-            let m0, _ = AIAssistantUI.initSteps ()
+            let m0, _ = AIAssistantUI.init ()
 
             let p = prepared (Guid.NewGuid())
-            let _, steps = AIAssistantUI.step (AIAssistantUI.SubmitMessagePrepared p) m0
+            let _, steps = AIAssistantUI.update (AIAssistantUI.SubmitMessagePrepared p) m0
 
             same
                 (effects steps |> List.map shape)
@@ -223,20 +223,23 @@ let private assistantTests =
         <| fun () ->
             let conv = Guid.NewGuid()
             let p = prepared conv
-            let m0, _ = AIAssistantUI.initSteps ()
-            let m1, _ = AIAssistantUI.step (AIAssistantUI.SubmitMessagePrepared p) m0
+            let m0, _ = AIAssistantUI.init ()
+            let m1, _ = AIAssistantUI.update (AIAssistantUI.SubmitMessagePrepared p) m0
             let running = task conv
-            let m2, _ = AIAssistantUI.step (AIAssistantUI.MessageSubmitted(Finished running)) m1
-            let _, steps = AIAssistantUI.step (AIAssistantUI.WatchdogFired p.WatchdogId) m2
+
+            let m2, _ =
+                AIAssistantUI.update (AIAssistantUI.MessageSubmitted(Finished running)) m1
+
+            let _, steps = AIAssistantUI.update (AIAssistantUI.WatchdogFired p.WatchdogId) m2
 
             same (effects steps) [ call "AIAssistantApi.GetTaskStatus" running.TaskId ] "one status read"
 
         testCase "a deleted conversation reloads the list as a follow-up"
         <| fun () ->
-            let m0, _ = AIAssistantUI.initSteps ()
+            let m0, _ = AIAssistantUI.init ()
 
             let _, steps =
-                AIAssistantUI.step (AIAssistantUI.DeleteConversation(Finished(Ok()))) m0
+                AIAssistantUI.update (AIAssistantUI.DeleteConversation(Finished(Ok()))) m0
 
             same (effects steps) [] "no effect of its own"
 
@@ -249,13 +252,13 @@ let private assistantTests =
 
         testCase "a cancel is one signal"
         <| fun () ->
-            let m0, _ = AIAssistantUI.initSteps ()
-            let _, steps = AIAssistantUI.step (AIAssistantUI.CancelTask(Guid.NewGuid())) m0
+            let m0, _ = AIAssistantUI.init ()
+            let _, steps = AIAssistantUI.update (AIAssistantUI.CancelTask(Guid.NewGuid())) m0
             same (effects steps) [ signal "AIAssistantUI.cancel" ] "the cancel POST, by its site"
 
         testCase "update hands today's loop one command element per step"
         <| fun () ->
-            let m0, _ = AIAssistantUI.initSteps ()
+            let m0, _ = AIAssistantUI.init ()
 
             let _, cmd =
                 AIAssistantUI.update (AIAssistantUI.SubmitMessagePrepared(prepared (Guid.NewGuid()))) m0

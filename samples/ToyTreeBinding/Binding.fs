@@ -3,6 +3,7 @@
 
 module Toolup.Samples.ToyTreeBinding.Binding
 
+open Fuaran.MVU
 open Feliz
 open ToolUp.Elmish
 open ToolUp.Platform
@@ -32,13 +33,13 @@ type Msg =
     | Echoed of string
     | EchoFailed of string
 
-let init () : Model * Cmd<Msg> = { Count = 0; LastEcho = "" }, Cmd.none
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list = { Count = 0; LastEcho = "" }, []
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | Bumped -> { model with Count = model.Count + 1 }, Cmd.none
-    | Echoed s -> { model with LastEcho = s }, Cmd.none
-    | EchoFailed e -> { model with LastEcho = $"error: {e}" }, Cmd.none
+    | Bumped -> { model with Count = model.Count + 1 }, []
+    | Echoed s -> { model with LastEcho = s }, []
+    | EchoFailed e -> { model with LastEcho = $"error: {e}" }, []
 
 /// The toy view tree. One event site per capability, so the binding
 /// exercises all four hooks.

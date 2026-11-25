@@ -40,8 +40,8 @@ let private erasedModule (id: string) (name: string) : ErasedModule = {
         Icon = Unchecked.defaultof<ReactElement>
         Pages = []
     }
-    Init = fun _ -> box (), Cmd.none
-    Update = fun _ state -> state, Cmd.none
+    Init = fun _ -> box (), []
+    Update = fun _ state -> state, []
     View = None
     PageViews = None
     NeedsData = None
@@ -90,8 +90,8 @@ let tests =
             // registration surface actually applies.
             let m =
                 ClientModule.create {
-                    Init = fun () -> (), Cmd.none
-                    Update = fun () () -> (), Cmd.none
+                    Init = fun () -> (), []
+                    Update = fun () () -> (), []
                     Name = "Channel Analysis"
                     Icon = Unchecked.defaultof<ReactElement>
                 }
@@ -112,8 +112,8 @@ let tests =
             // "ChannelAnalysis". Both tiers must land on one ComponentId.
             let clientModule =
                 ClientModule.create {
-                    Init = fun () -> (), Cmd.none
-                    Update = fun () () -> (), Cmd.none
+                    Init = fun () -> (), []
+                    Update = fun () () -> (), []
                     Name = "Channel Analysis"
                     Icon = Unchecked.defaultof<ReactElement>
                 }
@@ -216,16 +216,16 @@ let tests =
             // display names that derive one id.
             let a =
                 ClientModule.create {
-                    Init = fun () -> (), Cmd.none
-                    Update = fun () () -> (), Cmd.none
+                    Init = fun () -> (), []
+                    Update = fun () () -> (), []
                     Name = "Channel Analysis"
                     Icon = Unchecked.defaultof<ReactElement>
                 }
 
             let b =
                 ClientModule.create {
-                    Init = fun () -> (), Cmd.none
-                    Update = fun () () -> (), Cmd.none
+                    Init = fun () -> (), []
+                    Update = fun () () -> (), []
                     Name = "ChannelAnalysis"
                     Icon = Unchecked.defaultof<ReactElement>
                 }

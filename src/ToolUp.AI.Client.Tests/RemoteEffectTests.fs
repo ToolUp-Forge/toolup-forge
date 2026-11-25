@@ -142,15 +142,15 @@ let private TransportDown = "transport down"
 
 /// Send `msg` through the knowledge base's real `update` with the call
 /// `methodName` failing, collect the replies, and hand back the model before
-/// the replies and a function that folds them through `step`. The page has
+/// the replies and a function that folds them through `update`. The page has
 /// no server, so the call fails in transport; the chain replaces the
 /// exception so the reason is known.
 let private kbFailing (methodName: string) (msg: ClientModel.Msg) (model: ClientModel.Model) =
     let interceptor = recording methodName (Some TransportDown)
     let seen = ResizeArray<ClientModel.Msg>()
-    let requested, cmd = ClientModel.update msg model
+    let requested, steps = ClientModel.update msg model
 
-    for effect in cmd do
+    for effect in RemoteEffect.toCmd steps do
         effect seen.Add
 
     requested,
@@ -158,7 +158,7 @@ let private kbFailing (methodName: string) (msg: ClientModel.Msg) (model: Client
         same (events interceptor) [ "calling"; "error" ] (sprintf "%s failed in transport" methodName)
         let replies = List.ofSeq seen
         same (List.length replies) 1 "one reply"
-        replies |> List.fold (fun m reply -> fst (ClientModel.step reply m)) requested
+        replies |> List.fold (fun m reply -> fst (ClientModel.update reply m)) requested
 
 let tests =
     testList "Remote calls as effect values" [
@@ -361,9 +361,36 @@ let tests =
                     "a legacy body compares by its site")
         ]
 
+        testList "the interpreter registers every kind it names" [
+            testCase "each effect case and the subscription name a registered kind, each its own" (fun () ->
+                let effects: RemoteEffect<Msg> list = [
+                    RemoteEffect.call "Probe.Call" (fun (_: int) -> async { return 1 }) 0 reply
+                    RemoteEffect.await "Probe.Await" (fun (_: int) -> async { return 1 }) 0 reply
+                    RemoteEffect.legacy "Probe.Legacy" ignore
+                    RemoteEffect.signal "Probe.Signal" ignore
+                ]
+
+                let interpreter = RemoteEffect.interpreter<Msg>
+
+                let effectKinds =
+                    effects |> List.map (fun e -> (interpreter.Effect e).Invocation.Kind)
+
+                let subscriptionKind =
+                    (interpreter.Resource (ResourceKey [ "probe" ]) (Subscription("Probe.Sub", fun _ -> null)))
+                        .Invocation.Kind
+
+                let named = effectKinds @ [ subscriptionKind ]
+
+                for kind in named do
+                    same (Interpreter.tryKind kind interpreter |> Option.isSome) true (kind + " is registered")
+
+                same (List.length (List.distinct named)) 5 "five distinct kinds"
+                same (List.length interpreter.Kinds) 5 "and no kind registered that nothing names")
+        ]
+
         testList "a ported update states its effects" [
             testCase "the fact browse: opening a table reads its detail and its first page of runs" (fun () ->
-                let _, steps = stepWith fakeApi (OpenTable "prices") empty
+                let _, steps = updateWith fakeApi (OpenTable "prices") empty
 
                 same
                     steps
@@ -371,10 +398,7 @@ let tests =
                         expectCall "IFactBrowseApi.GetTable" "prices"
                         expectCall "IFactBrowseApi.ListRuns" ("prices", 0, FactBrowseApi.DefaultPageSize)
                     ]
-                    "two calls, as values"
-
-                let _, cmd = updateWith fakeApi (OpenTable "prices") empty
-                same (List.length cmd) 2 "and updateWith still returns them as two commands")
+                    "two calls, as values")
 
             testCase "the fact browse: opening a run's movers names the table and the run" (fun () ->
                 let selected = {
@@ -382,14 +406,14 @@ let tests =
                         SelectedTable = Some "prices"
                 }
 
-                let _, steps = stepWith fakeApi (ToggleMovers "run-1") selected
+                let _, steps = updateWith fakeApi (ToggleMovers "run-1") selected
                 same steps [ expectCall "IFactBrowseApi.GetRunMovers" ("prices", "run-1") ] "one call")
 
             testCase "the knowledge base: opening a document's history reads its versions" (fun () ->
                 let m0, _ = ClientModel.init ClientModuleContext.empty
 
                 let _, steps =
-                    ClientModel.step (ClientModel.OpenVersionHistory("doc-1", "handbook.pdf")) m0
+                    ClientModel.update (ClientModel.OpenVersionHistory("doc-1", "handbook.pdf")) m0
 
                 same steps [ expectCall "KnowledgeApi.GetDocumentVersions" "doc-1" ] "one call")
 
@@ -397,7 +421,7 @@ let tests =
                 let m0, _ = ClientModel.init ClientModuleContext.empty
 
                 let _, steps =
-                    ClientModel.step (ClientModel.LoadDocuments(Finished [ pendingDocument ])) m0
+                    ClientModel.update (ClientModel.LoadDocuments(Finished [ pendingDocument ])) m0
 
                 same steps [ Do(RemoteEffect.legacy "KnowledgeBase.schedulePoll" ignore) ] "the timer, by its site")
 
@@ -405,7 +429,7 @@ let tests =
                 let m0, _ = PlatformKnowledgeAdminUI.init ()
 
                 let _, steps =
-                    PlatformKnowledgeAdminUI.step (PlatformKnowledgeAdminUI.RequestDelete "doc-9") m0
+                    PlatformKnowledgeAdminUI.update (PlatformKnowledgeAdminUI.RequestDelete "doc-9") m0
 
                 same steps [ expectCall "IPlatformKnowledgeApi.DeletePlatformDocument" "doc-9" ] "one call")
         ]
@@ -502,7 +526,7 @@ let tests =
                     let m0, _ = ClientModel.init ClientModuleContext.empty
 
                     let loaded =
-                        fst (ClientModel.step (ClientModel.LoadDocuments(Finished [ pendingDocument ])) m0)
+                        fst (ClientModel.update (ClientModel.LoadDocuments(Finished [ pendingDocument ])) m0)
 
                     let requested, settle =
                         kbFailing "KnowledgeApi.GetStatus" ClientModel.PollStatuses loaded

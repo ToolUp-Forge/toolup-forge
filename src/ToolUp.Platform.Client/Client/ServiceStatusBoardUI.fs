@@ -82,7 +82,7 @@ let internal loadSection (msgs: ServiceStatusBoardMessages) (section: string) : 
 
 // ─── Init ────────────────────────────────────────────────────────────
 
-let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list =
     let model = {
         Snapshot = Remote.Loading
         Collapsed = Set.empty
@@ -91,7 +91,7 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Messages = ctx.Messages.ServiceStatusBoard
     }
 
-    (model, loadSnapshot ()) |> RemoteEffect.run
+    (model, loadSnapshot ())
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -153,7 +153,7 @@ let private flippedSections
 // ─── Update ──────────────────────────────────────────────────────────
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | RefreshAll -> { model with Snapshot = Remote.Loading }, loadSnapshot ()
 
@@ -267,9 +267,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
                     Refreshing = nextRefreshing
             },
             []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Renderers ───────────────────────────────────────────────────────
 

@@ -146,8 +146,7 @@ let private loading: Model = {
     ExportError = None
 }
 
-let init () : Model * Cmd<Msg> =
-    (loading, loadAll ()) |> RemoteEffect.run
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list = (loading, loadAll ())
 
 /// Fold one panel's answer into its slot.
 let private settle (result: Result<'T, string>) : PanelData<'T> =
@@ -188,7 +187,7 @@ let internal download (panel: InspectorPanel) (json: string) : Step<Msg, RemoteE
 ]
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Refresh -> { loading with Exporting = None }, loadAll ()
     | CompositionLoaded r -> { model with Composition = settle r }, []
@@ -214,9 +213,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
                 ExportError = Some(panel, err)
         },
         []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 

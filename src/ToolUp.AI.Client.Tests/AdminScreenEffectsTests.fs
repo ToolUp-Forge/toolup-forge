@@ -52,13 +52,13 @@ let tests =
 
         testCase "AdminHome: a refresh reads the overview once" (fun () ->
             let m0, _ = AdminHome.init ()
-            let _, steps = AdminHome.step AdminHome.Refresh m0
+            let _, steps = AdminHome.update AdminHome.Refresh m0
             same steps [ expectCall "IHomeOverviewApi.GetOverview" () ] "one call")
 
         testCase "AuditLogUI: applying filters queries the first page; an export downloads" (fun () ->
             let m0, _ = AuditLogUI.init ()
-            let m1, _ = AuditLogUI.step (AuditLogUI.SetActor "sam") m0
-            let _, steps = AuditLogUI.step AuditLogUI.ApplyFilters m1
+            let m1, _ = AuditLogUI.update (AuditLogUI.SetActor "sam") m0
+            let _, steps = AuditLogUI.update AuditLogUI.ApplyFilters m1
 
             same
                 steps
@@ -70,12 +70,12 @@ let tests =
                 ]
                 "the query carries the applied actor"
 
-            let _, exported = AuditLogUI.step (AuditLogUI.ExportComplete(Ok [| 1uy |])) m0
+            let _, exported = AuditLogUI.update (AuditLogUI.ExportComplete(Ok [| 1uy |])) m0
             same exported [ expectSignal "AuditLogUI.downloadCsv" ] "the download, by its site")
 
         testCase "CompositionInspectorUI: a refresh reads the five panels in order" (fun () ->
             let m0, _ = CompositionInspectorUI.init ()
-            let _, steps = CompositionInspectorUI.step CompositionInspectorUI.Refresh m0
+            let _, steps = CompositionInspectorUI.update CompositionInspectorUI.Refresh m0
 
             same
                 steps
@@ -89,7 +89,7 @@ let tests =
                 "five calls, in the order Cmd.batch ran them"
 
             let _, exported =
-                CompositionInspectorUI.step (CompositionInspectorUI.ExportRequested RulesPanel) m0
+                CompositionInspectorUI.update (CompositionInspectorUI.ExportRequested RulesPanel) m0
 
             same exported [ expectCall "ICompositionInspectorApi.ExportPanel" RulesPanel ] "one export call")
 
@@ -97,18 +97,18 @@ let tests =
             let m0, _ = DataSubjectRequestAdminUI.init ctx
 
             let m1, started =
-                DataSubjectRequestAdminUI.step (DataSubjectRequestAdminUI.AsyncExportStarted(Ok "ticket-1")) m0
+                DataSubjectRequestAdminUI.update (DataSubjectRequestAdminUI.AsyncExportStarted(Ok "ticket-1")) m0
 
             same started [ expectLegacy "DataSubjectRequestAdminUI.pollDelay" ] "the poll timer, by its site"
 
             let _, polled =
-                DataSubjectRequestAdminUI.step DataSubjectRequestAdminUI.PollTicket m1
+                DataSubjectRequestAdminUI.update DataSubjectRequestAdminUI.PollTicket m1
 
             same polled [ expectCall "IDataSubjectRequestApi.GetExportStatus" "ticket-1" ] "one status read")
 
         testCase "DatadogReadbackUI: a monitors refresh is one read of its URL" (fun () ->
             let m0, _ = DatadogReadbackUI.init DatadogReadbackConfig.defaults ()
-            let _, steps = DatadogReadbackUI.step DatadogReadbackUI.RefreshMonitors m0
+            let _, steps = DatadogReadbackUI.update DatadogReadbackUI.RefreshMonitors m0
 
             same
                 steps
@@ -119,7 +119,7 @@ let tests =
 
         testCase "HealthMonitorUI: a live refresh reads four panels in order, as four commands" (fun () ->
             let m0, _ = HealthMonitorUI.init ()
-            let _, steps = HealthMonitorUI.step HealthMonitorUI.RefreshLive m0
+            let _, steps = HealthMonitorUI.update HealthMonitorUI.RefreshLive m0
 
             same
                 steps
@@ -137,14 +137,14 @@ let tests =
         testCase "JobsAdminUI: expanding reads attempts; an accepted re-run reads and starts the poll" (fun () ->
             let id = Guid.NewGuid()
             let m0, _ = JobsAdminUI.init ()
-            let _, expanded = JobsAdminUI.step (JobsAdminUI.ToggleAttempts id) m0
+            let _, expanded = JobsAdminUI.update (JobsAdminUI.ToggleAttempts id) m0
 
             same
                 expanded
                 [ expectCall "JobApi.GetRecentRuns" (id, JobsAdminUI.recentAttemptCount) ]
                 "one attempts read"
 
-            let _, accepted = JobsAdminUI.step (JobsAdminUI.RerunAccepted(id, Ok())) m0
+            let _, accepted = JobsAdminUI.update (JobsAdminUI.RerunAccepted(id, Ok())) m0
 
             same
                 accepted
@@ -159,7 +159,7 @@ let tests =
                     Reruns = Map.ofList [ id, JobsAdminUI.RerunProgress.Awaiting(None, 0) ]
             }
 
-            let _, polled = JobsAdminUI.step (JobsAdminUI.PollJob id) awaiting
+            let _, polled = JobsAdminUI.update (JobsAdminUI.PollJob id) awaiting
 
             same
                 polled
@@ -171,7 +171,7 @@ let tests =
 
         testCase "MigrationStatusUI: a refresh reads types then statuses; a trigger names its data type" (fun () ->
             let m0, _ = MigrationStatusUI.init ()
-            let _, steps = MigrationStatusUI.step MigrationStatusUI.Refresh m0
+            let _, steps = MigrationStatusUI.update MigrationStatusUI.Refresh m0
 
             same
                 steps
@@ -182,13 +182,13 @@ let tests =
                 "two calls, in order"
 
             let _, triggered =
-                MigrationStatusUI.step (MigrationStatusUI.TriggerClicked "media") m0
+                MigrationStatusUI.update (MigrationStatusUI.TriggerClicked "media") m0
 
             same triggered [ expectCall "IDataMigrationApi.TriggerMigration" "media" ] "one trigger")
 
         testCase "ModuleVisibilityAdminUI: a load reads three things; a save reloads by a follow-up" (fun () ->
             let m0, _ = ModuleVisibilityAdminUI.init ctx
-            let _, loaded = ModuleVisibilityAdminUI.step ModuleVisibilityAdminUI.Load m0
+            let _, loaded = ModuleVisibilityAdminUI.update ModuleVisibilityAdminUI.Load m0
 
             same
                 loaded
@@ -200,7 +200,7 @@ let tests =
                 "three calls, in order"
 
             let _, saved =
-                ModuleVisibilityAdminUI.step (ModuleVisibilityAdminUI.SaveCompleted(Ok())) m0
+                ModuleVisibilityAdminUI.update (ModuleVisibilityAdminUI.SaveCompleted(Ok())) m0
 
             same saved [ Then ModuleVisibilityAdminUI.Load ] "the reload, as a follow-up message")
 
@@ -208,7 +208,7 @@ let tests =
             let m0, _ = ObservabilityUI.init ()
 
             let _, steps =
-                ObservabilityUI.step
+                ObservabilityUI.update
                     (ObservabilityUI.SourcesLoaded(
                         Ok {
                             Logs = false
@@ -222,16 +222,16 @@ let tests =
 
         testCase "PermissionsAdminUI: a refresh reads the snapshot" (fun () ->
             let m0, _ = PermissionsAdminUI.init ctx
-            let _, steps = PermissionsAdminUI.step PermissionsAdminUI.RefreshSnapshot m0
+            let _, steps = PermissionsAdminUI.update PermissionsAdminUI.RefreshSnapshot m0
             same steps [ expectCall "PermissionsAdminUI.loadSnapshot" () ] "one snapshot read")
 
         testCase "PlatformAdminUI: a refresh, a directory lookup and a lifted confirmation" (fun () ->
             let m0, _ = PlatformAdminUI.init ctx
-            let _, refreshed = PlatformAdminUI.step PlatformAdminUI.RefreshAdmins m0
+            let _, refreshed = PlatformAdminUI.update PlatformAdminUI.RefreshAdmins m0
             same refreshed [ expectCall "PlatformAdminApi.ListPlatformAdmins" () ] "one list call"
 
             let _, owner =
-                PlatformAdminUI.step (PlatformAdminUI.SetNewTeamOwnerUserId " u9 ") m0
+                PlatformAdminUI.update (PlatformAdminUI.SetNewTeamOwnerUserId " u9 ") m0
 
             same owner [ expectCall "IUserDirectoryApi.ResolveUsers" [ "u9" ] ] "the directory's one lookup"
 
@@ -241,7 +241,7 @@ let tests =
             }
 
             let _, granted =
-                PlatformAdminUI.step
+                PlatformAdminUI.update
                     (PlatformAdminUI.AssignConfirmMsg PlatformAdminUI.AssignConfirm.Confirm)
                     confirming
 
@@ -251,7 +251,7 @@ let tests =
                 "the sub-model's call, lifted with its identity"
 
             let _, deleted =
-                PlatformAdminUI.ConfirmDeleteTeam.step
+                PlatformAdminUI.ConfirmDeleteTeam.update
                     PlatformAdminUI.ConfirmDeleteTeam.Confirm
                     (PlatformAdminUI.ConfirmDeleteTeam.init "t1" "Team One")
 
@@ -259,24 +259,26 @@ let tests =
 
         testCase "PlatformUsersUI: a load reads the principals" (fun () ->
             let m0, _ = PlatformUsersUI.init ctx
-            let _, steps = PlatformUsersUI.step PlatformUsersUI.LoadPrincipals m0
+            let _, steps = PlatformUsersUI.update PlatformUsersUI.LoadPrincipals m0
             same steps [ expectCall "IPlatformTenantApi.ListPrincipals" () ] "one call")
 
         testCase "ServiceAccountUI: selecting an account reads its tokens" (fun () ->
             let m0, _ = ServiceAccountUI.init ()
-            let _, steps = ServiceAccountUI.step (ServiceAccountUI.SelectAccount "sa-1") m0
+            let _, steps = ServiceAccountUI.update (ServiceAccountUI.SelectAccount "sa-1") m0
             same steps [ expectCall "IServiceAccountApi.ListTokens" "sa-1" ] "one call")
 
         testCase "ServiceStatusBoardUI: a section refresh names its method; an unknown one answers at once" (fun () ->
             let m0, _ = ServiceStatusBoardUI.init ctx
 
             let _, health =
-                ServiceStatusBoardUI.step (ServiceStatusBoardUI.RefreshSection ServiceStatusSnapshot.HealthSection) m0
+                ServiceStatusBoardUI.update
+                    (ServiceStatusBoardUI.RefreshSection ServiceStatusSnapshot.HealthSection)
+                    m0
 
             same health [ expectCall "IServiceStatusBoardApi.RefreshHealth" () ] "the health section's own call"
 
             let _, unknown =
-                ServiceStatusBoardUI.step (ServiceStatusBoardUI.RefreshSection "bogus") m0
+                ServiceStatusBoardUI.update (ServiceStatusBoardUI.RefreshSection "bogus") m0
 
             same
                 unknown
@@ -289,18 +291,18 @@ let tests =
             let m0, _ = TenantLifecycleAdminUI.init ()
 
             let _, steps =
-                TenantLifecycleAdminUI.step (TenantLifecycleAdminUI.SubmitScope "  team-1  ") m0
+                TenantLifecycleAdminUI.update (TenantLifecycleAdminUI.SubmitScope "  team-1  ") m0
 
             same steps [ expectCall "IPlatformTenantApi.GetLifecycleSummary" "team-1" ] "one call"
 
             let _, blank =
-                TenantLifecycleAdminUI.step (TenantLifecycleAdminUI.SubmitScope "   ") m0
+                TenantLifecycleAdminUI.update (TenantLifecycleAdminUI.SubmitScope "   ") m0
 
             same blank [] "nothing")
 
         testCase "UsageDashboard: an export names its window; a finished export downloads" (fun () ->
             let m0, _ = UsageDashboard.init ()
-            let _, steps = UsageDashboard.step UsageDashboard.ExportCsv m0
+            let _, steps = UsageDashboard.update UsageDashboard.ExportCsv m0
 
             same
                 steps
@@ -310,13 +312,13 @@ let tests =
                 "one export call"
 
             let _, exported =
-                UsageDashboard.step (UsageDashboard.ExportComplete(Ok [| 1uy |])) m0
+                UsageDashboard.update (UsageDashboard.ExportComplete(Ok [| 1uy |])) m0
 
             same exported [ expectSignal "UsageDashboard.downloadCsv" ] "the download, by its site")
 
         testCase "WebhookAdminUI: a test fire names its subscription" (fun () ->
             let id = Guid.NewGuid()
             let m0, _ = WebhookAdminUI.init ctx
-            let _, steps = WebhookAdminUI.step (WebhookAdminUI.TestFireSubmit id) m0
+            let _, steps = WebhookAdminUI.update (WebhookAdminUI.TestFireSubmit id) m0
             same steps [ expectCall "IWebhookApi.TestFire" id ] "one call")
     ]

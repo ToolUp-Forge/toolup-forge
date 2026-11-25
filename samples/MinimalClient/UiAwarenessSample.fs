@@ -31,6 +31,7 @@ module MinimalClient.UiAwarenessSample
 // AI server + model), so this sample proves the compile-time half of
 // the contract; `docs/ai/ui-awareness.md` documents the runtime half.
 
+open Fuaran.MVU
 open Feliz
 open ToolUp.Elmish
 open ToolUp.Platform
@@ -45,18 +46,17 @@ type Msg =
     | SetFilter of string
     | Refresh
 
-let private init () : Model * Cmd<Msg> =
-    { Filter = ""; RefreshCount = 0 }, Cmd.none
+let private init () : Model * Step<Msg, RemoteEffect<Msg>> list = { Filter = ""; RefreshCount = 0 }, []
 
-let private update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+let private update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | SetFilter text -> { model with Filter = text }, Cmd.none
+    | SetFilter text -> { model with Filter = text }, []
     | Refresh ->
         {
             model with
                 RefreshCount = model.RefreshCount + 1
         },
-        Cmd.none
+        []
 
 /// The `'Model -> UiStateReport` projection `withInspectState` takes.
 /// Fields are JSON-encoded leaves (Phase 536's contract) — a string

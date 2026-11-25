@@ -272,7 +272,7 @@ let private defaultFilter: LogFilter = {
 }
 
 /// The initial state: every read pending on the sources answer.
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     let model = {
         Sources = Remote.Loading
         ActiveTab = LogsTab
@@ -288,7 +288,7 @@ let init () : Model * Cmd<Msg> =
         Alerts = Remote.NotAsked
     }
 
-    (model, loadSources ()) |> RemoteEffect.run
+    (model, loadSources ())
 
 /// The first tab whose source is on, in tab order.
 let private firstTab (sources: ObservabilitySources) : Tab =
@@ -306,7 +306,7 @@ let private searchLogs (model: Model) (filter: LogFilter) =
     loadLogs filter
 
 /// The transitions — pure; every read is an effect value.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SourcesLoaded(Error error) ->
         {
@@ -438,9 +438,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
                 Alerts = Remote.ofResult result
         },
         []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Shared renderers ────────────────────────────────────────────────
 

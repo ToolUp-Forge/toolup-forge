@@ -49,20 +49,24 @@ type private CounterMsg =
     | Increment
     | DecrementBy of int
 
-let private counterInit () : CounterModel * Cmd<CounterMsg> = { Count = 0 }, Cmd.none
+let private counterInit () : CounterModel * Fuaran.MVU.Step<CounterMsg, ToolUp.Elmish.RemoteEffect<CounterMsg>> list =
+    { Count = 0 }, []
 
-let private counterUpdate (msg: CounterMsg) (model: CounterModel) : CounterModel * Cmd<CounterMsg> =
+let private counterUpdate
+    (msg: CounterMsg)
+    (model: CounterModel)
+    : CounterModel * Fuaran.MVU.Step<CounterMsg, ToolUp.Elmish.RemoteEffect<CounterMsg>> list =
     match msg with
-    | Increment -> { model with Count = model.Count + 1 }, Cmd.none
-    | DecrementBy n -> { model with Count = model.Count - n }, Cmd.none
+    | Increment -> { model with Count = model.Count + 1 }, []
+    | DecrementBy n -> { model with Count = model.Count - n }, []
 
 let private moduleHarnessTests =
     testList "ModuleHarness — fluent dispatch + assertions" [
-        testCase "init seeds the model and Cmd.none"
+        testCase "init seeds the model and asks for nothing"
         <| fun _ ->
             let h = ModuleHarness.fromUnitInit counterInit counterUpdate
             Expect.equal h.Model.Count 0 "init count"
-            Expect.isEmpty h.Cmd "init Cmd.none"
+            Expect.isEmpty h.Steps "init asks for nothing"
 
         testCase "Dispatch chains through update"
         <| fun _ ->
@@ -73,7 +77,7 @@ let private moduleHarnessTests =
                     .Dispatch(Increment)
                     .Dispatch(DecrementBy 5)
                     .AssertModel(fun m -> m.Count = -3)
-                    .AssertNoCmd()
+                    .AssertNoSteps()
 
             Expect.equal final.Model.Count -3 "post-chain count"
 

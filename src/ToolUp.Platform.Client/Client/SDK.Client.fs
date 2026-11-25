@@ -1139,13 +1139,13 @@ module Client =
         | Some moduleImpl when model.InitPhase <> Prefetching && canNavigateToModule config model moduleImpl ->
             try
                 let context = buildContext config queryBus model moduleId
-                let state, cmd = moduleImpl.Init context
+                let state, steps = moduleImpl.Init context
 
                 {
                     model with
                         Hosts = model.Hosts |> Map.add moduleId { State = state; Generation = 0 }
                 },
-                moduleCmd moduleId cmd
+                moduleCmd moduleId (RemoteEffect.toCmd steps)
             with ex ->
                 {
                     model with
@@ -1167,13 +1167,13 @@ module Client =
     let private applyToHost (modules: ErasedModule list) (moduleId: string) (message: obj) (model: Model) =
         match tryFind modules moduleId, model.Hosts |> Map.tryFind moduleId with
         | Some moduleImpl, Some host ->
-            let state, cmd = moduleImpl.Update message host.State
+            let state, steps = moduleImpl.Update message host.State
 
             {
                 model with
                     Hosts = model.Hosts |> Map.add moduleId { host with State = state }
             },
-            moduleCmd moduleId cmd
+            moduleCmd moduleId (RemoteEffect.toCmd steps)
         | _ -> model, Cmd.none
 
     /// Deliver a message the module's own view did not send — a decoded

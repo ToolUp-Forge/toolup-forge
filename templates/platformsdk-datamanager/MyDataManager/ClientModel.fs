@@ -1,5 +1,6 @@
 module MyDataManager.ClientModel
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open ToolUp.Platform
 open ProcessedDataTypes
@@ -24,36 +25,35 @@ type Msg =
     | IngestSucceeded of IngestResponse
     | IngestFailed of string
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     {
         SelectedFile = None
         LastIngest = None
         Processed = []
     },
-    Cmd.none
+    []
 
 let private api: MyDataManagerApi =
     Api.makeProxy<MyDataManagerApi> (customOptions = UserSession.withRequestHeaders)
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | FileSelected uri -> { model with SelectedFile = Some uri }, Cmd.none
+    | FileSelected uri -> { model with SelectedFile = Some uri }, []
     | Ingest ->
         match model.SelectedFile with
-        | None -> model, Cmd.none
+        | None -> model, []
         | Some uri ->
-            let cmd =
+            let call =
                 RemoteEffect.call "MyDataManagerApi.Ingest" api.Ingest { SourceUri = uri; Format = "csv" } (function
                     | Ok response -> IngestSucceeded response
                     | Error ex -> IngestFailed ex.Message)
-                |> RemoteEffect.asCmd
 
-            model, cmd
+            model, [ Do call ]
     | IngestSucceeded response ->
         {
             model with
                 LastIngest = Some response.Result
                 Processed = model.Processed @ [ response.Processed ]
         },
-        Cmd.none
-    | IngestFailed _ -> model, Cmd.none
+        []
+    | IngestFailed _ -> model, []

@@ -366,8 +366,8 @@ let private referenceServer () : ServerModule =
 
 let private referenceClient () : ErasedModule =
     ClientModule.create {
-        Init = fun () -> { Ready = false }, Cmd.none
-        Update = fun _ model -> model, Cmd.none
+        Init = fun () -> { Ready = false }, []
+        Update = fun _ model -> model, []
         Name = "conformance-reference"
         Icon = Unchecked.defaultof<ReactElement>
     }
@@ -540,8 +540,8 @@ let private helloWorldServer () : ServerModule =
 let private helloWorldClient () : ErasedModule =
     // samples/HelloWorld/HelloWorld.Module/ClientView.fs — `register ()`
     ClientModule.create {
-        Init = fun () -> (), Cmd.none
-        Update = fun (_: ConformanceReferenceMsg) model -> model, Cmd.none
+        Init = fun () -> (), []
+        Update = fun (_: ConformanceReferenceMsg) model -> model, []
         Name = "Hello World"
         Icon = Unchecked.defaultof<ReactElement>
     }

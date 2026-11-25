@@ -220,7 +220,7 @@ let private pollDelay (runKey: string) : Steps = [
     )
 ]
 
-let internal initSteps () : Model * Steps =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     {
         Narratives = Loading
         Open = None
@@ -232,15 +232,13 @@ let internal initSteps () : Model * Steps =
     },
     loadList ()
 
-let init () : Model * Cmd<Msg> = initSteps () |> RemoteEffect.run
-
 let private openKey (model: Model) : string option =
     match model.Open with
     | Some(Loaded view) -> Some view.RunKey
     | _ -> None
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Steps =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Refresh -> { model with Narratives = Loading }, loadList ()
     | NarrativesLoaded(Ok narratives) ->
@@ -432,9 +430,6 @@ let internal step (msg: Msg) (model: Model) : Model * Steps =
                 Banner = Some(Error reason)
         },
         []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ───────────────────────────────────────────────────────────
 

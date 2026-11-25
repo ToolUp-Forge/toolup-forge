@@ -151,7 +151,7 @@ let internal loadMetrics (config: DatadogReadbackConfig) : Step<Msg, RemoteEffec
 
 // ─── Init / update ───────────────────────────────────────────────────
 
-let init (config: DatadogReadbackConfig) () : Model * Cmd<Msg> =
+let init (config: DatadogReadbackConfig) () : Model * Step<Msg, RemoteEffect<Msg>> list =
     let model = {
         Config = config
         ActiveTab = MonitorsTab
@@ -163,10 +163,9 @@ let init (config: DatadogReadbackConfig) () : Model * Cmd<Msg> =
     }
 
     (model, loadMonitors () @ loadLogs config @ loadMetrics config)
-    |> RemoteEffect.run
 
 /// The transitions, with their reads as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SwitchTab tab -> { model with ActiveTab = tab }, []
 
@@ -205,9 +204,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
                     |> List.map (fun (name, state) -> if name = metric then name, next else name, state)
         },
         []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── Shared renderers ────────────────────────────────────────────────
 

@@ -21,8 +21,8 @@ let private erasedModule (id: string) (name: string) (group: string option) : Er
         Icon = Unchecked.defaultof<ReactElement>
         Pages = []
     }
-    Init = fun _ -> box (), Cmd.none
-    Update = fun _ state -> state, Cmd.none
+    Init = fun _ -> box (), []
+    Update = fun _ state -> state, []
     View = None
     PageViews = None
     NeedsData = None

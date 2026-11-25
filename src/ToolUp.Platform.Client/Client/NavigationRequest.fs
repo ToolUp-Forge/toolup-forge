@@ -39,7 +39,7 @@ let private listeners = List<SidebarId -> unit>()
 // registry safe under concurrent (un)subscription + `request` — the
 // case Expecto's parallel test runner exercises, where one test
 // enumerated the list while another mutated it ("Collection was
-// modified…"). Symmetry with `ModuleEvents.fire`, which snapshots for
+// modified…"). Symmetry with `ModuleEvents.publishNow`, which snapshots for
 // the same reason.
 let private gate = obj ()
 

@@ -41,12 +41,12 @@ type private Msg =
     | Bumped
     | Echoed of string
 
-let private init () : Model * ToolUp.Elmish.Cmd<Msg> = { Count = 0 }, ToolUp.Elmish.Cmd.none
+let private init () : Model * Fuaran.MVU.Step<Msg, ToolUp.Elmish.RemoteEffect<Msg>> list = { Count = 0 }, []
 
-let private update (msg: Msg) (model: Model) : Model * ToolUp.Elmish.Cmd<Msg> =
+let private update (msg: Msg) (model: Model) : Model * Fuaran.MVU.Step<Msg, ToolUp.Elmish.RemoteEffect<Msg>> list =
     match msg with
-    | Bumped -> { model with Count = model.Count + 1 }, ToolUp.Elmish.Cmd.none
-    | Echoed _ -> model, ToolUp.Elmish.Cmd.none
+    | Bumped -> { model with Count = model.Count + 1 }, []
+    | Echoed _ -> model, []
 
 let private baseModule () : ClientModule<Model, Msg> =
     ClientModule.create {

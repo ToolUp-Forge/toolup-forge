@@ -101,7 +101,7 @@ let private delete (docId: string) : Step<Msg, RemoteEffect<Msg>> list = [
     )
 ]
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     let model = {
         Documents = Remote.Loading
         Uploading = false
@@ -109,12 +109,12 @@ let init () : Model * Cmd<Msg> =
         DeleteError = Map.empty
     }
 
-    (model, loadDocs ()) |> RemoteEffect.run
+    (model, loadDocs ())
 
 // ─── Update ──────────────────────────────────────────────────────────
 
 /// The transitions, with their remote calls as values.
-let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | RefreshDocs ->
         {
@@ -175,9 +175,6 @@ let step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
                 DeleteError = model.DeleteError |> Map.add docId msg
         },
         []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 

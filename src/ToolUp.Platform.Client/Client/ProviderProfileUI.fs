@@ -283,7 +283,7 @@ let saveBlocked (config: ProviderProfileConfig) (verification: VerificationState
 
 // ─── Update ──────────────────────────────────────────────────────────
 
-let init (config: ProviderProfileConfig) : Model * Cmd<Msg> =
+let init (config: ProviderProfileConfig) : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         Profile = ProviderProfileView.empty
         Loaded = false
@@ -294,14 +294,9 @@ let init (config: ProviderProfileConfig) : Model * Cmd<Msg> =
         Status = None
      },
      load config)
-    |> RemoteEffect.run
 
 /// The transitions, with their remote calls as values.
-let internal step
-    (config: ProviderProfileConfig)
-    (msg: Msg)
-    (model: Model)
-    : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | Load -> { model with Error = None }, load config
 
@@ -538,10 +533,6 @@ let internal step
     | DismissError -> { model with Error = None }, []
 
     | DismissStatus -> { model with Status = None }, []
-
-/// The transitions, on today's loop.
-let update (config: ProviderProfileConfig) (msg: Msg) (model: Model) : Model * Cmd<Msg> =
-    step config msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 

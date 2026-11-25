@@ -84,16 +84,15 @@ let private check: Step<Msg, RemoteEffect<Msg>> list = [
     )
 ]
 
-let private init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+let internal init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         State = CheckState.Checking
         OnTeamSwitched = ctx.OnTeamSwitched
      },
      check)
-    |> RemoteEffect.run
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let internal update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | CheckInvites ->
         {
@@ -128,9 +127,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
                 State = CheckState.Failed message
         },
         []
-
-/// The transitions, on today's loop.
-let private update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 let private statusLine (msgs: NoActiveTeamLandingMessages) (state: CheckState) : ReactElement =
     match state with

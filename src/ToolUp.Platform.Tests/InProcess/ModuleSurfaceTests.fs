@@ -154,8 +154,8 @@ let private referenceClient () : ErasedModule = {
             }
         ]
     }
-    Init = fun _ -> box (), Cmd.none
-    Update = fun _ state -> state, Cmd.none
+    Init = fun _ -> box (), []
+    Update = fun _ state -> state, []
     View = None
     PageViews = None
     NeedsData = Some(fun has -> has "SalesData")
@@ -613,8 +613,8 @@ let tests =
         <| fun _ ->
             let m =
                 ClientModule.create {
-                    Init = fun () -> (), Cmd.none
-                    Update = fun () () -> (), Cmd.none
+                    Init = fun () -> (), []
+                    Update = fun () () -> (), []
                     Name = "Builder"
                     Icon = Unchecked.defaultof<ReactElement>
                 }
@@ -630,8 +630,8 @@ let tests =
         <| fun _ ->
             let m =
                 ClientModule.create {
-                    Init = fun () -> (), Cmd.none
-                    Update = fun () () -> (), Cmd.none
+                    Init = fun () -> (), []
+                    Update = fun () () -> (), []
                     Name = "Builder"
                     Icon = Unchecked.defaultof<ReactElement>
                 }

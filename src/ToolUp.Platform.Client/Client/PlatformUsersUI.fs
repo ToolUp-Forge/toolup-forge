@@ -199,11 +199,11 @@ let private lift (steps: Step<UserDirectory.Msg, RemoteEffect<UserDirectory.Msg>
 
 /// Ask the directory for `ids`; it skips blank and already-known ids.
 let internal resolve (ids: string list) (model: Model) : Steps =
-    UserDirectory.resolveSteps ids model.Directory |> lift
+    UserDirectory.resolve ids model.Directory |> lift
 
 // ─── Init ────────────────────────────────────────────────────────────
 
-let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         Principals = None
         Loading = true
@@ -214,7 +214,6 @@ let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
         Messages = ctx.Messages.PlatformUsers
      },
      loadPrincipals ())
-    |> RemoteEffect.run
 
 // ─── Update helpers ──────────────────────────────────────────────────
 
@@ -316,7 +315,7 @@ let private applyOffboardResult
 // ─── Update ──────────────────────────────────────────────────────────
 
 /// The transitions, with their remote calls as values.
-let internal step (msg: Msg) (model: Model) : Model * Steps =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadPrincipals ->
         {
@@ -352,7 +351,7 @@ let internal step (msg: Msg) (model: Model) : Model * Steps =
         []
 
     | DirectoryMsg subMsg ->
-        let directory, steps = UserDirectory.step subMsg model.Directory
+        let directory, steps = UserDirectory.update subMsg model.Directory
         { model with Directory = directory }, lift steps
 
     | DismissError -> { model with Error = None }, []
@@ -502,9 +501,6 @@ let internal step (msg: Msg) (model: Model) : Model * Steps =
     | ExportOffboardDone(Ok result) -> applyOffboardResult (Some result.Summary) (Some result.Archive) None model
 
     | ExportOffboardDone(Error e) -> applyOffboardResult None None (Some e) model
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 

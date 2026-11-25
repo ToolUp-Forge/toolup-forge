@@ -112,7 +112,7 @@ let private loadTokenStatus (id: DataSourceId) : Step<Msg, RemoteEffect<Msg>> =
             TokenStatusLoaded(id, reply |> Result.defaultValue None))
     )
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         Sources = Remote.Loading
         Statuses = Map.empty
@@ -123,12 +123,11 @@ let init () : Model * Cmd<Msg> =
         Creating = None
      },
      loadSources ())
-    |> RemoteEffect.run
 
 /// The transitions, with their remote calls as values. The browser
 /// navigation to an OAuth authorize URL is not among them: it answers no
 /// message, which an effect value cannot yet say, so `update` keeps it.
-let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | RefreshSources ->
         {
@@ -255,9 +254,6 @@ let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg
         []
 
     | CancelCreate -> { model with Creating = None }, []
-
-/// The transitions, on today's loop.
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ───────────────────────────────────────────────────────────
 

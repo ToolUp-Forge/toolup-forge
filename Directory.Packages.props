@@ -30,13 +30,14 @@
          Compute 0.46.0): every package of it floors Core at 0.45.0 and
          Compute at 0.46.0, so the three pins move together. -->
     <FuaranUIVersion>0.106.0</FuaranUIVersion>
-    <!-- The pin for Fuaran.MVU, the model-update-view runtime whose effects
-         are values (ToolUp.Platform.Client: `Step` and the performance type
-         a ported module's remote calls are written in, until the runtime
-         moves). Public: a release on nuget.org. 0.1.0 depends on
-         Fuaran.MVU.Kernel 0.1.0, FSharp.Core 10.1.300 and Fuaran.Core.Function
-         and Fuaran.Core.AiSurface 0.44.1 or later, which the FSharp.Core and
-         Core pins above satisfy, so no other pin moves with it. -->
+    <!-- The pin for Fuaran.MVU and its React adapter, Fuaran.MVU.React, one
+         repository's packages released together: the model-update-view
+         runtime the client shell mounts on (ToolUp.Platform.Client). Public:
+         releases on nuget.org. 0.1.0 depends on Fuaran.MVU.Kernel 0.1.0,
+         FSharp.Core 10.1.300 and Fuaran.Core.Function and
+         Fuaran.Core.AiSurface 0.44.1 or later; the adapter adds Fable.Core
+         5.0.0 and Fable.React.Types 18.4.0. The pins above satisfy all of
+         them, so no other pin moves with it. -->
     <FuaranMvuVersion>0.1.0</FuaranMvuVersion>
   </PropertyGroup>
   <!--
@@ -219,10 +220,11 @@
          client pack reads the fact browse's table select off its tree with
          it. Same repository, same pin; Fable-clean. -->
     <PackageVersion Include="Fuaran.UI.Operability" Version="$(FuaranUIVersion)" />
-    <!-- The published Apache-2.0 model-update-view runtime: its step type, its
-         performance type and its legacy effect (ToolUp.Platform.Client only).
-         Fable-clean: sources under fable/, as are Fuaran.MVU.Kernel's. -->
+    <!-- The published Apache-2.0 model-update-view runtime and its React
+         adapter, which the client shell mounts on (ToolUp.Platform.Client
+         only). Fable-clean: sources under fable/, as are Fuaran.MVU.Kernel's. -->
     <PackageVersion Include="Fuaran.MVU" Version="$(FuaranMvuVersion)" />
+    <PackageVersion Include="Fuaran.MVU.React" Version="$(FuaranMvuVersion)" />
     <!-- The published Apache-2.0 op vocabulary a stored page's
          layers are written in (ToolUp.Platform.Server only): the hash-chained
          `Fuaran.Core.OpStream` each layer is, the tree-op vocabulary

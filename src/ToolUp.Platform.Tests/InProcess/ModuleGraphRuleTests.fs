@@ -92,8 +92,8 @@ let private erased (id: string) : ErasedModule = {
         Icon = Unchecked.defaultof<ReactElement>
         Pages = []
     }
-    Init = fun _ -> box (), Cmd.none
-    Update = fun _ state -> state, Cmd.none
+    Init = fun _ -> box (), []
+    Update = fun _ state -> state, []
     View = None
     PageViews = None
     NeedsData = None

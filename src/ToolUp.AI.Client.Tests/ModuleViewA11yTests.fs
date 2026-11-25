@@ -47,6 +47,7 @@ module ToolUp.AI.Client.Tests.ModuleViewA11yTests
 // CSS, focus rings, contrast, the browser's real accessibility tree. And
 // a state is covered only if it is in `viewStates` below.
 
+open Fuaran.MVU
 open Feliz
 open ToolUp.Elmish
 open ToolUp.Platform
@@ -87,7 +88,7 @@ type private ViewState = {
     MustName: string list
 }
 
-/// The module's own `init` — including the `Cmd` it emits, which the
+/// The module's own `init` — including the steps it returns, which the
 /// harness captures and does not run. That is what makes the initial
 /// state honest: the real dashboard IS in `Loading` while its first
 /// `Aggregate` call is in flight.
@@ -217,9 +218,10 @@ type private ToyModel = { Named: bool }
 
 type private ToyMsg = StripTheName
 
-let private toyInit () : ToyModel * Cmd<ToyMsg> = { Named = true }, Cmd.none
+let private toyInit () : ToyModel * Step<ToyMsg, RemoteEffect<ToyMsg>> list = { Named = true }, []
 
-let private toyUpdate (_: ToyMsg) (model: ToyModel) : ToyModel * Cmd<ToyMsg> = { model with Named = false }, Cmd.none
+let private toyUpdate (_: ToyMsg) (model: ToyModel) : ToyModel * Step<ToyMsg, RemoteEffect<ToyMsg>> list =
+    { model with Named = false }, []
 
 /// An icon-only button — the exact shape Phase 609 found unnamed in the
 /// shipped rail. With `Named = false` its `aria-label` is gone and there

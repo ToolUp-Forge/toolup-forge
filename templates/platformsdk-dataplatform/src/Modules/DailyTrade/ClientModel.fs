@@ -1,5 +1,6 @@
 module DailyTrade.ClientModel
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open ToolUp.Platform
 open ProcessedDataTypes
@@ -25,7 +26,7 @@ type Msg =
     | Uploaded of UploadResponse
     | UploadFailed of string
 
-let init () : Model * Cmd<Msg> =
+let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
     {
         Pending = None
         Uploading = false
@@ -33,12 +34,12 @@ let init () : Model * Cmd<Msg> =
         Error = None
         Processed = []
     },
-    Cmd.none
+    []
 
 let private api: DailyTradeApi =
     Api.makeProxy<DailyTradeApi> (customOptions = UserSession.withRequestHeaders)
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | FileRead(fileName, text) ->
         {
@@ -46,20 +47,23 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Pending = Some { FileName = fileName; Csv = text }
                 Error = None
         },
-        Cmd.none
+        []
     | Upload ->
         match model.Pending with
-        | None -> model, Cmd.none
+        | None -> model, []
         | Some request ->
             {
                 model with
                     Uploading = true
                     Error = None
             },
-            RemoteEffect.call "DailyTradeApi.Upload" api.Upload request (function
-                | Ok response -> Uploaded response
-                | Error ex -> UploadFailed ex.Message)
-            |> RemoteEffect.asCmd
+            [
+                Do(
+                    RemoteEffect.call "DailyTradeApi.Upload" api.Upload request (function
+                        | Ok response -> Uploaded response
+                        | Error ex -> UploadFailed ex.Message)
+                )
+            ]
     | Uploaded response ->
         {
             model with
@@ -67,11 +71,11 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 LastResult = Some response.Result
                 Processed = model.Processed @ Option.toList response.Processed
         },
-        Cmd.none
+        []
     | UploadFailed error ->
         {
             model with
                 Uploading = false
                 Error = Some error
         },
-        Cmd.none
+        []

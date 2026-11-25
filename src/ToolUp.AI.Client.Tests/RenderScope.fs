@@ -152,11 +152,11 @@ let run (sliced: bool) (report: ScopeRun -> unit) : unit =
 
     let counter =
         ClientModule.create {
-            Init = fun () -> { Count = 0 }, Cmd.none
+            Init = fun () -> { Count = 0 }, []
             Update =
                 fun msg (m: ScopeModel) ->
                     match msg with
-                    | Increment -> { m with Count = m.Count + 1 }, Cmd.none
+                    | Increment -> { m with Count = m.Count + 1 }, []
             Name = CountedRow
             Icon = Html.none
         }
@@ -175,8 +175,8 @@ let run (sliced: bool) (report: ScopeRun -> unit) : unit =
     // to select.
     let other =
         ClientModule.create {
-            Init = fun () -> { Count = 0 }, Cmd.none
-            Update = fun (_: ScopeMsg) (m: ScopeModel) -> m, Cmd.none
+            Init = fun () -> { Count = 0 }, []
+            Update = fun (_: ScopeMsg) (m: ScopeModel) -> m, []
             Name = "Scope other"
             Icon = Html.none
         }
@@ -261,7 +261,7 @@ let run (sliced: bool) (report: ScopeRun -> unit) : unit =
 
             Client.programOver
                 config
-                (fun () -> model0, Cmd.none)
+                (fun () -> model0, [])
                 update
                 Client.dispatchers
                 (capture (Client.viewSliced store config modules Client.emptyChrome))
@@ -269,7 +269,7 @@ let run (sliced: bool) (report: ScopeRun -> unit) : unit =
         else
             Client.programOver
                 config
-                (fun () -> model0, Cmd.none)
+                (fun () -> model0, [])
                 update
                 Client.dispatchers
                 (capture (Client.viewWithSignIn config modules Client.emptyChrome))
