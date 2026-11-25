@@ -3,6 +3,7 @@
 
 module ExternalContactManagerUI
 
+open Fuaran.MVU
 open System
 open ToolUp.Elmish
 open Feliz
@@ -10,7 +11,7 @@ open Feliz.AgGrid
 open Toolup.UIToolkit
 open ToolUp.Platform
 
-// ─── Phase 6f.A — external contact admin ─────────────────────────────
+// ─── External contact admin ──────────────────────────────────────────
 //
 // Owner/Admin surface over `IExternalContactApi`: file the people a
 // deployment wants to reach who have no account on it, and manage the
@@ -201,13 +202,20 @@ let private contactApi: IExternalContactApi =
         customOptions = UserSession.withRequestHeaders
     )
 
-let private loadContactsCmd () =
-    Cmd.OfRemoting.call contactApi.ListContacts () ContactsLoaded (fun e -> ContactsLoaded(Error e.Message))
+let private loadContacts () : Step<Msg, RemoteEffect<Msg>> list = [
+    Do(
+        RemoteEffect.call
+            "IExternalContactApi.ListContacts"
+            contactApi.ListContacts
+            ()
+            (RemoteEffect.flatten >> ContactsLoaded)
+    )
+]
 
 // ─── Init / update ───────────────────────────────────────────────────
 
 let init () : Model * Cmd<Msg> =
-    {
+    ({
         Contacts = []
         CurrentView = ContactList
         Form = None
@@ -215,8 +223,9 @@ let init () : Model * Cmd<Msg> =
         Loaded = false
         Busy = true
         Error = None
-    },
-    loadContactsCmd ()
+     },
+     loadContacts ())
+    |> RemoteEffect.run
 
 /// The owner a newly filed contact is created under, as the CLIENT
 /// guesses it. The server derives the real one from the caller's own
@@ -225,9 +234,10 @@ let init () : Model * Cmd<Msg> =
 /// a placeholder that keeps the wire shape complete.
 let private clientOwnerPlaceholder = ContactOwner.Team ""
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | LoadContacts -> { model with Busy = true; Error = None }, loadContactsCmd ()
+    | LoadContacts -> { model with Busy = true; Error = None }, loadContacts ()
 
     | ContactsLoaded(Ok contacts) ->
         {
@@ -237,7 +247,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = None
         },
-        Cmd.none
+        []
 
     | ContactsLoaded(Error err) ->
         {
@@ -246,7 +256,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | OpenContact contactId ->
         {
@@ -256,7 +266,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 OptIn = OptInDraft.empty
                 Error = None
         },
-        Cmd.none
+        []
 
     | BackToList ->
         {
@@ -265,7 +275,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Form = None
                 Error = None
         },
-        Cmd.none
+        []
 
     | StartAdd ->
         {
@@ -273,7 +283,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Form = Some ContactForm.empty
                 Error = None
         },
-        Cmd.none
+        []
 
     | StartEdit contactId ->
         let form =
@@ -281,37 +291,37 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             |> List.tryFind (fun c -> c.Id = contactId)
             |> Option.map ContactForm.ofContact
 
-        { model with Form = form; Error = None }, Cmd.none
+        { model with Form = form; Error = None }, []
 
-    | CancelForm -> { model with Form = None }, Cmd.none
+    | CancelForm -> { model with Form = None }, []
 
     | SetFormField f ->
         {
             model with
                 Form = model.Form |> Option.map f
         },
-        Cmd.none
+        []
 
     | SubmitForm ->
         match model.Form with
-        | None -> model, Cmd.none
+        | None -> model, []
         | Some form ->
-            let cmd =
+            let save =
                 match form.EditingId with
                 | None ->
-                    Cmd.OfRemoting.call
+                    RemoteEffect.call
+                        "IExternalContactApi.CreateContact"
                         contactApi.CreateContact
                         (ContactForm.toCreate clientOwnerPlaceholder form)
-                        ContactSaved
-                        (fun e -> ContactSaved(Error e.Message))
+                        (RemoteEffect.flatten >> ContactSaved)
                 | Some contactId ->
-                    Cmd.OfRemoting.call
+                    RemoteEffect.call
+                        "IExternalContactApi.UpdateContact"
                         contactApi.UpdateContact
                         (ContactForm.toUpdate contactId form)
-                        ContactSaved
-                        (fun e -> ContactSaved(Error e.Message))
+                        (RemoteEffect.flatten >> ContactSaved)
 
-            { model with Busy = true; Error = None }, cmd
+            { model with Busy = true; Error = None }, [ Do save ]
 
     | ContactSaved(Ok _) ->
         {
@@ -320,7 +330,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = true
                 Error = None
         },
-        loadContactsCmd ()
+        loadContacts ()
 
     | ContactSaved(Error err) ->
         {
@@ -328,11 +338,19 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | DeleteContact contactId ->
         { model with Busy = true; Error = None },
-        Cmd.OfRemoting.call contactApi.DeleteContact contactId ContactDeleted (fun e -> ContactDeleted(Error e.Message))
+        [
+            Do(
+                RemoteEffect.call
+                    "IExternalContactApi.DeleteContact"
+                    contactApi.DeleteContact
+                    contactId
+                    (RemoteEffect.flatten >> ContactDeleted)
+            )
+        ]
 
     | ContactDeleted(Ok()) ->
         {
@@ -341,7 +359,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = true
                 Error = None
         },
-        loadContactsCmd ()
+        loadContacts ()
 
     | ContactDeleted(Error err) ->
         {
@@ -349,21 +367,21 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
     | SetOptInChannel channel ->
         {
             model with
                 OptIn = { model.OptIn with Channel = channel }
         },
-        Cmd.none
+        []
 
     | SetOptInSource source ->
         {
             model with
                 OptIn = { model.OptIn with Source = source }
         },
-        Cmd.none
+        []
 
     | RecordOptIn contactId ->
         // The source is required client-side as well as server-side.
@@ -371,31 +389,39 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // one that binds, and this one is what stops an operator
         // reaching for a blank box in the first place.
         if String.IsNullOrWhiteSpace model.OptIn.Source then
-            model, Cmd.none
+            model, []
         else
             { model with Busy = true; Error = None },
-            Cmd.OfRemoting.call
-                contactApi.RecordOptIn
-                {
-                    ContactId = contactId
-                    Channel = model.OptIn.Channel
-                    Source = model.OptIn.Source.Trim()
-                    ExpiresAt = None
-                }
-                OptInChanged
-                (fun e -> OptInChanged(Error e.Message))
+            [
+                Do(
+                    RemoteEffect.call
+                        "IExternalContactApi.RecordOptIn"
+                        contactApi.RecordOptIn
+                        {
+                            ContactId = contactId
+                            Channel = model.OptIn.Channel
+                            Source = model.OptIn.Source.Trim()
+                            ExpiresAt = None
+                        }
+                        (RemoteEffect.flatten >> OptInChanged)
+                )
+            ]
 
     | WithdrawOptIn(contactId, channel) ->
         { model with Busy = true; Error = None },
-        Cmd.OfRemoting.call
-            contactApi.WithdrawOptIn
-            {
-                ContactId = contactId
-                Channel = channel
-                Reason = "admin"
-            }
-            OptInChanged
-            (fun e -> OptInChanged(Error e.Message))
+        [
+            Do(
+                RemoteEffect.call
+                    "IExternalContactApi.WithdrawOptIn"
+                    contactApi.WithdrawOptIn
+                    {
+                        ContactId = contactId
+                        Channel = channel
+                        Reason = "admin"
+                    }
+                    (RemoteEffect.flatten >> OptInChanged)
+            )
+        ]
 
     | OptInChanged(Ok _) ->
         {
@@ -404,7 +430,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = true
                 Error = None
         },
-        loadContactsCmd ()
+        loadContacts ()
 
     | OptInChanged(Error err) ->
         {
@@ -412,9 +438,12 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 Busy = false
                 Error = Some(Notice.Problem err)
         },
-        Cmd.none
+        []
 
-    | DismissError -> { model with Error = None }, Cmd.none
+    | DismissError -> { model with Error = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View helpers ────────────────────────────────────────────────────
 
@@ -745,7 +774,7 @@ let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.ExternalContactManager"

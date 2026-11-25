@@ -3,6 +3,7 @@
 
 module FileManagerUI
 
+open Fuaran.MVU
 open ToolUp.Elmish
 open Feliz
 open Fable.Core.JsInterop
@@ -22,11 +23,11 @@ type Model = {
     ProcessedData: ProcessedFileEntry list
     /// Per-file RAG ingestion status (fileName → status), hydrated from
     /// `FileListSnapshot.Ingestion` and patched live via
-    /// `DataManagerIngestionStatusKey` notifications (Phase 173). Empty
+    /// `DataManagerIngestionStatusKey` notifications. Empty
     /// when no RAG is composed ⇒ the status column is not rendered.
     IngestionStatus: Map<string, FileIngestionStatus>
-    /// Client-side filter over the file list by ingestion status
-    /// (Phase 220). `AllFiles` by default.
+    /// Client-side filter over the file list by ingestion status.
+    /// `AllFiles` by default.
     StatusFilter: IngestionStatusFilter
     ErrorMessage: string option
     /// True while the initial (or post-delete refresh) `ListFiles` call
@@ -72,13 +73,13 @@ type Msg =
     /// named file's ingestion badge in place (no refetch). Fired from the
     /// `IngestionStatusSubscriber` component's notification handler.
     | IngestionStatusChanged of fileName: string * status: FileIngestionStatus
-    /// Phase 220 — one-click re-ingest of a `Failed` file. No optimistic
+    /// One-click re-ingest of a `Failed` file. No optimistic
     /// state change: the badge re-renders from the store via the live
     /// `Pending → Indexed` notification.
     | RetryIngestion of ApiCall<string, Result<unit, string>>
-    /// Phase 220 — narrow the file list to one ingestion status (client-side).
+    /// Narrow the file list to one ingestion status (client-side).
     | SetStatusFilter of IngestionStatusFilter
-    /// Phase 6p — the server-side session store this tab was talking to
+    /// The server-side session store this tab was talking to
     /// is gone. Raised by `SessionEpoch` from whichever path noticed
     /// first (the server's notification, the on-focus poll, the SSE
     /// reconnect check, a pre-flight guard) and delivered through the
@@ -94,8 +95,19 @@ type Msg =
 let private fileApi: FileManagementApi =
     Api.makeProxy<FileManagementApi> (customOptions = UserSession.withRequestHeaders)
 
-let init (ctx: ClientModuleContext) =
-    {
+/// A call's reply, with a failure sent to the screen's one error branch.
+let private orApiError (ofAnswer: 'result -> Msg) (reply: Result<'result, exn>) : Msg =
+    match reply with
+    | Ok answer -> ofAnswer answer
+    | Error ex -> ApiError ex.Message
+
+/// The file reader's site label: reading a browser file has no value form
+/// until the runtime's standard vocabulary arrives.
+[<Literal>]
+let private ReadFileSite = "FileManagerUI.readFile"
+
+let init (ctx: ClientModuleContext) : Model * Cmd<Msg> =
+    ({
         UploadedFiles = Map.empty
         CurrentUpload = NotStarted
         ProcessedData = []
@@ -104,10 +116,12 @@ let init (ctx: ClientModuleContext) =
         ErrorMessage = None
         FilesLoading = true
         Messages = ctx.Messages.FileManager
-    },
-    Cmd.ofMsg (LoadFiles(Start()))
+     },
+     [ Then(LoadFiles(Start())) ])
+    |> RemoteEffect.run
 
-let update msg model =
+/// The transitions, with their remote calls as values.
+let internal step (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | SelectFile action ->
         match action with
@@ -115,37 +129,49 @@ let update msg model =
             // Read via a direct effect, not `Cmd.OfAsync.perform` +
             // `Async.FromContinuations`. Under Fable 5 that async path
             // silently no-ops (the deferred async start never runs the
-            // reader), so the upload hangs with no error. An effect runs
-            // synchronously and dispatches straight from the reader callbacks.
+            // reader), so the upload hangs with no error. The body runs
+            // synchronously and dispatches once, from whichever reader
+            // callback fires.
             {
                 model with
                     CurrentUpload = Loading None
             },
-            Cmd.ofEffect (fun dispatch ->
-                let reader = Browser.Dom.FileReader.Create()
+            [
+                Do(
+                    RemoteEffect.legacy ReadFileSite (fun dispatch ->
+                        let reader = Browser.Dom.FileReader.Create()
 
-                reader.onload <-
-                    fun _ ->
-                        let upload = {
-                            filename = file.name
-                            contents = reader.result :?> string
-                            dataType = "UnrecognisedData"
-                        }
+                        reader.onload <-
+                            fun _ ->
+                                let upload = {
+                                    filename = file.name
+                                    contents = reader.result :?> string
+                                    dataType = "UnrecognisedData"
+                                }
 
-                        dispatch (SelectFile(Finished upload))
+                                dispatch (SelectFile(Finished upload))
 
-                reader.onerror <- fun _ -> dispatch (ApiError(model.Messages.FileReadError file.name))
+                        reader.onerror <- fun _ -> dispatch (ApiError(model.Messages.FileReadError file.name))
 
-                reader.readAsText file)
+                        reader.readAsText file)
+                )
+            ]
 
-        | Finished dataFileUpload -> model, Cmd.ofMsg (UploadFile(Start dataFileUpload))
+        | Finished dataFileUpload -> model, [ Then(UploadFile(Start dataFileUpload)) ]
 
     | UploadFile action ->
         match action with
         | Start dataFileUpload ->
             model,
-            Cmd.OfRemoting.call fileApi.UploadFile { File = dataFileUpload } (Finished >> UploadFile) (fun ex ->
-                ApiError ex.Message)
+            [
+                Do(
+                    RemoteEffect.call
+                        "FileManagementApi.UploadFile"
+                        fileApi.UploadFile
+                        { File = dataFileUpload }
+                        (orApiError (Finished >> UploadFile))
+                )
+            ]
 
         | Finished result ->
             match result with
@@ -162,18 +188,26 @@ let update msg model =
                         CurrentUpload = Loaded fileInfo
                         ProcessedData = processedData
                 },
-                Cmd.none
+                []
             | Error errorMsg ->
                 {
                     model with
                         CurrentUpload = NotStarted
                         ErrorMessage = Some errorMsg
                 },
-                Cmd.none
+                []
 
     | LoadFiles(Start()) ->
         { model with FilesLoading = true },
-        Cmd.OfRemoting.call fileApi.ListFiles () (Finished >> LoadFiles) (fun ex -> ApiError ex.Message)
+        [
+            Do(
+                RemoteEffect.call
+                    "FileManagementApi.ListFiles"
+                    fileApi.ListFiles
+                    ()
+                    (orApiError (Finished >> LoadFiles))
+            )
+        ]
 
     | LoadFiles(Finished snapshot) ->
         // Server is the source of truth — both the file list and the
@@ -190,28 +224,45 @@ let update msg model =
                 IngestionStatus = Map.ofList snapshot.Ingestion
                 FilesLoading = false
         },
-        Cmd.none
+        []
 
     | DeleteFile(Start fileName) ->
-        model, Cmd.OfRemoting.call fileApi.DeleteFile fileName (Finished >> DeleteFile) (fun ex -> ApiError ex.Message)
+        model,
+        [
+            Do(
+                RemoteEffect.call
+                    "FileManagementApi.DeleteFile"
+                    fileApi.DeleteFile
+                    fileName
+                    (orApiError (Finished >> DeleteFile))
+            )
+        ]
 
     | DeleteFile(Finished(Ok())) ->
         // Re-fetch rather than splicing locally — keeps the client view
         // in sync with the server's processed-data and event-store side
         // effects of a delete (cascading audit emit, etc.) without us
         // having to mirror that logic.
-        model, Cmd.ofMsg (LoadFiles(Start()))
+        model, [ Then(LoadFiles(Start())) ]
 
     | DeleteFile(Finished(Error msg)) ->
         {
             model with
                 ErrorMessage = Some(model.Messages.DeleteFailed msg)
         },
-        Cmd.none
+        []
 
     | ReprocessFile(Start fileName) ->
         model,
-        Cmd.OfRemoting.call fileApi.ReprocessFile fileName (Finished >> ReprocessFile) (fun ex -> ApiError ex.Message)
+        [
+            Do(
+                RemoteEffect.call
+                    "FileManagementApi.ReprocessFile"
+                    fileApi.ReprocessFile
+                    fileName
+                    (orApiError (Finished >> ReprocessFile))
+            )
+        ]
 
     | ReprocessFile(Finished(Ok entry)) ->
         // Replace the existing entry in `ProcessedData` (matched by
@@ -223,18 +274,26 @@ let update msg model =
 
             withoutOld @ [ entry ]
 
-        { model with ProcessedData = updated }, Cmd.none
+        { model with ProcessedData = updated }, []
 
     | ReprocessFile(Finished(Error msg)) ->
         {
             model with
                 ErrorMessage = Some(model.Messages.ReprocessFailed msg)
         },
-        Cmd.none
+        []
 
     | ResetDataStore(Start()) ->
         model,
-        Cmd.OfRemoting.call fileApi.ResetDataStore () (Finished >> ResetDataStore) (fun ex -> ApiError ex.Message)
+        [
+            Do(
+                RemoteEffect.call
+                    "FileManagementApi.ResetDataStore"
+                    fileApi.ResetDataStore
+                    ()
+                    (orApiError (Finished >> ResetDataStore))
+            )
+        ]
 
     | ResetDataStore(Finished(Ok _)) ->
         // Re-fetch the file list rather than splicing locally — keeps
@@ -246,39 +305,47 @@ let update msg model =
                 UploadedFiles = Map.empty
                 ProcessedData = []
         },
-        Cmd.ofMsg (LoadFiles(Start()))
+        [ Then(LoadFiles(Start())) ]
 
     | ResetDataStore(Finished(Error msg)) ->
         {
             model with
                 ErrorMessage = Some(model.Messages.ResetFailed msg)
         },
-        Cmd.none
+        []
 
     | IngestionStatusChanged(fileName, status) ->
         {
             model with
                 IngestionStatus = model.IngestionStatus |> Map.add fileName status
         },
-        Cmd.none
+        []
 
     | RetryIngestion(Start fileName) ->
         model,
-        Cmd.OfRemoting.call fileApi.RetryIngestion fileName (Finished >> RetryIngestion) (fun ex -> ApiError ex.Message)
+        [
+            Do(
+                RemoteEffect.call
+                    "FileManagementApi.RetryIngestion"
+                    fileApi.RetryIngestion
+                    fileName
+                    (orApiError (Finished >> RetryIngestion))
+            )
+        ]
 
     | RetryIngestion(Finished(Ok())) ->
         // No optimistic state — the server transitions the store to
         // `Pending` and the live notification flips the badge.
-        model, Cmd.none
+        model, []
 
     | RetryIngestion(Finished(Error msg)) ->
         {
             model with
                 ErrorMessage = Some(model.Messages.RetryFailed msg)
         },
-        Cmd.none
+        []
 
-    | SetStatusFilter filter -> { model with StatusFilter = filter }, Cmd.none
+    | SetStatusFilter filter -> { model with StatusFilter = filter }, []
 
     | SessionStoreCleared ->
         // Everything derived from the server's session store goes; the
@@ -294,7 +361,7 @@ let update msg model =
                 IngestionStatus = Map.empty
                 FilesLoading = false
         },
-        Cmd.none
+        []
 
     | ApiError errorMsg ->
         {
@@ -303,9 +370,12 @@ let update msg model =
                 ErrorMessage = Some errorMsg
                 FilesLoading = false
         },
-        Cmd.none
+        []
 
-    | DismissError -> { model with ErrorMessage = None }, Cmd.none
+    | DismissError -> { model with ErrorMessage = None }, []
+
+/// The transitions, on today's loop.
+let update (msg: Msg) (model: Model) : Model * Cmd<Msg> = step msg model |> RemoteEffect.run
 
 // ─── View ─────────────────────────────────────────────────────────
 
@@ -341,7 +411,7 @@ let private processedDataSection
     (displays: DataTypeDisplay list)
     (entries: ProcessedFileEntry list)
     =
-    // Phase 817 — grouped by data type, rendered through the display's
+    // Grouped by data type, rendered through the display's
     // own step (typed envelope or legacy `Info`); see `DataTypeDisplay.render`.
     let grouped =
         entries
@@ -383,7 +453,7 @@ let private processedDataSection
         ]
     ]
 
-/// Per-file ingestion-status badge (Phase 173) — mirrors Knowledge
+/// Per-file ingestion-status badge — mirrors Knowledge
 /// Base's per-document badge so a Data Manager file that isn't
 /// searchable shows *why*. `NotIngested` renders nothing (absence ⇒
 /// no badge), which is also the no-RAG case.
@@ -430,7 +500,7 @@ let private IngestionStatusSubscriber (dispatch: Msg -> unit) =
                         ()
                 | _ -> ())
 
-        // Phase 6p — the session-store reset rides the same mount rather
+        // The session-store reset rides the same mount rather
         // than a second component: one effect, one dispose, and the two
         // subscriptions share a lifetime because they describe the same
         // file list.
@@ -442,7 +512,7 @@ let private IngestionStatusSubscriber (dispatch: Msg -> unit) =
 
     Html.none
 
-/// Phase 220 — status-filter dropdown over the file list. Labels match
+/// Status-filter dropdown over the file list. Labels match
 /// the badge vocabulary so the filter reads the same as what it selects.
 let private filterLabel (msgs: FileManagerMessages) status =
     match status with
@@ -530,7 +600,7 @@ let private FileManagerOutputPanel
         |> List.collect (fun (dataType, files) -> files |> List.map (fun info -> { DataType = dataType; Info = info }))
         |> Array.ofList
 
-    // Phase 220 — client-side status filter over the already-fetched
+    // Client-side status filter over the already-fetched
     // status set (no round trip). `AllFiles` (and the no-RAG case,
     // where every status is `None`) passes everything through.
     let filteredFiles =
@@ -546,7 +616,7 @@ let private FileManagerOutputPanel
         // the file list is momentarily empty.
         IngestionStatusSubscriber dispatch
 
-        // Phase 220 — status filter (only when RAG is composed and there
+        // Status filter (only when RAG is composed and there
         // is at least one file to filter).
         if not (Map.isEmpty model.IngestionStatus) && allFiles.Length > 0 then
             statusFilterControl msgs model dispatch
@@ -559,7 +629,7 @@ let private FileManagerOutputPanel
             Html.div [
                 prop.children [
                     AgGrid.grid [
-                        // Phase 815 — the Theming API replaces the legacy
+                        // The Theming API replaces the legacy
                         // `ag-theme-balham` CSS class + `theme = "legacy"`
                         // pair; the theme is self-contained, no stylesheet
                         // import required.
@@ -595,7 +665,7 @@ let private FileManagerOutputPanel
                                     | Some bytes -> formatSize msgs bytes
                                     | None -> "")
                             ]
-                            // Ingestion-status column (Phase 173) — only
+                            // Ingestion-status column — only
                             // when the deployment composes RAG (the snapshot
                             // then carries status). Absent ⇒ no column, so a
                             // non-RAG deployment renders exactly as before.
@@ -613,7 +683,7 @@ let private FileManagerOutputPanel
                                                     match status with
                                                     | Some s -> ingestionBadge msgs s
                                                     | None -> Html.none
-                                                    // Phase 220 — one-click re-ingest on a Failed file.
+                                                    // One-click re-ingest on a Failed file.
                                                     if FileIngestionStatus.isRetryable status then
                                                         Html.button [
                                                             prop.className
@@ -723,7 +793,7 @@ let private view (displays: DataTypeDisplay list) (model: Model) (ctx: RenderCon
 
 // ─── Module creation ──────────────────────────────────────────────
 
-/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// This built-in's module id. Its shell slot reads it
 /// (`ShellSlot.FilledModuleId`) to know which module fills the slot
 /// without building one; `builtIn` declares the module under it.
 let moduleId = "_sdk.DataManager"
