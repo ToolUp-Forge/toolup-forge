@@ -82,6 +82,99 @@ module Nodes =
                     Children = children
             }
 
+    /// A table whose data rows are built, and kept, one record at a time: a
+    /// header row naming each column once, then a row per record with its own
+    /// cells and actions. The shape for a list whose actions vary by record (a
+    /// button only some rows offer, a row disabled while its call is pending, a
+    /// notice under one row), which a `DataGrid` button column cannot carry.
+    ///
+    /// Every row is a grid of its own on the table's one column template, so
+    /// a kept row lines up with the header and with every other row without
+    /// knowing about them. The template is built of content-independent tracks
+    /// (`minmax(0, <share>fr)`): a column's width depends on the table's width
+    /// alone, never on what one row holds, which is what keeps the columns
+    /// straight across rows laid out separately.
+    ///
+    /// Roles: the table carries `table` and its name, each row `row`, each
+    /// header cell `columnheader` and each data cell `cell`.
+    [<RequireQualifiedAccess>]
+    module Table =
+
+        /// One column, built with `column`: the key its header cell's id derives from, the header a
+        /// reader meets once, and its share of the table's width.
+        type Column = private {
+            /// The key the column's header cell id derives from (`<table>-header-<key>`).
+            Key: string
+            /// The column's name, shown once, in the header row.
+            Header: string
+            /// The column's share of the table's width, in `fr` parts.
+            Share: int
+        }
+
+        /// A column headed `header` taking `share` parts of the width (at
+        /// least one).
+        let column (key: string) (header: string) (share: int) : Column = {
+            Key = key
+            Header = header
+            Share = max 1 share
+        }
+
+        /// The track list every row of a table on `columns` lays out on.
+        let template (columns: Column list) : string =
+            columns
+            |> List.map (fun c -> sprintf "minmax(0, %dfr)" (max 1 c.Share))
+            |> String.concat " "
+
+        let private withRole (role: string) (label: string option) (node: Node<'Msg>) : Node<'Msg> =
+            Node.withAccessibility
+                (Some {
+                    Defaults.Accessibility.empty with
+                        Role = Some(AriaRole.Custom role)
+                        Label = label |> Option.map (fun l -> Binding.Static(Some l))
+                })
+                node
+
+        let private onTemplate (id: string) (columns: Column list) (cells: Node<'Msg> list) : Node<'Msg> =
+            Fuaran.box id {
+                Defaults.box with
+                    Layout = BoxLayout.Grid(List.length columns, Some(template columns), Some 12)
+                    Children = cells
+            }
+            |> withRole "row" None
+
+        /// A data cell: its children stacked 8 px apart.
+        let cell (id: string) (children: Node<'Msg> list) : Node<'Msg> =
+            Fuaran.box id {
+                Defaults.box with
+                    Layout = BoxLayout.Flex(Orientation.Vertical, false, Some 8)
+                    Children = children
+            }
+            |> withRole "cell" None
+
+        /// A data row on `columns`: one `cell` per column, in column order.
+        /// Build it in a `Keep` so a dispatch that leaves its record alone
+        /// serves it again.
+        let row (id: string) (columns: Column list) (cells: Node<'Msg> list) : Node<'Msg> = onTemplate id columns cells
+
+        /// The table named `label`: its header row (`<id>-header`, a header
+        /// cell `<id>-header-<key>` per column), then `rows`, each built with
+        /// `row` on the same `columns`, 8 px apart.
+        let table (id: string) (label: string) (columns: Column list) (rows: Node<'Msg> list) : Node<'Msg> =
+            let headerId = Ids.child id "header"
+
+            let header =
+                onTemplate headerId columns [
+                    for c in columns do
+                        text (Ids.keyed headerId c.Key) c.Header |> withRole "columnheader" None
+                ]
+
+            Fuaran.box id {
+                Defaults.box with
+                    Layout = BoxLayout.Flex(Orientation.Vertical, false, Some 8)
+                    Children = header :: rows
+            }
+            |> withRole "table" (Some label)
+
     /// The panel shapes: a headed container and a titled section inside one.
     [<RequireQualifiedAccess>]
     module Panel =
