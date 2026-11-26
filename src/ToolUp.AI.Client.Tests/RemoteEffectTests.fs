@@ -531,7 +531,7 @@ let tests =
                 same
                     effect
                     (RemoteEffect.delay
-                        "ToolUp.AI.Client.NarrativePromptAdminUI.pollDelay"
+                        "NarrativePromptAdminUI.pollDelay"
                         ToolUp.AI.Client.NarrativePromptAdminUI.pollIntervalMs
                         (ToolUp.AI.Client.NarrativePromptAdminUI.Poll "summary"))
                     "the wait"
