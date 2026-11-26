@@ -895,10 +895,11 @@ let main args =
 
     // The browser-level smoke gate.
     //
-    // The repo's first REAL-BROWSER tier. Two scenarios, both of which
-    // shipped verified structurally or by hand because nothing here
-    // could open a browser: "two sessions co-edit the sample doc
-    // live", and "drop the network, make a change, restore it".
+    // The repo's REAL-BROWSER tier: co-editing across two contexts, an
+    // offline edit that queues and replays, the team manager's invite
+    // dialog and the command palette on a fixture page, and the shell run
+    // as the HelloWorld sample serves it, its tree surfaces opened from its
+    // own navigation.
     //
     // Usage: `dotnet run --project Build.fsproj -- VerifyBrowserSmoke`
     //
@@ -922,9 +923,9 @@ let main args =
     // `BrowserSmoke` row's floor holds it — the same guard the `Fable`
     // row puts on its TAP counts, and for the same reason. Unlike that
     // one the floor is the EXACT current count rather than a slack lower
-    // bound: there are eight scenarios and each is expensive, so losing
-    // one silently is exactly what this must catch. The floor is ten: the
-    // harness's registration guard adds two passed cases to the eight.
+    // bound: there are twelve scenarios and each is expensive, so losing
+    // one silently is exactly what this must catch. The floor is fourteen:
+    // the harness's registration guard adds two passed cases to the twelve.
     // Adding or removing a scenario edits the row's floor in the same commit.
     let runVerifyBrowserSmoke () : Verdict =
         let fixtureDir = Path.getFullName "tests/BrowserSmoke/fixture"
@@ -989,31 +990,78 @@ let main args =
         // fail differently: the first is an F# compile against the real
         // client tiers, the second is module resolution against the npm
         // tree.
-        Trace.tracefn "▶ VerifyBrowserSmoke (1/6): dotnet tool restore (fixture)"
+        Trace.tracefn "▶ VerifyBrowserSmoke (1/7): dotnet tool restore (fixture)"
         Proc.exec "dotnet" [ "tool"; "restore" ] fixtureDir |> Proc.ensure |> ignore
 
-        Trace.tracefn "▶ VerifyBrowserSmoke (2/6): npm ci (fixture)"
+        Trace.tracefn "▶ VerifyBrowserSmoke (2/7): npm ci (fixture)"
 
         Proc.exec npm [ "ci"; "--no-fund"; "--no-audit" ] fixtureDir
         |> Proc.ensure
         |> ignore
 
-        Trace.tracefn "▶ VerifyBrowserSmoke (3/6): dotnet fable -o output --noCache (fixture)"
+        Trace.tracefn "▶ VerifyBrowserSmoke (3/7): dotnet fable -o output --noCache (fixture)"
 
         Proc.exec "dotnet" [ "fable"; "-o"; "output"; "--noCache" ] fixtureDir
         |> Proc.ensure
         |> ignore
 
-        Trace.tracefn "▶ VerifyBrowserSmoke (4/6): npm run build (fixture bundle)"
+        Trace.tracefn "▶ VerifyBrowserSmoke (4/7): npm run build (fixture bundle)"
         Proc.exec npm [ "run"; "build" ] fixtureDir |> Proc.ensure |> ignore
 
-        // ── 5: the harness, and the browser it drives ───────────────
+        // ── 5: the shell the shell scenarios open ───────────────────
+        //
+        // The HelloWorld sample, run as its README runs it: the client
+        // bundled under the development identity (the same variable selects
+        // the server's profile, which exists in a Debug build only, so the
+        // server is built Debug), and served by the server the scenarios
+        // start on the sample's claimed port.
+        let helloWorldDir = Path.getFullName "samples/HelloWorld"
+        let helloWorldClient = Path.combine helloWorldDir "HelloWorld.Client"
+
+        Trace.tracefn
+            "▶ VerifyBrowserSmoke (5/7): the HelloWorld sample (npm ci, dotnet fable, vite build, server build)"
+
+        Proc.exec "dotnet" [ "tool"; "restore" ] helloWorldDir |> Proc.ensure |> ignore
+
+        Proc.exec npm [ "ci"; "--no-fund"; "--no-audit" ] helloWorldClient
+        |> Proc.ensure
+        |> ignore
+
+        Proc.exec "dotnet" [ "fable"; "-o"; "output"; "--noCache" ] helloWorldClient
+        |> Proc.ensure
+        |> ignore
+
+        Proc.execWith
+            {
+                Proc.options with
+                    Environment = [ "TOOLUP_PROFILE", "helloworld-dev-identity" ]
+            }
+            npm
+            [ "run"; "build" ]
+            helloWorldClient
+        |> Proc.ensure
+        |> ignore
+
+        Proc.exec
+            "dotnet"
+            [
+                "build"
+                Path.combine helloWorldDir "HelloWorld.Server/HelloWorld.Server.fsproj"
+                "-c"
+                "Debug"
+                "--nologo"
+            ]
+            "."
+        |> Proc.ensure
+        |> ignore
+
+        // ── 6: the harness, and the browser it drives ───────────────
         //
         // Built and then invoked as a DLL rather than through `dotnet
         // run --project`: that launch path intermittently
         // hangs before the suite starts, and a hang costs far more than
         // a failure because nothing about it says which it is.
-        Trace.tracefn "▶ VerifyBrowserSmoke (5/6): build the harness + ensure Chromium"
+        Trace.tracefn "▶ VerifyBrowserSmoke (6/7): build the harness + ensure Chromium"
 
         // Build FIRST, then ask. `-getProperty:TargetPath` makes MSBuild
         // EVALUATE the project and print the property without running
@@ -1062,7 +1110,7 @@ let main args =
                     "VerifyBrowserSmoke: Playwright's Chromium install step failed (%s). Continuing — the scenario floor below will report it if no browser is available."
                     ex.Message
 
-        Trace.tracefn "▶ VerifyBrowserSmoke (6/6): run the scenarios"
+        Trace.tracefn "▶ VerifyBrowserSmoke (7/7): run the scenarios"
 
         // The counts come from the JUnit summary the harness writes, a
         // structured record: Expecto colours every count on its console
