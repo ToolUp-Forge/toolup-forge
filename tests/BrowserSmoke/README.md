@@ -1,18 +1,25 @@
 # Browser smoke harness
 
-The repo's real-browser verification tier. Eight scenarios over four pages: two contexts
+The repo's real-browser verification tier. Twelve scenarios over five pages: two contexts
 co-editing one document, an edit made with the link down that queues and then applies,
-the team manager's invite dialog clicked inside and on its backdrop, and the command
-palette opened through its public component and narrowed by a query.
+the team manager's invite dialog clicked inside and on its backdrop, the command
+palette opened through its public component and narrowed by a query, and the shell itself,
+run as the HelloWorld sample serves it, with the team manager, the module-visibility editor,
+Platform Management and the command palette opened from its own navigation.
 
 ```powershell
 dotnet run --project Build.fsproj -- VerifyBrowserSmoke
+
+# on a machine that must not run Playwright's browser installer (it can remove other
+# browser builds): use the browser already installed — see "Chromium" below
+$env:TOOLUP_BROWSER_SMOKE_SKIP_INSTALL='1'; dotnet run --project Build.fsproj -- VerifyBrowserSmoke
 ```
 
-That one command owns every step — `npm ci`, the Fable compile, the Vite bundle, the
-harness build, Playwright's Chromium install, and the run — so CI and a developer cannot
-drift. It takes about **two minutes**, of which the scenarios themselves are ~25 seconds
-and the Fable compile is most of the rest.
+That one command owns every step — `npm ci`, the Fable compiles, the Vite bundles (the
+fixture's and the HelloWorld sample's), the sample's server build, the harness build,
+Playwright's Chromium install, and the run — so CI and a developer cannot drift. It takes
+about **seven minutes**, of which the scenarios themselves are ~45 seconds and the two Fable
+compiles are most of the rest.
 
 ## Scope — smoke, not an e2e suite
 
@@ -23,7 +30,10 @@ means it needs one of exactly three things:
   Playwright browser *context* is;
 - **a browser storage engine** — IndexedDB, which the offline queue is built on;
 - **the browser's own connectivity signal** — `navigator.onLine` and the `online` event,
-  which the sync coordinator wakes on.
+  which the sync coordinator wakes on;
+- **the shell as a deployment serves it** — a real server, the real bundle and the shell's
+  own navigation, which is the only place a surface that mounts, fetches and draws can be
+  seen failing the way a person meets it.
 
 Everything else is cheaper and better tested elsewhere, and putting it here makes this
 gate slower without making it stronger:
@@ -52,7 +62,8 @@ tests/BrowserSmoke/
     ├── CoEditSmokeTests.fs      co-edit: two contexts on one document, and its go-red
     ├── OfflineSmokeTests.fs     offline: an edit queued with the link down, and its go-red
     ├── InviteModalSmokeTests.fs the team manager's invite dialog, clicked inside and on its backdrop
-    └── PaletteSmokeTests.fs     the command palette, opened through its deferred surface and narrowed by a query
+    ├── PaletteSmokeTests.fs     the command palette, opened through its deferred surface and narrowed by a query
+    └── ShellSmokeTests.fs       the HelloWorld sample's server and client, and the shell's tree surfaces opened in it
 ```
 
 The code **under test** is the shipped source: `ToolUp.Platform.CrdtSyncClient`,
@@ -81,6 +92,23 @@ tidiness.
 Neither project is in `ToolUp.Forge.sln` or in `BuildConfig.TestPacks`. That is deliberate:
 `VerifyAll`'s wall-clock is a shared budget and this launches browsers, so the default gate
 is untouched **by construction** rather than by convention.
+
+## The shell scenarios
+
+`ShellSmokeTests.fs` does not use the fixture. Each attempt starts the HelloWorld sample's
+server (`samples/HelloWorld`) as its own process, in a fresh working directory, on the
+sample's claimed port, serving the sample's client bundle under its development identity
+(`TOOLUP_PROFILE=helloworld-dev-identity`: a platform admin in team mode, which exists in a
+Debug build of the server only). It opens each surface the way a person does — the
+navigation rail, or Ctrl+K for the palette — waits for its tree, makes one dispatch (a tab,
+a toggle, a typed query) and asserts the result. **Any console error or page error fails the
+case**, collected from the moment the page opens, and the failure names every refused
+response. The host is stopped by the attempt that started it, pass or fail; a port another
+process holds is a named failure.
+
+**A phase that moves a view the shell opens adds its scenario to `ShellSmokeTests.fs`**,
+opened from the shell's own navigation, with one dispatch and its result, and moves the
+floor below in the same commit.
 
 ## Adding a scenario
 
@@ -169,6 +197,10 @@ $env:TOOLUP_BROWSER_SMOKE_SKIP_INSTALL='1'; dotnet run --project Build.fsproj --
 
 ## Ports
 
-The host binds an **OS-assigned free loopback port**, so the harness claims nothing in the
-workspace port bands: it is a test process, not an app, and a smoke run must not collide
-with a second run or with a developer's own dev server.
+The fixture host binds an **OS-assigned free loopback port**, so it claims nothing: it is a
+test process, not an app, and a smoke run must not collide with a second run or with a
+developer's own dev server.
+
+The shell scenarios are the exception: they run the HelloWorld sample as the sample runs,
+on its claimed server port (`samples/HelloWorld/ports.json`, read at run time). A
+`run.ps1` left running holds that port, and the scenarios then fail naming it.

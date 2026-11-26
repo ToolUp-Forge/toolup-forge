@@ -1,0 +1,168 @@
+/* >>> @toolup/tailwind canonical — DO NOT EDIT between these markers <<<
+   Single source of truth for the ToolUp Tailwind v4 contract. Consumer
+   client apps embed this block verbatim and override ONLY their brand
+   --color-* values in a :root AFTER the end marker. check-drift.ps1
+   fails CI/precommit if any consumer's marked region differs from this file.
+
+   Pinned toolchain (see deps.json — exact, no ^): tailwindcss 4.3.0 +
+   @tailwindcss/vite 4.3.0. These move only by editing this package, never
+   a blanket `ncu -u` (update-all.ps1 rejects them by default). */
+@import "tailwindcss";
+
+/* The Fuaran-UI renderer's reference stylesheet, read from the restored
+   Fuaran.UI.Renderer package's `content/` through the canonical
+   `vite-fuaran-content.mjs` plugin (copy it beside vite.config.mts and add
+   `nugetContent()`), so it is always the stylesheet of the renderer the
+   client compiled against. Then the bridge that answers its `--fuaran-*`
+   tokens with the shell's (copy `client-styling/fuaran-bridge.css` beside
+   this file). Both sit in Tailwind's `base` layer: every utility, and every
+   rule an app writes after the end marker, still wins over them. */
+@import "@nuget/fuaran.ui.renderer/content/fuaran-reference.css" layer(base);
+@import "./fuaran-bridge.css" layer(base);
+
+/* The SDK shell's classes (bg-sidebar, bg-brand, text-brand-dark, …) exist
+   ONLY in Fable's compiled output/ (the shell ships in the
+   ToolUp.Platform.Client NuGet pkg, not the app source). v4's oxide scan
+   honours .gitignore and does NOT use the module graph in `vite build`, so
+   the gitignored output/ is invisible to auto-detection. This @source
+   overrides the REPO-level `output/` ignore. It is NOT sufficient on its
+   own: Fable also writes output/fable_modules/.gitignore (content: two
+   chars star-star, slash, star) which @source canNOT override — a
+   MANDATORY post-Fable build step must empty/delete that nested file on
+   every compile (see README "Fable output needs @source + a build step").
+   Universal across ToolUp Fable clients: all use `dotnet fable -o output`
+   with the Vite root at the client dir, so this path is identical
+   everywhere and drift-checked. */
+@source "./output";
+
+@theme {
+  /* The six semantic tokens the ToolUp.Platform.Client shell renders
+     against (bg-brand, bg-sidebar, border-border, text-brand-dark, ...).
+     v4 auto-generates the utilities from the --color-* namespace AND
+     emits each as a :root custom property, so an app's later :root
+     override re-skins every utility at runtime with no rebuild. Apps
+     override the VALUES, never the NAMES. Defaults = the SDK brand. */
+  --color-brand: #59229D;
+  --color-brand-dark: #371561;
+  --color-sidebar: #1A0B2E;
+  --color-bg-light: #F6F7F8;
+  --color-border: #CBCCCC;
+  --color-separator: #D1D5DB;
+
+  /* v4 changed ring defaults (width 3px->1px, color blue-500->
+     currentColor). Restore v3 so the SDK shell's + apps' existing
+     `ring`/`focus:ring` sites keep their look. (Upgrade guide §7.) */
+  --default-ring-width: 3px;
+  --default-ring-color: var(--color-blue-500);
+}
+
+/* Client-toolkit theming tokens (Phase 221). Brand-neutral DEFAULTS that
+   equal the current rendered look — referenced from Tailwind's own colour
+   scale / radius so adoption is a ZERO visual change. The client toolkit
+   (`Toolup.UIToolkit.Tokens` + Kpi/Data/StateViews/Forms/…) and shell read
+   these instead of hardcoding shape/neutral/status, mirroring the SSR
+   ToolUp.BrandKit `--bk-*` contract: colours/shape are CSS-variable-
+   parameterised, never baked in. A consumer app overrides any of these in a
+   :root AFTER this block to re-skin the whole client surface with no
+   rebuild; per-team branding (Phase 5e / 223) injects the colour subset
+   (brand/sidebar/status + logo only — never fonts or component shape) at
+   runtime. Override the VALUES, never the NAMES. */
+:root {
+  /* surfaces + neutrals */
+  --surface:     #ffffff;
+  --surface-2:   var(--color-gray-50);
+  --text-strong: var(--color-gray-900);
+  --text:        var(--color-gray-600);
+  --muted:       var(--color-gray-500);
+
+  /* status (deltas) */
+  --pos: var(--color-green-600);
+  --neg: var(--color-red-600);
+
+  /* shape + elevation */
+  --radius:      0.5rem;     /* = rounded-lg, the current toolkit radius */
+  --radius-pill: 9999px;
+  --shadow:      0 0 #0000;  /* none by default; an app may opt into elevation */
+}
+
+/* Official v3 -> v4 compatibility base layer (upgrade guide §7). v4
+   changed several element defaults that would otherwise silently restyle
+   every consumer and the SDK shell. Deliberate, removable bridge —
+   retired incrementally in migration-plan Phase 5 alongside the
+   semantic-token cleanup. Does NOT mask two known minor deltas: the
+   shadow/rounded/blur scale was renamed one notch (cosmetic; fixed by
+   the Phase 5 class migration) and the space-y/divide selector changed
+   (migrate those sites to flex/grid `gap`). */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  dialog {
+    margin: auto;
+  }
+}
+
+/* Sidebar scrollbar. The shell's sidebar scroll region (a `bg-sidebar`
+   ancestor with an `overflow-y-auto` child) otherwise renders the native OS
+   scrollbar — a grey track, grey thumb, and up/down stepper buttons that
+   clash against the dark `--color-sidebar`. Re-skin it to a thin, track-less,
+   button-less light-on-dark thumb. The thumb is a white alpha so it reads
+   correctly against any dark sidebar value an app overrides in. Scoped under
+   `.bg-sidebar` so the rest of the app keeps its native scrollbars. Firefox
+   (scrollbar-width/color) and WebKit/Chromium (::-webkit-scrollbar) covered. */
+.bg-sidebar,
+.bg-sidebar * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+.bg-sidebar ::-webkit-scrollbar,
+.bg-sidebar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.bg-sidebar ::-webkit-scrollbar-track,
+.bg-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.bg-sidebar ::-webkit-scrollbar-thumb,
+.bg-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.bg-sidebar ::-webkit-scrollbar-thumb:hover,
+.bg-sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+  background-clip: padding-box;
+}
+/* Kill the up/down stepper buttons (the worst of the OS-default look). */
+.bg-sidebar ::-webkit-scrollbar-button,
+.bg-sidebar::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+/* >>> end @toolup/tailwind canonical <<< */
+
+/* HelloWorld - the sample's own rules. Everything above the end marker is the
+   canonical styling block (client-styling/tailwind/index.css), embedded
+   verbatim and held by client-styling/check-drift.ps1: change it there, never
+   here. The sample keeps the SDK brand, so it overrides no token. */
+html, body { margin: 0; padding: 0; height: 100%; font-family: system-ui, -apple-system, sans-serif; }
+#elmish-app { height: 100%; }
