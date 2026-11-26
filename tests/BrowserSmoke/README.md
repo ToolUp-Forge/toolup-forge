@@ -49,7 +49,8 @@ tests/BrowserSmoke/
     ├── FixtureHost.fs           HttpListener: the bundle, the co-edit API over a real ICrdtDocumentStore, and the SSE relay endpoint
     ├── Harness.fs               browser lifetime, the waits, the retry, the failure artefacts
     ├── CoEditSmokeTests.fs      scenario 1
-    └── OfflineSmokeTests.fs     scenario 2
+    ├── OfflineSmokeTests.fs     scenario 2
+    └── InviteModalSmokeTests.fs scenario 3: the team manager's invite dialog, clicked inside and on its backdrop
 ```
 
 The code **under test** is the shipped source: `ToolUp.Platform.CrdtSyncClient`,

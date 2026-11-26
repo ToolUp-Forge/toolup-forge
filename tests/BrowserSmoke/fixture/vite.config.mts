@@ -13,6 +13,11 @@ export default defineConfig(() => ({
         svgr({ svgrOptions: { dimensions: false } }),
         react(),
     ],
+    // The SDK's `./icons/*.svg?react` imports resolve to files under the
+    // repository's `src/`, outside this fixture, where no node_modules sits
+    // above them; svgr's generated component imports `react` from there.
+    // Resolve it (and its DOM twin) from this fixture's install.
+    resolve: { dedupe: ["react", "react-dom"] },
     build: {
         // A smoke fixture is not shipped; readable output is worth more
         // than bytes when a scenario fails in CI and the trace is all

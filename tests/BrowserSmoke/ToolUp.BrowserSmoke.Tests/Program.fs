@@ -8,7 +8,11 @@ open System.Reflection
 open ToolUp.Platform.Tests.Support
 
 let private registeredTests =
-    testList "ToolUp.BrowserSmoke.Tests" [ CoEditSmokeTests.tests; OfflineSmokeTests.tests ]
+    testList "ToolUp.BrowserSmoke.Tests" [
+        CoEditSmokeTests.tests
+        OfflineSmokeTests.tests
+        InviteModalSmokeTests.tests
+    ]
 
 /// Phase 722 — the registered list plus the guard that makes an
 /// unregistered `[<Tests>]` binding fail loudly instead of vanishing.

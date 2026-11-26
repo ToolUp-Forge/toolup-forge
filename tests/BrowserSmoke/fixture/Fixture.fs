@@ -363,6 +363,65 @@ let private startOffline (docId: string) (sessionId: string) (faultQueue: bool) 
 
     markReady ()
 
+// ─── The team manager's invite dialog, in a real browser ─────────────
+//
+// `?mode=invite` mounts the team manager's page through its public module
+// view, so the dialog the scenario clicks is the shipped tree, fetched on
+// demand with the renderer exactly as the shell fetches it. The page holds
+// the module's model and runs its real `update`; `#invite-state` says
+// whether the model still has the dialog open, so the scenario asserts on
+// the model as well as on the DOM.
+
+[<Import("createRoot", "react-dom/client")>]
+let private createRoot (container: obj) : obj = jsNative
+
+let private inviteTeam: TeamInfo = {
+    TeamId = "smoke-team"
+    Name = "Smoke team"
+    CreatedAt = DateTime(2026, 11, 26)
+    Archived = false
+}
+
+let private inviting () =
+    let step (model: TeamManagerUI.Model) (msg: TeamManagerUI.Msg) = fst (TeamManagerUI.update msg model)
+
+    [
+        TeamManagerUI.TeamsLoaded [ inviteTeam ]
+        TeamManagerUI.NavigatePendingInvites inviteTeam.TeamId
+        TeamManagerUI.PendingByEmailLoaded(inviteTeam.TeamId, [])
+        TeamManagerUI.OpenIssueByEmail inviteTeam.TeamId
+    ]
+    |> List.fold step (fst (TeamManagerUI.init ClientModuleContext.empty))
+
+[<Feliz.ReactComponent>]
+let private InvitePage () : Feliz.ReactElement =
+    let model, setModel = Feliz.React.useState inviting
+
+    let dispatch (msg: TeamManagerUI.Msg) =
+        setModel (fst (TeamManagerUI.update msg model))
+
+    let page =
+        match TeamManagerUI.builtIn.View with
+        | BuiltInView.Page view ->
+            match view model (RenderContext.create MessageCatalog.english dispatch) with
+            | PageContent.FullWidth element -> element
+            | _ -> Feliz.Html.none
+        | BuiltInView.Pages _ -> Feliz.Html.none
+
+    Feliz.Html.div [
+        Feliz.Html.span [
+            Feliz.prop.id "invite-state"
+            Feliz.prop.custom ("data-open", (if model.IssueByEmail.IsSome then "true" else "false"))
+        ]
+        page
+    ]
+
+let private startInvite () =
+    let container = document.getElementById "fixture"
+    let root = createRoot container
+    root?render (InvitePage())
+    container.setAttribute ("data-ready", "true")
+
 // ─── Entry point ─────────────────────────────────────────────────────
 
 window?__smoke <- createObj [ "strayEntitySync" ==> 0 ]
@@ -378,4 +437,5 @@ do
 
     match queryParam "mode" "coedit" with
     | "offline" -> startOffline docId sessionId (fault = "queue")
+    | "invite" -> startInvite ()
     | _ -> startCoEdit docId sessionId (fault = "relay")
