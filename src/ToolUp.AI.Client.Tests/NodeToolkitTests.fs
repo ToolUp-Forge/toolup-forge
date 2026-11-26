@@ -279,6 +279,101 @@ let private layoutTests =
             Expect.equal (gapsOf (Nodes.Layout.grid "g" 2 children)) [ "12px" ] "grid gap")
     ]
 
+/// Each `role` the mounted markup of `node` declares, with the element's
+/// `aria-label` when it carries one, in document order.
+let private rolesOf (html: string) : (string * string) list = [
+    for m in System.Text.RegularExpressions.Regex.Matches(html, "<[a-z]+\\s[^>]*>") do
+        let tag = m.Value
+        let role = System.Text.RegularExpressions.Regex.Match(tag, "\\srole=\"([^\"]+)\"")
+
+        if role.Success then
+            let label =
+                System.Text.RegularExpressions.Regex.Match(tag, "\\saria-label=\"([^\"]*)\"")
+
+            role.Groups[1].Value, (if label.Success then label.Groups[1].Value else "")
+]
+
+/// Every `grid-template-columns` the mounted markup declares, in document order.
+let private templatesOf (html: string) : string list = [
+    for m in System.Text.RegularExpressions.Regex.Matches(html, @"grid-template-columns:\s*([^;""]+)") do
+        m.Groups[1].Value.Trim()
+]
+
+// The table's rows are laid out separately (each can be kept on its own), so
+// what lines them up is one column template written on every row, and what a
+// reader meets is a table with each column's header named once.
+let private tableTests =
+    let columns = [ Nodes.Table.column "name" "Name" 2; Nodes.Table.column "actions" "Actions" 1 ]
+
+    let dataRow (key: string) : Node<obj> =
+        let id = Nodes.Ids.keyed "people" key
+
+        Nodes.Table.row id columns [
+            Nodes.Table.cell (Nodes.Ids.child id "name") [ Nodes.text (Nodes.Ids.child id "label") ("Person " + key) ]
+            Nodes.Table.cell (Nodes.Ids.child id "actions") [
+                Nodes.Actions.secondary (Nodes.Ids.child id "open") "Open" (box key)
+            ]
+        ]
+
+    let mounted () =
+        Nodes.Table.table "people" "People" columns [ dataRow "a"; dataRow "b"; dataRow "c" ]
+        |> renderTree
+        |> ToolUp.Platform.Testing.ViewMount.mount
+
+    testList "the table shape" [
+
+        testCase "the header and every row lay out on one column template" (fun () ->
+            Expect.equal
+                (templatesOf (mounted ()))
+                (List.replicate 4 "minmax(0, 2fr) minmax(0, 1fr)")
+                "the header row and three data rows, one template")
+
+        testCase "control: a table on other shares writes another template" (fun () ->
+            let other: Node<obj> =
+                Nodes.Table.table "t" "T" [ Nodes.Table.column "a" "A" 1; Nodes.Table.column "b" "B" 3 ] []
+
+            Expect.equal
+                (templatesOf (ToolUp.Platform.Testing.ViewMount.mount (renderTree other)))
+                [ "minmax(0, 1fr) minmax(0, 3fr)" ]
+                "the probe reads the template the shape wrote")
+
+        testCase "the roles: one named table, a header row and a row per record" (fun () ->
+            let roles = rolesOf (mounted ())
+
+            Expect.equal (roles |> List.filter (fun (r, _) -> r = "table")) [ "table", "People" ] "one table, named"
+
+            Expect.equal
+                (roles |> List.filter (fun (r, _) -> r = "row") |> List.length)
+                4
+                "a header row and three rows"
+
+            Expect.equal (roles |> List.filter (fun (r, _) -> r = "cell") |> List.length) 6 "two cells per data row")
+
+        testCase "each column's header is named once, never repeated in a row" (fun () ->
+            let html = mounted ()
+
+            let headers =
+                elementsOf (renderTree (Nodes.Table.table "people" "People" columns [ dataRow "a"; dataRow "b" ]))
+                |> Array.filter (fun e -> propOf e "role" = box "columnheader")
+                |> Array.map textOf
+                |> List.ofArray
+
+            Expect.equal headers [ "Name"; "Actions" ] "the header cells, in column order"
+
+            Expect.equal
+                (System.Text.RegularExpressions.Regex.Matches(html, ">Name<").Count)
+                1
+                "the Name header appears once in the markup")
+
+        testCase "the table passes the Strict accessibility floor" (fun () ->
+            let findings =
+                ToolUp.Platform.Testing.Accessibility.checkHtml
+                    ToolUp.Platform.Testing.Accessibility.Strict
+                    (mounted ())
+
+            Expect.isEmpty findings "no finding")
+    ]
+
 let private contextTests =
     let keptRow: Node<obj> = Nodes.text "kept-row" "Kept"
 
@@ -368,5 +463,6 @@ let tests =
         keepTests
         panelTests
         layoutTests
+        tableTests
         contextTests
     ]

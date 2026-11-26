@@ -153,13 +153,15 @@ in full (the Node column renders each pass from nothing, so the subtree memo has
 the dispatch after it, where the kept table costs what the Feliz table does. Of a tree's render, the renderer's own
 `RenderContext.create` is 64.0 µs for the boxes and 2.2 µs for the grid: the rest is the walk and React's elements.
 
-1. **The table form is `DataGrid`.** Rows of the same fields are a grid: `Fuaran.grid` with a column per field and,
-   for a per-row action, a `CellKind.Button` column whose message carries the row's identity. A row of boxes per
-   record is the shape that cost the original measurement its verdict: a node per cell, each with its own wrapper.
+1. **The table form is `DataGrid`, unless the actions vary by record.** Rows of the same fields are a grid:
+   `Fuaran.grid` with a column per field and, for a per-row action, a `CellKind.Button` column whose message carries
+   the row's identity. A row of boxes per record is the shape that cost the original measurement its verdict: a node
+   per cell, each with its own wrapper. Where one record offers an action another does not, disables its own while
+   its call is pending or carries a notice of its own, the table is `Nodes.Table` with its rows kept (below).
 2. **Running text is `Text`.** `Nodes.text` writes the vocabulary's `Text` node, which is never parsed. `Markdown`
    is for text that carries formatting, and it pays a parse per cell and a raw-HTML sink React reparses on commit.
 3. **Boxes are for layout.** `Nodes.Layout.row` / `column` / `grid` arrange regions of a page (a header, a panel, an
-   action bar), not the cells of a table.
+   action bar), not the cells of a table: a table's cells are `Nodes.Table.cell`, on its column template.
 4. **Every node needs a stable id.** A builder takes the id of the node it returns, a list item takes its id from the
    item's identity (`Nodes.Ids.keyed`), and the id is what the renderer keys reconciliation and the subtree memo on.
 5. **Islands are for hook-owning components only.** A component that owns a hook (display state for a text input, a
@@ -209,6 +211,55 @@ catalog's strings and whether it is the active team, a member row the caller's r
 with one `Keep` per context, replaced when the context changes (the catalog by identity, the scalars by value), so a
 row node is reused while both its record and its context are the same, and every row is rebuilt once when the context
 moves.
+
+### A table whose actions vary by record
+
+A `DataGrid` button column draws one action set for every row. Platform Management's teams list cannot be drawn that
+way: an archived team offers Restore and Delete where a live one offers Archive, a team's buttons are disabled while
+its own call is pending, and a failed call leaves a notice on that team's row. Such a list is `Nodes.Table`, its rows
+kept on their records:
+
+```fsharp skip=fragment
+let private columns (msgs: PlatformAdminMessages) = [
+    Nodes.Table.column "team" msgs.ColumnTeam 3
+    Nodes.Table.column "members" msgs.ColumnMembers 1
+    Nodes.Table.column "actions" msgs.ColumnActions 3
+]
+
+let private rows =
+    Rows(sameContext, fun context (team: TeamSummary) ->
+        let id = Nodes.Ids.keyed "team" team.TeamId
+
+        Nodes.Table.row id (columns context.Msgs) [
+            Nodes.Table.cell (Nodes.Ids.child id "about") [ Nodes.text (Nodes.Ids.child id "name") team.Name ]
+            Nodes.Table.cell (Nodes.Ids.child id "members") [ Nodes.text (Nodes.Ids.child id "count") (string team.MemberCount) ]
+            Nodes.Table.cell (Nodes.Ids.child id "actions") [ (* this record's own buttons and notice *) ]
+        ])
+
+Nodes.Table.table "teams-table" msgs.AllTeamsHeading (columns msgs) (rows.List context teams)
+```
+
+Every row is a grid of its own on the table's one template, so a kept row lines up with the header and with every
+other row without knowing about them. The template is built of `minmax(0, <share>fr)` tracks: a column's width
+depends on the table's width alone, never on what one row holds, so the columns stay straight across rows laid out
+separately (an `auto` track would size each row to its own content). The table carries `role="table"` and its name,
+the header row names each column once (`columnheader`), and each data row is a `row` of `cell`s, so no row repeats a
+column's label. The rows' messages carry the record's id, as every kept row's do.
+
+What each costs, measured, not estimated:
+
+- **A dispatch that renames one team among 200, kept table:** 1.7 / 2.0 / 2.4 ms, the median of 30 samples in three
+  runs of Platform Management's real page on the browser-smoke fixture's production bundle (headless Chromium 1148,
+  desktop CPU): the module's `update`, React's commit under `flushSync` and a forced layout, 15 warm-ups first. The
+  control is the same dispatch with every record replaced, which defeats the `Keep`: 33.3 / 33.3 / 34.1 ms. In the
+  parity pack the rename builds 43 of the page's 3,226 nodes, held below 80 and no more than a one-row page builds
+  (`TreeViewParityTests`).
+- **A `DataGrid` with a `CellKind.Button` column:** 4.61 ms desktop / 30.05 ms at 6x CPU for the bench's 200-row table
+  (the browser column of the table above, `levers.browserDispatch`). The two figures come from different pages and
+  harnesses, so they say which order of cost each shape is, not which is faster by how much.
+
+So: a list of the same fields with the same actions on every row is a `DataGrid`; a list whose actions, their state
+or their notices vary by record is a kept `Nodes.Table`.
 
 ## A `Model` field or `Binding.State`
 
