@@ -443,5 +443,41 @@ let tests =
                             (Directory.Exists(Path.Combine(repoRoot, i.Template)))
                             (sprintf "%s: %s" spec.Name i.Template)
             }
+
+            // A scaffold is a repository root of its own: its tool manifest is
+            // the only one `dotnet fantomas` resolves there, so a manifest
+            // without it leaves the consumer unable to format before a commit.
+            test "every template's tool manifest pins fantomas at the repository's version" {
+                let fantomasVersion (manifest: string) =
+                    use doc = Text.Json.JsonDocument.Parse(File.ReadAllText manifest)
+                    let mutable tool = Unchecked.defaultof<Text.Json.JsonElement>
+
+                    if doc.RootElement.GetProperty("tools").TryGetProperty("fantomas", &tool) then
+                        Some(tool.GetProperty("version").GetString())
+                    else
+                        None
+
+                let expected = fantomasVersion (Path.Combine(repoRoot, "dotnet-tools.json"))
+                Expect.isSome expected "the root manifest pins fantomas"
+
+                // Only the manifests are opened, and only they are declared
+                // (`templates/*/.config/dotnet-tools.json` on the Build row):
+                // the template directories are listed, never read.
+                let manifests =
+                    Directory.GetDirectories(repoRoot, "templates")
+                    |> Array.collect Directory.GetDirectories
+                    |> Array.map (fun t -> Path.Combine(t, ".config", "dotnet-tools.json"))
+                    |> Array.filter File.Exists
+
+                Expect.isNonEmpty manifests "the templates carry tool manifests"
+
+                for m in manifests do
+                    Expect.equal
+                        (fantomasVersion m)
+                        expected
+                        (sprintf
+                            "%s must pin fantomas at the root manifest's version"
+                            (Path.GetRelativePath(repoRoot, m)))
+            }
         ]
     ]
