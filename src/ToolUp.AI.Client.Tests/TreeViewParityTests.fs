@@ -145,14 +145,9 @@ let private expectThrows (body: unit -> unit) (what: string) : string =
 
 let private msgs = MessageCatalog.english.TeamManager
 
-/// The view as it ships.
+/// The Feliz page the module's own tree replaced, kept as this kit's reference.
 let private felizView (model: TeamManagerUI.Model) (dispatch: TeamManagerUI.Msg -> unit) : Feliz.ReactElement =
-    match TeamManagerUI.builtIn.View with
-    | BuiltInView.Page view ->
-        match view model (RenderContext.create MessageCatalog.english dispatch) with
-        | PageContent.FullWidth element -> element
-        | other -> failwithf "the team manager renders a full-width page, not %A" other
-    | BuiltInView.Pages _ -> failwith "the team manager renders one page"
+    TeamManagerUI.felizBody msgs model dispatch
 
 /// The team manager as a tree: the spike's shape on the node toolkit, over
 /// today's model. Every row id comes from the team's own id and every row

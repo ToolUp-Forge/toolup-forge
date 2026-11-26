@@ -5,6 +5,8 @@ module TeamManagerUI
 
 open Fuaran.MVU
 open System
+open Fable.Core
+open Fable.Core.JsInterop
 open Feliz
 open Toolup.UIToolkit
 open ToolUp.Platform
@@ -454,7 +456,7 @@ let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list 
 let private roleFor (userId: string) (members: TeamMembership list) =
     members |> List.tryFind (fun m -> m.UserId = userId) |> Option.map _.Role
 
-let private selfUserId () = UserSession.getUserId ()
+let internal selfUserId () = UserSession.getUserId ()
 
 /// Reload the members of the team on screen, if one is.
 let private refreshCurrentTeam (model: Model) : Step<Msg, RemoteEffect<Msg>> list =
@@ -939,7 +941,7 @@ let private myTeamsView (msgs: TeamManagerMessages) (model: Model) (dispatch: Ms
 /// back to the team store's view otherwise. Server-side gates apply
 /// the same bypass; this is the client-side mirror that keeps the
 /// management controls visible for PAs.
-let private effectiveCallerRole (model: Model) (teamId: string) : TeamRole option =
+let internal effectiveCallerRole (model: Model) (teamId: string) : TeamRole option =
     if model.IsPlatformAdmin = Some true then
         Some Owner
     else
@@ -952,7 +954,7 @@ let private effectiveCallerRole (model: Model) (teamId: string) : TeamRole optio
 /// concern. Members cannot assign anything (the management UI is
 /// hidden for them anyway, but the predicate keeps the helper
 /// total).
-let private assignableRoles (callerRole: TeamRole option) : TeamRole list =
+let internal assignableRoles (callerRole: TeamRole option) : TeamRole list =
     match callerRole with
     | Some Owner -> [ Member; Admin ]
     | Some Admin -> [ Member ]
@@ -1004,7 +1006,7 @@ let private roleButtons (msgs: TeamManagerMessages) (roles: TeamRole list) (sele
 
 /// The caller's own id labels with the session's display name; every other
 /// id with the directory's label.
-let private labelFor (directory: UserDirectory.Model) (selfId: string) (userId: string) : string =
+let internal labelFor (directory: UserDirectory.Model) (selfId: string) (userId: string) : string =
     if userId = selfId then
         UserSession.getDisplayName () |> Option.defaultValue userId
     else
@@ -1102,7 +1104,7 @@ let private addMemberForm
         ]
     ]
 
-let private teamNameOf (model: Model) (teamId: string) =
+let internal teamNameOf (model: Model) (teamId: string) =
     model.Teams
     |> List.tryFind (fun t -> t.TeamId = teamId)
     |> Option.map _.Name
@@ -1500,8 +1502,10 @@ let private pendingInvitesView (msgs: TeamManagerMessages) (teamId: string) (mod
         ]
     ]
 
-/// The module's page, over the catalog section the view hands it.
-let private body (msgs: TeamManagerMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+/// The module's page as Feliz, over the catalog section the view hands it:
+/// the page the tree in `TeamManagerTree` replaced, which the shell no longer
+/// mounts. It stays as the reference the tree is held at parity with.
+let internal felizBody (msgs: TeamManagerMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
     let body =
         match model.CurrentView with
         | MyTeams -> myTeamsView msgs model dispatch
@@ -1518,8 +1522,31 @@ let private body (msgs: TeamManagerMessages) (model: Model) (dispatch: Msg -> un
         ]
     ]
 
+/// What the deferred tree component takes.
+type internal SurfaceProps = {|
+    Model: Model
+    Dispatch: Msg -> unit
+    Messages: TeamManagerMessages
+    Locale: string
+|}
+
+[<Emit("$0.then(m => m.Surface)")>]
+let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
+
+/// The tree's file, fetched on demand with the node vocabulary and the
+/// renderer, so the shell's first load pays nothing for them.
+let private loadSurface () : JS.Promise<obj> =
+    surfaceOf (importDynamic "./TeamManagerTree.fs")
+
 let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
-    PageContent.FullWidth(body ctx.Messages.TeamManager model ctx.Dispatch)
+    PageContent.FullWidth(
+        TreeSurface.deferred "TeamManagerTree.Surface" loadSurface {|
+            Model = model
+            Dispatch = ctx.Dispatch
+            Messages = ctx.Messages.TeamManager
+            Locale = ctx.Locale
+        |}
+    )
 
 // ─── Module creation ─────────────────────────────────────────────────
 

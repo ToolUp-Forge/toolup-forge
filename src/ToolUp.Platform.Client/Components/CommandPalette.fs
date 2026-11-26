@@ -3,6 +3,7 @@
 
 module Components.CommandPalette
 
+open Fable.Core
 open Fable.Core.JsInterop
 open Feliz
 open ToolUp.Platform
@@ -106,55 +107,17 @@ let private isTextEntryTarget (target: obj) : bool =
             let editable: bool = target?isContentEditable
             tag = "INPUT" || tag = "TEXTAREA" || tag = "SELECT" || editable = true
 
-/// The row a caller is about to activate, and the rows around it.
+/// The open palette: the query box, the ranked rows and the keyboard cursor.
+/// It owns what a tree cannot express, focus on open and scrolling the cursor
+/// into view, so a tree holds it as an island (`CommandPaletteTree`).
 [<ReactComponent>]
-let CommandPalette (props: CommandPaletteProps) =
+let internal Overlay (props: CommandPaletteProps) =
     let inputRef = React.useRef<Browser.Types.HTMLInputElement option> None
     let listRef = React.useRef<Browser.Types.HTMLDivElement option> None
     // Phase 444 — the overlay's own chrome. The entries themselves carry
     // module and page names, which are consumer-supplied and stay as they
     // were registered.
     let msgs = (MessageCatalogProvider.useMessages ()).CommandPalette
-
-    // The document listener is attached ONCE (deps `[||]`) so the
-    // shortcut does not churn a listener per render. It therefore must
-    // not close over `props` — a mount-time capture would keep calling
-    // the first render's `dispatch`. This ref is refreshed after every
-    // render and read at event time instead.
-    let latest = React.useRef props
-    React.useEffect (fun () -> latest.current <- props)
-
-    React.useEffect (
-        (fun () ->
-            let onKeyDown (e: Browser.Types.Event) =
-                let ke = e :?> Browser.Types.KeyboardEvent
-
-                // Cmd+K on macOS, Ctrl+K elsewhere. Alt is excluded so
-                // Ctrl+Alt+K (an AltGr composition on some layouts)
-                // stays the layout's business.
-                let isPaletteChord =
-                    (ke.ctrlKey || ke.metaKey) && not ke.altKey && ke.key.ToLower() = "k"
-
-                if isPaletteChord && not (isTextEntryTarget (box e.target)) then
-                    ke.preventDefault ()
-                    latest.current.OnOpen()
-
-            // `removeEventListener` matches by REFERENCE, so both calls
-            // must be handed the identical function object. Passing an
-            // `unbox`ed F# lambda makes Fable emit a fresh
-            // `(arg) => onKeyDown(arg)` wrapper at each call site — the
-            // add succeeds, the remove silently matches nothing, and the
-            // listener outlives every unmount. Binding the JS function
-            // once and passing that binding twice is what keeps the two
-            // references equal; verified in the emitted
-            // `output/src/ToolUp.Platform.Client/Components/CommandPalette.js`.
-            let listener: Browser.Types.Event -> unit = onKeyDown
-
-            Browser.Dom.document.addEventListener ("keydown", listener)
-
-            (fun () -> Browser.Dom.document.removeEventListener ("keydown", listener))),
-        [||]
-    )
 
     // Focus the query box whenever the overlay opens — a palette that
     // opens without the caret in it is a palette the user has to click.
@@ -331,3 +294,61 @@ let CommandPalette (props: CommandPaletteProps) =
                 ]
             ]
         ]
+
+[<Emit("$0.then(m => m.Surface)")>]
+let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
+
+/// The palette's tree file, fetched with the renderer the first time the
+/// palette opens.
+let private loadSurface () : JS.Promise<obj> =
+    surfaceOf (importDynamic "./CommandPaletteTree.fs")
+
+/// The palette: a document-wide shortcut that opens it, and, while it is open,
+/// a tree holding the overlay as an island. A shell that never opens it never
+/// fetches the renderer.
+[<ReactComponent>]
+let CommandPalette (props: CommandPaletteProps) =
+    // The document listener is attached ONCE (deps `[||]`) so the
+    // shortcut does not churn a listener per render. It therefore must
+    // not close over `props` — a mount-time capture would keep calling
+    // the first render's `dispatch`. This ref is refreshed after every
+    // render and read at event time instead.
+    let latest = React.useRef props
+    React.useEffect (fun () -> latest.current <- props)
+
+    React.useEffect (
+        (fun () ->
+            let onKeyDown (e: Browser.Types.Event) =
+                let ke = e :?> Browser.Types.KeyboardEvent
+
+                // Cmd+K on macOS, Ctrl+K elsewhere. Alt is excluded so
+                // Ctrl+Alt+K (an AltGr composition on some layouts)
+                // stays the layout's business.
+                let isPaletteChord =
+                    (ke.ctrlKey || ke.metaKey) && not ke.altKey && ke.key.ToLower() = "k"
+
+                if isPaletteChord && not (isTextEntryTarget (box e.target)) then
+                    ke.preventDefault ()
+                    latest.current.OnOpen()
+
+            // `removeEventListener` matches by REFERENCE, so both calls
+            // must be handed the identical function object. Passing an
+            // `unbox`ed F# lambda makes Fable emit a fresh
+            // `(arg) => onKeyDown(arg)` wrapper at each call site — the
+            // add succeeds, the remove silently matches nothing, and the
+            // listener outlives every unmount. Binding the JS function
+            // once and passing that binding twice is what keeps the two
+            // references equal; verified in the emitted
+            // `output/src/ToolUp.Platform.Client/Components/CommandPalette.js`.
+            let listener: Browser.Types.Event -> unit = onKeyDown
+
+            Browser.Dom.document.addEventListener ("keydown", listener)
+
+            (fun () -> Browser.Dom.document.removeEventListener ("keydown", listener))),
+        [||]
+    )
+
+    if props.IsOpen then
+        TreeSurface.deferred "CommandPaletteTree.Surface" loadSurface props
+    else
+        Html.none

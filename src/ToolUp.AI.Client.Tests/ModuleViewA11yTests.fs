@@ -251,6 +251,197 @@ let private expectThrows (body: unit -> unit) (message: string) : string =
                of work exists to prevent."
         )
 
+// ─── The three surfaces authored as trees ────────────────────────────
+//
+// The team manager, the module-visibility editor and the command palette
+// render as Fuaran-UI trees. Each module's view mounts its tree through a
+// deferred surface, which a synchronous mount cannot wait for, so the trees
+// are drawn here through the renderer's component directly, as their own
+// files draw them, and the same Strict floor holds them.
+
+let private teamMsgs = MessageCatalog.english.TeamManager
+let private visibilityMsgs = MessageCatalog.english.ModuleVisibilityAdmin
+
+let private teamTree (model: TeamManagerUI.Model) (dispatch: TeamManagerUI.Msg -> unit) : ReactElement =
+    TreeViewParityTests.lowerTree dispatch (TeamManagerTree.tree teamMsgs model dispatch)
+
+let private visibilityTree
+    (model: ModuleVisibilityAdminUI.Model)
+    (dispatch: ModuleVisibilityAdminUI.Msg -> unit)
+    : ReactElement =
+    TreeViewParityTests.lowerTree dispatch (ModuleVisibilityAdminTree.tree visibilityMsgs model dispatch)
+
+let private on = System.DateTime(2026, 11, 26)
+
+let private teamInit () =
+    fromUnitInit (fun () -> TeamManagerUI.init ClientModuleContext.empty) TeamManagerUI.update
+
+let private teamsLoaded () =
+    (teamInit ())
+        .Dispatch(
+            TeamManagerUI.TeamsLoaded [
+                {
+                    TeamId = "t1"
+                    Name = "Alpha"
+                    CreatedAt = on
+                    Archived = false
+                }
+                {
+                    TeamId = "t2"
+                    Name = "Beta"
+                    CreatedAt = on
+                    Archived = false
+                }
+            ]
+        )
+        .Dispatch(TeamManagerUI.ActiveTeamLoaded(Some "t1"))
+
+let private details () =
+    (teamsLoaded ()).Dispatch(TeamManagerUI.IsPlatformAdminLoaded true).Dispatch(TeamManagerUI.SelectTeam "t1")
+
+let private invites () =
+    (details ())
+        .Dispatch(TeamManagerUI.NavigatePendingInvites "t1")
+        .Dispatch(
+            TeamManagerUI.PendingByEmailLoaded(
+                "t1",
+                [
+                    "a@example.com",
+                    {
+                        TeamId = "t1"
+                        Role = Member
+                        ExpiresAt = on
+                        InviterUserId = "u-owner"
+                        IssuedAt = on
+                    }
+                ]
+            )
+        )
+        .Dispatch(
+            TeamManagerUI.ExpiredInvitesLoaded(
+                "t1",
+                [
+                    {
+                        TeamId = "t1"
+                        InviteeEmail = "b@example.com"
+                        InviterUserId = "u-owner"
+                        Role = Admin
+                        IssuedAt = on
+                        ExpiredAt = on
+                    }
+                ]
+            )
+        )
+
+let private teamStates () = [
+    "no teams yet", (teamInit ()).Dispatch(TeamManagerUI.TeamsLoaded [])
+    "two teams, one active", teamsLoaded ()
+    "an error over the team list", (teamsLoaded ()).Dispatch(TeamManagerUI.ApiError "unreachable")
+    "a team's details, managed by a platform admin", details ()
+    "pending and expired invites", invites ()
+    "inviting by email", (invites ()).Dispatch(TeamManagerUI.OpenIssueByEmail "t1")
+    "revoking an invite", (invites ()).Dispatch(TeamManagerUI.OpenRevokeByEmail("t1", "a@example.com"))
+]
+
+let private visibilityInit () =
+    fromUnitInit (fun () -> ModuleVisibilityAdminUI.init ClientModuleContext.empty) ModuleVisibilityAdminUI.update
+
+let private visibilityLoaded () =
+    (visibilityInit ())
+        .Dispatch(ModuleVisibilityAdminUI.RegisteredLoaded(Ok [ "alpha"; "_sdk.Team_Manager" ]))
+        .Dispatch(ModuleVisibilityAdminUI.ProfileLoaded(Ok None))
+        .Dispatch(
+            ModuleVisibilityAdminUI.ResolutionLoaded(
+                Ok(
+                    Some {
+                        GovernedModuleIds = [ "_sdk.Team_Manager" ]
+                        SelectedModuleIds = [ "alpha" ]
+                        ExcludedEntryIds = []
+                        ContributingScopes = []
+                    }
+                )
+            )
+        )
+
+let private paletteProps: Components.CommandPalette.CommandPaletteProps = {
+    IsOpen = true
+    Query = ""
+    Highlight = 0
+    Entries = []
+    OnOpen = ignore
+    OnDismiss = ignore
+    OnQueryChanged = ignore
+    OnHighlightMoved = ignore
+    OnSelect = ignore
+}
+
+let private treeSurfaceTests =
+    testList "the three surfaces as trees" [
+
+        testCase "every team manager state passes the Strict floor as a tree" (fun () ->
+            for name, harness in teamStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, teamTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "every module-visibility state passes the Strict floor as a tree" (fun () ->
+            for harness in [ visibilityInit (); visibilityLoaded () ] do
+                harness.AssertAccessibleView(ViewMount.mount, visibilityTree, Accessibility.Strict)
+                |> ignore)
+
+        testCase "the palette's tree, its overlay an island, passes the Strict floor" (fun () ->
+            let html = ViewMount.mount (Components.CommandPaletteTree.Surface paletteProps)
+            let node = Accessibility.ofHtml html
+            Expect.isEmpty (Accessibility.check Accessibility.Strict node) "the open palette has no finding"
+
+            Expect.isTrue
+                (html.Contains MessageCatalog.english.CommandPalette.NoMatches)
+                "and the island drew the overlay")
+
+        testCase "a module id reads as itself through the Text node" (fun () ->
+            let html = (visibilityLoaded ()).RenderViewHtml(ViewMount.mount, visibilityTree)
+            Expect.isTrue (html.Contains "_sdk.Team_Manager") "the id is not read as emphasis"
+            Expect.isFalse (html.Contains "<em>") "and nothing in the page is parsed as markdown")
+
+        testCase "a tree button and a kept row's button reach update" (fun () ->
+            (teamsLoaded ())
+                .Interact(ViewMount.mountAndInteract, teamTree, TreeViewParityTests.Drive.click teamMsgs.Manage)
+                .AssertModelWith(
+                    "the first team's Manage opens its details",
+                    fun m -> m.CurrentView = TeamManagerUI.TeamDetails "t1"
+                )
+            |> ignore
+
+            (visibilityLoaded ())
+                .Interact(
+                    ViewMount.mountAndInteract,
+                    visibilityTree,
+                    TreeViewParityTests.Drive.click visibilityMsgs.DenyLabel
+                )
+                .AssertModelWith(
+                    "the Deny choice sets the rule's kind",
+                    fun m -> m.Kind = ModuleVisibilityAdminUI.RuleKind.Deny
+                )
+            |> ignore)
+
+        testCase "the modules' views mount their trees on demand, not at boot" (fun () ->
+            let teamPage =
+                match TeamManagerUI.builtIn.View with
+                | BuiltInView.Page view ->
+                    match view (teamsLoaded ()).Model (RenderContext.create MessageCatalog.english ignore) with
+                    | PageContent.FullWidth element -> ViewMount.mount element
+                    | other -> failwithf "a full-width page, not %A" other
+                | BuiltInView.Pages _ -> failwith "one page"
+
+            Expect.isTrue
+                (teamPage.Contains "role=\"status\"" && teamPage.Contains "aria-busy=\"true\"")
+                "the team manager shows the loading state until its tree arrives"
+
+            Expect.isFalse (teamPage.Contains teamMsgs.MyTeamsPanel) "and draws nothing of the tree synchronously")
+    ]
+
 // ─── Cases ───────────────────────────────────────────────────────────
 
 let tests =
@@ -421,4 +612,6 @@ let tests =
                 ((fromUnitInit toyInit toyUpdate).CheckAccessibleView(ViewMount.mount, toyView, Accessibility.Strict))
                 "and the same view WITH its aria-label is clean, so the finding tracks the name and \
                  not the shape")
+
+        treeSurfaceTests
     ]

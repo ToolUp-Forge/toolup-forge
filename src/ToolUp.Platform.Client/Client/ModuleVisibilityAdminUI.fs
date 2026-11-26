@@ -4,8 +4,8 @@
 module ModuleVisibilityAdminUI
 
 open Fuaran.MVU
-open Feliz
-open Toolup.UIToolkit
+open Fable.Core
+open Fable.Core.JsInterop
 open ToolUp.Platform
 
 // ─── Module-visibility profile editor (client-tier admin slice) ──────
@@ -378,241 +378,33 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
 
     | DismissStatus -> { model with Status = None }, []
 
-// ─── View helpers ────────────────────────────────────────────────────
+// ─── View ────────────────────────────────────────────────────────────
 
-let private kindButton (label: string) (description: string) (active: bool) (onClick: unit -> unit) =
-    Html.button [
-        prop.className [
-            "flex-1 text-left px-3 py-2 rounded-lg border transition-colors"
-            if active then
-                "border-brand bg-brand/5"
-            else
-                "border-border bg-white hover:border-brand"
-        ]
-        prop.onClick (fun _ -> onClick ())
-        prop.children [
-            Html.div [ prop.className "text-sm font-semibold"; prop.text label ]
-            Html.div [ prop.className ("text-xs " + Tokens.Text.muted); prop.text description ]
-        ]
-    ]
+/// What the deferred tree component takes.
+type internal SurfaceProps = {|
+    Model: Model
+    Dispatch: Msg -> unit
+    Messages: ModuleVisibilityAdminMessages
+    Locale: string
+|}
 
-/// One row of the candidate list: the module id, its membership of the
-/// edited rule, and — once the resolution has landed — whether the
-/// server currently admits it.
-let private moduleRow
-    (msgs: ModuleVisibilityAdminMessages)
-    (resolution: ModuleVisibilityResolution option)
-    (selected: bool)
-    (moduleId: string)
-    (onToggle: unit -> unit)
-    =
-    let admittedBadge =
-        match resolution with
-        | None -> Html.none
-        | Some r ->
-            if ModuleVisibility.admitsModule r moduleId then
-                Html.span [
-                    prop.className "text-xs px-2 py-0.5 rounded bg-green-100 text-green-700"
-                    prop.text msgs.VisibleNow
-                ]
-            else
-                Html.span [
-                    prop.className ("text-xs px-2 py-0.5 rounded bg-gray-200 " + Tokens.Text.secondary)
-                    prop.text msgs.HiddenNow
-                ]
+[<Emit("$0.then(m => m.Surface)")>]
+let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
 
-    Html.label [
-        prop.className "flex items-center gap-3 px-3 py-2 border-t border-border cursor-pointer hover:bg-gray-50"
-        prop.children [
-            Html.input [
-                prop.type' "checkbox"
-                prop.isChecked selected
-                prop.onChange (fun (_: bool) -> onToggle ())
-            ]
-            Html.span [ prop.className "font-mono text-xs flex-1 break-all"; prop.text moduleId ]
-            admittedBadge
-        ]
-    ]
-
-/// The resolved answer, rendered beside the editable profile. See the
-/// header note — this is what makes "I allowed it and it still does not
-/// appear" answerable without leaving the page.
-let private resolvedPane (msgs: ModuleVisibilityAdminMessages) (model: Model) =
-    let body =
-        match model.Resolved with
-        | None when not model.ResolvedLoaded ->
-            Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
-        | None ->
-            Html.p [
-                prop.className ("text-sm " + Tokens.Text.secondary)
-                prop.text msgs.NoResolutionYet
-            ]
-        | Some r ->
-            let list (label: int -> string) (items: string list) =
-                Html.div [
-                    prop.className "mb-3"
-                    prop.children [
-                        Html.div [
-                            prop.className ("text-xs font-medium mb-1 " + Tokens.Text.secondary)
-                            prop.text (label (List.length items))
-                        ]
-                        if List.isEmpty items then
-                            Html.p [ prop.className ("text-xs " + Tokens.Text.muted); prop.text msgs.NoItems ]
-                        else
-                            Html.div [
-                                prop.className "flex flex-wrap gap-1"
-                                prop.children [
-                                    for item in items ->
-                                        Html.span [
-                                            prop.className (
-                                                "font-mono text-xs px-2 py-0.5 rounded bg-gray-100 break-all "
-                                                + Tokens.Text.secondary
-                                            )
-                                            prop.text item
-                                        ]
-                                ]
-                            ]
-                    ]
-                ]
-
-            Html.div [
-                prop.children [
-                    list msgs.GovernedModules r.GovernedModuleIds
-                    list msgs.SelectedAfterEveryLayer r.SelectedModuleIds
-                    list msgs.ExcludedEntries r.ExcludedEntryIds
-                    list msgs.ContributingScopes (r.ContributingScopes |> List.map FlagScope.slug)
-                ]
-            ]
-
-    Html.div [
-        prop.className "bg-white rounded-lg border border-border p-4"
-        prop.children [
-            Html.h3 [
-                prop.className "text-sm font-semibold mb-1"
-                prop.text msgs.ResolvedForYouHeading
-            ]
-            Html.p [
-                prop.className ("text-xs mb-3 " + Tokens.Text.muted)
-                prop.text msgs.ResolvedForYouHelp
-            ]
-            body
-        ]
-    ]
-
-/// The note field plus the two mutating actions. The note is local React
-/// state, committed on Enter / blur, so free-typing does not round-trip
-/// through Elmish; `onSave` carries its value at submit time. Seeded once from
-/// `model.Note` on mount — a reload after a save must not overwrite what
-/// the operator is mid-way through typing.
-[<ReactComponent>]
-let private EditorForm (model: Model) (onSave: string -> unit) (onClear: unit -> unit) =
-    let msgs = (MessageCatalogProvider.useMessages ()).ModuleVisibilityAdmin
-    let note, setNote = React.useState model.Note
-
-    Html.div [
-        prop.children [
-            Html.label [
-                prop.className ("block text-xs font-medium mb-1 " + Tokens.Text.secondary)
-                prop.text msgs.NoteLabel
-            ]
-            Html.div [
-                prop.className "mb-4"
-                prop.children [ Forms.Input.text note setNote msgs.NotePlaceholder ]
-            ]
-
-            Html.div [
-                prop.className "flex gap-2"
-                prop.children [
-                    Forms.Button.primaryWith
-                        (Forms.Button.stateOf model.Busy msgs.Working false)
-                        msgs.SaveProfile
-                        (fun () -> onSave note)
-                    Forms.Button.secondaryWith
-                        (Forms.Button.stateOf false msgs.Working (model.Busy || model.StoredProfile.IsNone))
-                        msgs.ClearProfile
-                        onClear
-                ]
-            ]
-        ]
-    ]
-
-/// The module's page, over the catalog section the view hands it.
-let private body (msgs: ModuleVisibilityAdminMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    let noticeMsgs = { Dismiss = msgs.Dismiss }
-
-    let candidateRows =
-        if List.isEmpty model.RegisteredModuleIds then
-            [
-                Html.p [
-                    prop.className ("px-3 py-3 text-xs " + Tokens.Text.muted)
-                    prop.text msgs.NoCuratableModules
-                ]
-            ]
-        else
-            [
-                for moduleId in model.RegisteredModuleIds ->
-                    moduleRow msgs model.Resolved (List.contains moduleId model.Selection) moduleId (fun () ->
-                        dispatch (ToggleModule moduleId))
-            ]
-
-    let candidateHeader =
-        Html.div [
-            prop.className ("px-3 py-2 bg-gray-50 text-xs font-medium " + Tokens.Text.secondary)
-            prop.text (msgs.RegisteredModulesHeader model.RegisteredModuleIds.Length model.Selection.Length)
-        ]
-
-    let editor =
-        if not model.Loaded then
-            Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
-        else
-            Html.div [
-                prop.className "bg-white rounded-lg border border-border p-4 mb-4"
-                prop.children [
-                    Html.h3 [
-                        prop.className "text-sm font-semibold mb-1"
-                        prop.text msgs.YourProfileHeading
-                    ]
-                    Html.p [
-                        prop.className ("text-xs mb-3 " + Tokens.Text.muted)
-                        prop.text msgs.YourProfileHelp
-                    ]
-
-                    Html.div [
-                        prop.className "flex gap-2 mb-4"
-                        prop.children [
-                            kindButton msgs.AllowLabel msgs.AllowDescription (model.Kind = RuleKind.Allow) (fun () ->
-                                dispatch (SetKind RuleKind.Allow))
-                            kindButton msgs.DenyLabel msgs.DenyDescription (model.Kind = RuleKind.Deny) (fun () ->
-                                dispatch (SetKind RuleKind.Deny))
-                        ]
-                    ]
-
-                    Html.div [
-                        prop.className "border border-border rounded-lg overflow-hidden mb-4"
-                        prop.children (candidateHeader :: candidateRows)
-                    ]
-
-                    EditorForm model (fun note -> dispatch (Save note)) (fun () -> dispatch Clear)
-                ]
-            ]
-
-    Html.div [
-        prop.className "p-6 max-w-3xl"
-        prop.children [
-            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
-            Html.p [
-                prop.className ("text-sm mb-4 " + Tokens.Text.secondary)
-                prop.text msgs.Subheading
-            ]
-            StateViews.notice noticeMsgs model.Error (fun () -> dispatch DismissError)
-            StateViews.notice noticeMsgs model.Status (fun () -> dispatch DismissStatus)
-            editor
-            resolvedPane msgs model
-        ]
-    ]
+/// The tree's file, fetched on demand with the node vocabulary and the
+/// renderer, so the shell's first load pays nothing for them.
+let private loadSurface () : JS.Promise<obj> =
+    surfaceOf (importDynamic "./ModuleVisibilityAdminTree.fs")
 
 let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
-    PageContent.FullWidth(body ctx.Messages.ModuleVisibilityAdmin model ctx.Dispatch)
+    PageContent.FullWidth(
+        TreeSurface.deferred "ModuleVisibilityAdminTree.Surface" loadSurface {|
+            Model = model
+            Dispatch = ctx.Dispatch
+            Messages = ctx.Messages.ModuleVisibilityAdmin
+            Locale = ctx.Locale
+        |}
+    )
 
 // ─── Module creation ─────────────────────────────────────────────────
 

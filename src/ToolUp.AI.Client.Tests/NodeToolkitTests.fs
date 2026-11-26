@@ -75,11 +75,11 @@ let private toolkitTests =
             Expect.equal (Nodes.Ids.keyed "rows" "r-17") "rows-r-17" "keyed id"
             Expect.equal (Nodes.Ids.child "rows" "header") "rows-header" "child id")
 
-        testCase "text is literal: markdown punctuation is escaped" (fun () ->
+        testCase "text is literal: the Text node carries it unparsed" (fun () ->
             match (Nodes.text "t" "_sdk.Team_Manager": Node<Msg>).Kind with
-            | NodeKind.Markdown spec ->
-                Expect.equal spec.Text (TextSource.Literal "\\_sdk\\.Team\\_Manager") "escaped body"
-            | other -> failwithf "expected a markdown node, got %A" other)
+            | NodeKind.Text spec ->
+                Expect.equal spec.Text (TextSource.Literal "_sdk.Team_Manager") "the body as written"
+            | other -> failwithf "expected a text node, got %A" other)
 
         testCase "a form's fields keep their names and its submit dispatches" (fun () ->
             let form =
