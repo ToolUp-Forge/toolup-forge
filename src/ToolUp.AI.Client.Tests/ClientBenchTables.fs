@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-/// The 200-row table `ClientBench` times, as Feliz and as a Fuaran-UI tree, in
-/// a module that imports nothing from Node, so a browser can load it.
+/// The 200-row table `ClientBench` times, as Feliz and as a Fuaran-UI tree,
+/// and the real module views that moved to a tree, each as the Feliz page it
+/// replaced and as its shipped tree, in a module that imports nothing from
+/// Node, so a browser can load it.
 ///
 /// `ClientBench` times the Feliz view's construction under Node
 /// (`viewPerDispatchUs`). `client-bench-browser.mjs` bundles this module for a
@@ -17,6 +19,7 @@ open Fable.Core.JsInterop
 open Feliz
 open ToolUp.Platform
 open Toolup.UIToolkit
+open Fuaran.MVU
 
 type Row = { Id: int; Label: string; Value: int }
 
@@ -183,6 +186,129 @@ let benchRows (count: int) : Row[] =
         Value = i
     })
 
+// ─── The real module views ─────────────────────────────────────────────
+
+/// One host dispatch of a real module page: the module's own `update` applied
+/// to the model the page shows, its effects dropped (the leg times the view,
+/// not the remote call). `tick` counts the dispatches, so each one changes
+/// what the page shows.
+type private ModuleStep<'Model, 'Msg> = {
+    Update: 'Msg -> 'Model -> 'Model * Step<'Msg, RemoteEffect<'Msg>> list
+    Next: int -> 'Msg
+}
+
+let private stepThrough (s: ModuleStep<'Model, 'Msg>) (model: 'Model, tick: int) : 'Model * int =
+    fst (s.Update (s.Next tick) model), tick + 1
+
+let private seedThrough (update: 'Msg -> 'Model -> 'Model * 'Steps) (init: 'Model) (msgs: 'Msg list) : 'Model =
+    msgs |> List.fold (fun model msg -> fst (update msg model)) init
+
+/// The teams a page lists: 200, as the leg's tables hold 200 rows.
+let private benchTeamCount = 200
+
+/// The team every dispatch renames, so one row changes per dispatch.
+let private renamedTeam = 7
+
+/// A team's name; `tick` below zero is the seed, before any rename.
+let private teamName (i: int) (tick: int) =
+    if i = renamedTeam && tick >= 0 then
+        sprintf "Team %03d (%d)" i tick
+    else
+        sprintf "Team %03d" i
+
+let private teamInfos (tick: int) : TeamInfo list =
+    List.init benchTeamCount (fun i -> {
+        TeamId = sprintf "t%03d" i
+        Name = teamName i tick
+        CreatedAt = System.DateTime(2026, 1, 1)
+        Archived = false
+    })
+
+let private teamSummaries (tick: int) : TeamSummary list =
+    List.init benchTeamCount (fun i -> {
+        TeamId = sprintf "t%03d" i
+        Name = teamName i tick
+        CreatedAt = System.DateTime(2026, 1, 1)
+        Archived = (i % 2 = 1)
+        MemberCount = 2
+        Owners = [ sprintf "owner-t%03d" i ]
+        Admins = []
+    })
+
+/// The team manager's list of 200 teams, one active, reached through its
+/// `update`; a dispatch renames one team.
+let private teamManager () =
+    let seed =
+        seedThrough TeamManagerUI.update (fst (TeamManagerUI.init ClientModuleContext.empty)) [
+            TeamManagerUI.TeamsLoaded(teamInfos -1)
+            TeamManagerUI.ActiveTeamLoaded(Some "t000")
+        ]
+
+    seed,
+    {
+        Update = TeamManagerUI.update
+        Next = fun tick -> TeamManagerUI.TeamsLoaded(teamInfos tick)
+    }
+
+/// The registered modules the visibility editor lists: 40, half selected by
+/// the resolution, so the page is a working list rather than the two rows
+/// its parity state holds.
+let private visibilityModules = List.init 40 (sprintf "module-%02d")
+
+/// The module-visibility editor with no stored profile and its resolution
+/// beside it, reached through its `update`; a dispatch flips the rule's kind.
+let private visibilityEditor () =
+    let seed =
+        seedThrough ModuleVisibilityAdminUI.update (fst (ModuleVisibilityAdminUI.init ClientModuleContext.empty)) [
+            ModuleVisibilityAdminUI.RegisteredLoaded(Ok visibilityModules)
+            ModuleVisibilityAdminUI.ProfileLoaded(Ok None)
+            ModuleVisibilityAdminUI.ResolutionLoaded(
+                Ok(
+                    Some {
+                        GovernedModuleIds = visibilityModules
+                        SelectedModuleIds =
+                            visibilityModules
+                            |> List.indexed
+                            |> List.filter (fun (i, _) -> i % 2 = 0)
+                            |> List.map snd
+                        ExcludedEntryIds = []
+                        ContributingScopes = []
+                    }
+                )
+            )
+        ]
+
+    seed,
+    {
+        Update = ModuleVisibilityAdminUI.update
+        Next =
+            fun tick ->
+                ModuleVisibilityAdminUI.SetKind(
+                    if tick % 2 = 0 then
+                        ModuleVisibilityAdminUI.RuleKind.Allow
+                    else
+                        ModuleVisibilityAdminUI.RuleKind.Deny
+                )
+    }
+
+/// Platform Management's teams tab with 200 teams, reached through its
+/// `update`; a dispatch renames one team.
+let private platformTeams () =
+    let seed =
+        seedThrough PlatformAdminUI.update (fst (PlatformAdminUI.init ClientModuleContext.empty)) [
+            PlatformAdminUI.SwitchTab PlatformAdminUI.TeamsTab
+            PlatformAdminUI.TeamsLoaded(Ok(teamSummaries -1))
+        ]
+
+    seed,
+    {
+        Update = PlatformAdminUI.update
+        Next = fun tick -> PlatformAdminUI.TeamsLoaded(Ok(teamSummaries tick))
+    }
+
+/// The locale the shipped surfaces are drawn under.
+let private benchLocale = "en"
+
 // ─── The browser entry ─────────────────────────────────────────────────
 
 [<Import("createRoot", from = "react-dom/client")>]
@@ -191,39 +317,22 @@ let private createRoot (container: obj) : obj = jsNative
 [<Import("flushSync", from = "react-dom")>]
 let private flushSync (work: unit -> unit) : unit = jsNative
 
-type private BodyProps = {|
-    Model: BenchModel
-    Dispatch: BenchMsg -> unit
-    View: BenchModel -> (BenchMsg -> unit) -> ReactElement
-|}
+type private BodyProps = {| Draw: unit -> ReactElement |}
 
-/// Both tables are built inside a component's render, as a module view is.
-let private Body (props: BodyProps) : ReactElement = props.View props.Model props.Dispatch
+/// Every page is built inside a component's render, as a module view is.
+let private Body (props: BodyProps) : ReactElement = props.Draw()
 
-/// Mount the table named `kind` (`feliz`, `tree`, `tree-kept`, `tree-grid` or `tree-markdown`) into `container` and return
-/// a handle whose `dispatch` renders the next model synchronously: one row's
-/// value bumped and the tick advanced, the view rebuilt whole, as a host
-/// dispatch rebuilds it. Layout is the caller's to force and time.
-let mount (kind: string) (rows: int) (container: obj) : obj =
-    let view =
-        match kind with
-        | "feliz" -> benchView
-        | "tree" -> benchTreeView
-        | "tree-kept" -> benchKeptTreeView
-        | "tree-grid" -> benchGridTreeView
-        | "tree-markdown" -> benchMarkdownTreeView
-        | other -> failwithf "unknown table '%s': expected feliz, tree, tree-kept, tree-grid or tree-markdown" other
-
+/// Mount `view` of `seed` into `container` and return a handle whose
+/// `dispatch` moves the model one `step` and renders it synchronously, the
+/// view rebuilt whole as a host dispatch rebuilds it. Layout is the caller's
+/// to force and time.
+let private mountPage (container: obj) (view: 'Model -> ReactElement) (seed: 'Model) (step: 'Model -> 'Model) : obj =
     let root = createRoot container
-    let mutable model = { Rows = benchRows rows; Tick = 0 }
+    let mutable model = seed
 
     let render () =
-        let props: BodyProps = {|
-            Model = model
-            Dispatch = ignore
-            View = view
-        |}
-
+        let current = model
+        let props: BodyProps = {| Draw = fun () -> view current |}
         flushSync (fun () -> root?render (ReactLegacy.createElement (unbox<ReactElement> Body, box props)))
 
     render ()
@@ -231,15 +340,114 @@ let mount (kind: string) (rows: int) (container: obj) : obj =
     createObj [
         "dispatch"
         ==> fun () ->
-            let i = model.Tick % model.Rows.Length
-            let rows' = Array.copy model.Rows
-
-            rows'[i] <- {
-                rows'[i] with
-                    Value = rows'[i].Value + 1
-            }
-
-            model <- { Rows = rows'; Tick = model.Tick + 1 }
+            model <- step model
             render ()
         "unmount" ==> fun () -> root?unmount ()
     ]
+
+/// The synthetic table's dispatch: one row's value bumped and the tick advanced.
+let private bump (model: BenchModel) : BenchModel =
+    let i = model.Tick % model.Rows.Length
+    let rows' = Array.copy model.Rows
+
+    rows'[i] <- {
+        rows'[i] with
+            Value = rows'[i].Value + 1
+    }
+
+    { Rows = rows'; Tick = model.Tick + 1 }
+
+/// A real module page mounted through `view`, dispatched through its `update`.
+let private mountModule (container: obj) (view: 'Model -> ReactElement) (seed: 'Model, step: ModuleStep<'Model, 'Msg>) =
+    mountPage container (fst >> view) (seed, 0) (stepThrough step)
+
+/// The tables and pages a run can mount, by name: the synthetic 200-row
+/// table in five shapes, and each real module view as the Feliz page it
+/// replaced (`FelizReferenceViews`) and as the module's shipped tree, mounted
+/// by the component its deferred surface loads.
+let tableKinds = [
+    "feliz"
+    "tree"
+    "tree-kept"
+    "tree-grid"
+    "tree-markdown"
+    "team-manager-feliz"
+    "team-manager-tree"
+    "visibility-feliz"
+    "visibility-tree"
+    "platform-teams-feliz"
+    "platform-teams-tree"
+]
+
+/// Mount the table or page named `kind` (one of `tableKinds`) into
+/// `container`, with `rows` rows for the synthetic table.
+let mount (kind: string) (rows: int) (container: obj) : obj =
+    let table view =
+        mountPage container (fun m -> view m ignore) { Rows = benchRows rows; Tick = 0 } bump
+
+    let teamMsgs = MessageCatalog.english.TeamManager
+    let visibilityMsgs = MessageCatalog.english.ModuleVisibilityAdmin
+    let adminMsgs = MessageCatalog.english.PlatformAdmin
+    let widgetMsgs = MessageCatalog.english.PublicUtilityWidgets
+
+    match kind with
+    | "feliz" -> table benchView
+    | "tree" -> table benchTreeView
+    | "tree-kept" -> table benchKeptTreeView
+    | "tree-grid" -> table benchGridTreeView
+    | "tree-markdown" -> table benchMarkdownTreeView
+    | "team-manager-feliz" ->
+        mountModule container (fun m -> FelizReferenceViews.TeamManager.body teamMsgs m ignore) (teamManager ())
+    | "team-manager-tree" ->
+        mountModule
+            container
+            (fun m ->
+                TeamManagerTree.Surface {|
+                    Model = m
+                    Dispatch = ignore
+                    Messages = teamMsgs
+                    Locale = benchLocale
+                |})
+            (teamManager ())
+    | "visibility-feliz" ->
+        mountModule
+            container
+            (fun m -> FelizReferenceViews.ModuleVisibilityAdmin.body visibilityMsgs m ignore)
+            (visibilityEditor ())
+    | "visibility-tree" ->
+        mountModule
+            container
+            (fun m ->
+                ModuleVisibilityAdminTree.Surface {|
+                    Model = m
+                    Dispatch = ignore
+                    Messages = visibilityMsgs
+                    Locale = benchLocale
+                |})
+            (visibilityEditor ())
+    | "platform-teams-feliz" ->
+        mountModule
+            container
+            (fun m ->
+                FelizReferenceViews.PlatformAdmin.body
+                    PublicUtilityConfig.defaults
+                    (PlatformAdminUI.caller ())
+                    adminMsgs
+                    widgetMsgs
+                    m
+                    ignore)
+            (platformTeams ())
+    | "platform-teams-tree" ->
+        mountModule
+            container
+            (fun m ->
+                PlatformAdminTree.Surface {|
+                    Model = m
+                    Dispatch = ignore
+                    Messages = adminMsgs
+                    Widgets = widgetMsgs
+                    Config = PublicUtilityConfig.defaults
+                    Locale = benchLocale
+                |})
+            (platformTeams ())
+    | other -> failwithf "unknown table '%s': expected one of %s" other (String.concat ", " tableKinds)

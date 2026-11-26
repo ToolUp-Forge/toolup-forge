@@ -61,8 +61,9 @@
 ///     the shell build writes. The whole-bundle figure above sums every file
 ///     and so cannot see a split.
 ///   * DISPATCH IN A BROWSER — with `--browser-dispatch`, one host dispatch
-///     of the 200-row table as Feliz and as a Fuaran-UI tree, timed in a
-///     headless browser with React's commit and a forced layout
+///     of the 200-row table as Feliz and as a Fuaran-UI tree, and of each real
+///     module view that moved to a tree as its Feliz page and its shipped
+///     tree, timed in a headless browser with React's commit and a forced layout
 ///     (`client-bench-browser.mjs` over `ClientBenchTables`). A lever: the
 ///     figure a tree surface is judged on, where `viewPerDispatchUs` sees
 ///     construction only.
@@ -204,7 +205,7 @@ type private Options = {
     /// sample and of the SDK shell, when the caller built them.
     MinimalBundle: string option
     ShellBundle: string option
-    /// Time the 200-row table's dispatch in a headless browser as well
+    /// Time the 200-row table's and the moved module views' dispatch in a headless browser as well
     /// (`client-bench-browser.mjs`). Recorded, never gated.
     BrowserDispatch: bool
 }
@@ -390,8 +391,9 @@ let private runBootChild (moduleRelative: string) (mode: string) : BootChild =
 
 // ─── Dispatch in a browser ─────────────────────────────────────────────
 
-/// The 200-row table's dispatch timed in a headless browser, with commit and
-/// layout, as Feliz and as a tree: `client-bench-browser.mjs` bundles
+/// The 200-row table's dispatch, and each moved module view's dispatch through
+/// its own `update`, timed in a headless browser with commit and layout, as
+/// Feliz and as a tree: `client-bench-browser.mjs` bundles
 /// `ClientBenchTables` for a page and drives the browser over CDP. Its report
 /// is recorded as a lever as it stands; a run that could not measure (no
 /// browser on the machine, a bundle that did not build) records why, and

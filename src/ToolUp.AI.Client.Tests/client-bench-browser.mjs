@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 //
-// ClientBench's browser leg: one host dispatch of the 200-row table, as Feliz and as a Fuaran-UI tree, timed in a
+// ClientBench's browser leg: one host dispatch of the 200-row table, as Feliz and as a Fuaran-UI tree, and of each
+// real module view that moved to a tree, as the Feliz page it replaced and as the shipped tree, timed in a
 // headless browser with React's commit and a forced layout. ClientBench's `viewPerDispatchUs` times the view's
 // construction under Node and cannot see commit or layout, which is where much of a tree's cost sits; this is the
 // figure a tree surface is judged on. Recorded, never gated.
@@ -14,7 +15,9 @@
 //      over the DevTools protocol with `--js-flags=--expose-gc`.
 //   3. Per profile (desktop; 6x CPU throttling, the study's low phone) and per arm (feliz, tree, the tree with its rows kept, the rows as a DataGrid with a button column,
 //      the boxes with Markdown cells, then feliz again
-//      as the control for drift across the run): mounts the table, runs warm-ups, then samples one dispatch each:
+//      as the control for drift across the run; then per real module view its Feliz page, its shipped tree and its
+//      Feliz page again, each dispatch going through the module's own `update`): mounts the page, runs warm-ups,
+//      then samples one dispatch each:
 //      `gc()`, the next model rendered synchronously (`flushSync`), then `offsetHeight` forced. `render` is the
 //      rebuild, React's render and commit; `layout` the forced layout after it; `total` both.
 //   4. Refuses a reading in which a mount built under 100 elements, a dispatch changed no DOM, the page was not
@@ -43,7 +46,17 @@ const PROFILES = [
     { name: "desktop", cpu: 1 },
     { name: "low phone: 6x CPU", cpu: 6 },
 ];
-const ARMS = ["feliz", "tree", "tree-kept", "tree-grid", "tree-markdown", "feliz-control"];
+// The real module views, each an arm pair and its drift control. A batch that moves more views adds its views here
+// and their mounts in ClientBenchTables.mount (docs/platform/budgets.md says how).
+const VIEWS = [
+    { name: "team-manager", label: "the team manager, one of 200 teams renamed" },
+    { name: "visibility", label: "the module-visibility editor, the rule kind flipped" },
+    { name: "platform-teams", label: "Platform Management's teams tab, one of 200 teams renamed" },
+];
+const ARMS = [
+    "feliz", "tree", "tree-kept", "tree-grid", "tree-markdown", "feliz-control",
+    ...VIEWS.flatMap((v) => [`${v.name}-feliz`, `${v.name}-tree`, `${v.name}-feliz-control`]),
+];
 
 const report = (value) => {
     console.log("CLIENTBENCH-BROWSER " + JSON.stringify(value));
@@ -123,7 +136,7 @@ const run = (kind, samples, warmups, rows) => {
     const container = document.createElement("div");
     host.replaceChildren(container);
     const t0 = performance.now();
-    const handle = window.__bench.mount(kind === "feliz-control" ? "feliz" : kind, rows, container);
+    const handle = window.__bench.mount(kind.endsWith("-control") ? kind.slice(0, -"-control".length) : kind, rows, container);
     void container.offsetHeight;
     const mountMs = performance.now() - t0;
     const elements = container.querySelectorAll("*").length;
@@ -250,12 +263,15 @@ try {
 }
 
 const medianOf = (prof, arm) => profiles.find((p) => p.profile === prof).arms.find((a) => a.arm === arm).totalMs.median;
-const summary = PROFILES.map((p) => `${p.name}: feliz ${medianOf(p.name, "feliz")} ms, tree ${medianOf(p.name, "tree")} ms, tree with kept rows ${medianOf(p.name, "tree-kept")} ms, DataGrid ${medianOf(p.name, "tree-grid")} ms, boxes with Markdown ${medianOf(p.name, "tree-markdown")} ms, feliz again ${medianOf(p.name, "feliz-control")} ms`).join("; ");
+const viewSummary = (prof) =>
+    VIEWS.map((v) => `${v.label}: Feliz ${medianOf(prof, `${v.name}-feliz`)} ms, tree ${medianOf(prof, `${v.name}-tree`)} ms, Feliz again ${medianOf(prof, `${v.name}-feliz-control`)} ms`).join(", ");
+const summary = PROFILES.map((p) => `${p.name}: feliz ${medianOf(p.name, "feliz")} ms, tree ${medianOf(p.name, "tree")} ms, tree with kept rows ${medianOf(p.name, "tree-kept")} ms, DataGrid ${medianOf(p.name, "tree-grid")} ms, boxes with Markdown ${medianOf(p.name, "tree-markdown")} ms, feliz again ${medianOf(p.name, "feliz-control")} ms | ${viewSummary(p.name)}`).join("; ");
 report({
     observed: refusals.length === 0,
     reason: refusals.length ? refusals.join("; ") : undefined,
     summary: `median dispatch with commit and layout, ${ROWS} rows, ${SAMPLES} samples after ${WARMUPS} warm-ups — ${summary}`,
-    method: "client-bench-browser.mjs: Vite production bundle of ClientBenchTables, cross-origin isolated page, headless browser over CDP, gc() before each sample, flushSync render then forced layout",
+    method: "client-bench-browser.mjs: Vite production bundle of ClientBenchTables, cross-origin isolated page, headless browser over CDP, gc() before each sample, flushSync render then forced layout; a module view's dispatch goes through its own update, effects dropped, and its tree is mounted by the component its deferred surface loads",
+    views: VIEWS,
     browser: version,
     machine: { cpu: os.cpus()[0]?.model, logicalCores: os.cpus().length, os: `${os.platform()} ${os.release()}`, node: process.version },
     rows: ROWS,
