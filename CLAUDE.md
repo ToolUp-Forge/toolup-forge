@@ -203,7 +203,7 @@ The lanes, what each runs and what each costs: [`docs/platform/testing-conventio
 | `doc-snippets` | DocSnippets | Tree | yes |
 | `source-citations` | SourceCitations, UploadResults | Tree | yes |
 | `templates` | Templates, PackagedModuleTemplate, DataPlatformTemplate | Tree, Network, Node | yes |
-| `browser-smoke` | BrowserSmoke | Tree, Node, Browser | yes |
+| `browser-smoke` | BrowserSmoke | Tree, Node, Browser, 1 env var(s) | yes |
 | `perf-budget` | PerfBudget | Tree, Node | runs; not yet a required check |
 <!-- gate-manifest:ci-table:end -->
 

@@ -552,6 +552,7 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
         Input.Tree
         Input.Node
         Input.Browser
+        Input.Env "TOOLUP_BROWSER_SMOKE_SKIP_INSTALL"
     ]
     |> floor' (Floor.Exactly 10)
     // The two measured gates: each script measures, then runs the SDK's

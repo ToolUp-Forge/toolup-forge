@@ -1040,10 +1040,19 @@ let main args =
         // Playwright ships its installer beside the built assembly. Best
         // effort: a failure here is reported and not fatal, because the
         // floor check below turns "no browser" into a named failure with
-        // a much better message than a download error.
+        // a much better message than a download error. A machine whose
+        // browser is already installed sets the skip variable to `1`: the
+        // installer can remove other browser builds there, and the floor
+        // still fails a run that finds no browser.
         let installer = Path.combine (Path.getDirectory targetPath) "playwright.ps1"
 
-        if File.exists installer then
+        let skipInstallVariable = "TOOLUP_BROWSER_SMOKE_SKIP_INSTALL"
+
+        if Environment.environVarOrNone skipInstallVariable = Some "1" then
+            Trace.tracefn
+                "VerifyBrowserSmoke: %s=1, so the browser install is skipped and the browser already installed is used."
+                skipInstallVariable
+        elif File.exists installer then
             try
                 Proc.exec (onPath "pwsh") [ installer; "install"; "chromium" ] "."
                 |> Proc.ensure

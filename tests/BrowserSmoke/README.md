@@ -158,6 +158,15 @@ To install by hand:
 pwsh tests/BrowserSmoke/ToolUp.BrowserSmoke.Tests/bin/Debug/net10.0/playwright.ps1 install chromium
 ```
 
+On a machine whose browser is already installed, the target can skip its install step:
+set `TOOLUP_BROWSER_SMOKE_SKIP_INSTALL=1` and it uses the browser that is there, with the
+same floor. The installer can remove other browser builds, so this is the setting for a
+shared developer machine. CI does not set it.
+
+```powershell
+$env:TOOLUP_BROWSER_SMOKE_SKIP_INSTALL='1'; dotnet run --project Build.fsproj -- VerifyBrowserSmoke
+```
+
 ## Ports
 
 The host binds an **OS-assigned free loopback port**, so the harness claims nothing in the
