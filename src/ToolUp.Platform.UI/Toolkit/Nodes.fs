@@ -41,23 +41,9 @@ module Nodes =
     /// Literal text for a `TextSource` slot.
     let literal (value: string) : TextSource = TextSource.Literal value
 
-    let private markdownPunctuation = "\\`*_{}[]()#+-.!|<>~"
-
-    /// Backslash-escape `text` for the markdown subset. The vocabulary has no
-    /// plain text node, so running text rides `Markdown`; a module id such as
-    /// `_sdk.Team_Manager` must read as itself rather than as emphasis.
-    let private escapeMarkdown (text: string) : string =
-        text
-        |> Seq.map (fun c ->
-            if markdownPunctuation.IndexOf c >= 0 then
-                "\\" + string c
-            else
-                string c)
-        |> String.concat ""
-
-    /// A run of literal text: never interpreted as markdown.
-    let text (id: string) (value: string) : Node<'Msg> =
-        Fuaran.markdown id (escapeMarkdown value)
+    /// A run of literal text, the vocabulary's `Text` node: never parsed, so a
+    /// module id such as `_sdk.Team_Manager` reads as itself.
+    let text (id: string) (value: string) : Node<'Msg> = Fuaran.text id value
 
     /// A heading at `level` (1 to 6).
     let heading (id: string) (level: int) (value: string) : Node<'Msg> =

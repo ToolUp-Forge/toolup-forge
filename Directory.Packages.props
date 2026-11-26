@@ -27,11 +27,11 @@
   <PropertyGroup>
     <!-- The Fuaran-UI repository's pin, for Fuaran.UI and Fuaran.UI.Charts
          (ToolUp.Facts.Presentation, and InterPlatform's fit-diagnostic
-         charts). Public: a release on nuget.org. 0.106.0 is the release built
+         charts). Public: a release on nuget.org. 0.107.0 is the release built
          against the Fuaran.Core and Fuaran.Compute pins above (Core 0.45.0,
-         Compute 0.46.0): every package of it floors Core at 0.45.0 and
-         Compute at 0.46.0, which the pins above meet. -->
-    <FuaranUIVersion>0.106.0</FuaranUIVersion>
+         Compute 0.47.0): every package of it floors Core at 0.45.0 and
+         Compute at 0.47.0, which the pins above meet. -->
+    <FuaranUIVersion>0.107.0</FuaranUIVersion>
     <!-- The pin for Fuaran.MVU and its React adapter, Fuaran.MVU.React, one
          repository's packages released together: the model-update-view
          runtime the client shell mounts on (ToolUp.Platform.Client). Public:
