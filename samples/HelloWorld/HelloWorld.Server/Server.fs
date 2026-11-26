@@ -16,54 +16,38 @@ open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
 
 // HelloWorld composition root.
-// Authenticated single-user deployment using the canonical
-// `Surfaces.individual` shape. `ServerConfigOverrides.referenceApp`
-// declares `Some Surfaces.individual` so `fromEnv` pins this app to
-// the Individual deployment unless the operator overrides via
-// TOOLUP_PLATFORM_SURFACES.
+// An authenticated deployment of the canonical `Surfaces.individual` shape:
+// `ServerConfigOverrides.referenceApp` declares `Some Surfaces.individual`,
+// so `fromEnv` pins the app to it unless the operator overrides with
+// TOOLUP_PLATFORM_SURFACES. Compare samples/MinimalApp, whose
+// `ServerConfigOverrides.empty` falls through to `Surfaces.anonymous`.
 //
-// Compare with samples/MinimalApp — that sample uses
-// `ServerConfigOverrides.empty`, which falls through to
-// `ServerConfig.defaults.Surfaces = Surfaces.anonymous`.
+// What it composes:
 //
-// ─── Module wiring + Phase 69b.tail worked example ────────────────
+//   1. The sibling `HelloWorld.Module` (the four-file minimum module), its
+//      handler mounted with two seams passed explicitly: a console-printing
+//      `IRemotingTelemetry` sink in place of the `IMetricsSink` bridge, and
+//      a `ForgeAuthContext` resolver evaluated per call. Without them
+//      `Api.make` composes its defaults (the `IMetricsSink` bridge and the
+//      stamped principal, `AccessContext.ofItems`); either is correct, and
+//      the worked example surfaces both.
 //
-// The sibling `HelloWorld.Module` project defines the four-file
-// minimum-module shape: SharedTypes (the `HelloWorldApi` record),
-// Server.fs (the pure `echoRoutine`), plus client-tier files
-// (ClientModel / ClientView / Icons) source-injected into a future
-// Client project via `HelloWorld.Module.Client.props`.
+//   2. The server halves of what the client's shell opens: module-visibility
+//      profiles (`SurfacingModuleVisibility`) for the profile editor, and the
+//      in-process notification stream the shell subscribes to on an
+//      authenticated surface.
 //
-// This Server demonstrates the consumer-side wiring of that Module
-// AND the Phase 69b.tail platform seams in one place:
-//
-//   1. A console-printing `IRemotingTelemetry` sink — passed via the
-//      `?telemetry` argument to override the IMetricsSink-bridging
-//      default. The migration doc references this block as the
-//      reproducer for "boot the sample, hit a curl, watch the per-
-//      method timing line render on stdout".
-//
-//   2. A `ForgeAuthContext` resolver that stamps a "request started
-//      at" timestamp on the per-request context. The resolver is
-//      evaluated PER CALL (not snapshotted at composition), so the
-//      `StartedAt` field is fresh on every invocation. Demonstrates
-//      the per-request-context shape consumers wire when bespoke
-//      claim semantics need to flow through to handler code.
-//
-// Without the explicit `?telemetry` and `?authContext` overrides the
-// wrapper would compose its defaults: `IMetricsSink` bridge for
-// telemetry, the stamped principal (`AccessContext.ofItems`) for context.
-// Either path is correct; the worked example surfaces both seams
-// explicitly so the migration doc has something to point at.
+//   3. In Debug builds only, the development identity profile below: the
+//      team surface with a stable header identity that is a platform admin
+//      and owns a bootstrap team, so the whole shell can be opened locally
+//      with no identity provider. It is selected, never defaulted:
+//      TOOLUP_PROFILE=helloworld-dev-identity (what `../run.ps1` sets).
 
 module HelloWorldRoutes =
-    let routeBuilder (typeName: string) (methodName: string) : string =
-        sprintf "/api/hello/%s/%s" typeName methodName
-
     /// Console-printing `IRemotingTelemetry` sink. Emits one line per
     /// method completion with the method name, wall-clock elapsed ms,
-    /// outcome (`ok`/`error`), and the per-request correlation id
-    /// (Phase 69b.D). Suitable as a worked example — a production
+    /// outcome (`ok`/`error`), and the per-request correlation id.
+    /// Suitable as a worked example — a production
     /// deployment would route through `ServerApp.withMetricsSink` and
     /// let the default `Api.make` bridge emit through there.
     let consoleTelemetry: IRemotingTelemetry =
@@ -89,9 +73,8 @@ module HelloWorldRoutes =
         }
 
     /// "Request started at" resolver — evaluated per call, not
-    /// snapshotted at composition. Demonstrates the build-once / read-
-    /// per-call shape Phase 69b.B closed: the timestamp is fresh on
-    /// every request, so a closure-captured value couldn't substitute.
+    /// snapshotted at composition: the timestamp is fresh on every
+    /// request, so a closure-captured value couldn't substitute.
     let requestStartedAtResolver (ctx: HttpContext) : Async<ForgeAuthContext> = async {
         let startedAt = DateTimeOffset.UtcNow
 
@@ -128,14 +111,10 @@ module HelloWorldRoutes =
     /// passed explicitly so the trace lines render on stdout; remove
     /// the explicit args to fall back to the default bridges (forge's
     /// `IMetricsSink` + the stamped principal (`AccessContext.ofItems`)
-    /// reader) per the Phase 69b.tail wrapper composition.
+    /// reader). The route is the default `/api/<type>/<method>`, the
+    /// one the module's client proxy (`Api.makeProxy`) calls.
     let routes =
-        Api.make (
-            helloWorldImpl,
-            routeBuilder = routeBuilder,
-            telemetry = consoleTelemetry,
-            authContext = requestStartedAtResolver
-        )
+        Api.make (helloWorldImpl, telemetry = consoleTelemetry, authContext = requestStartedAtResolver)
 
 /// Console `IMetricsSink` that prints every emission. Composed via
 /// `ServerApp.withMetricsSink` so the default `Api.make` bridge in any
@@ -152,23 +131,82 @@ type ConsoleMetricsSink() =
         member _.SetGauge(name, value, tags) =
             printfn "[metrics/gauge] %s=%g %A" name value tags
 
+#if DEBUG
+/// The development identity: the team surface, with the header identity
+/// `dev-admin` made the platform admin and the owner of a bootstrap team.
+/// The header-trust provider is the SDK's dev default (TOOLUP_AUTH_MODE
+/// unset), and the acknowledgement below is what lets it run on an
+/// authenticated surface; anyone who can reach the port can claim any
+/// identity, which is why the profile exists only in a Debug build and only
+/// when selected. A Release build never declares it, so selecting it there
+/// refuses startup and lists the profiles that do exist.
+let private devIdentityProfile: ConfigKeys.ConfigProfile = {
+    Name = "helloworld-dev-identity"
+    Description =
+        "HelloWorld on a developer machine: the team surface, with the header identity dev-admin as platform admin and owner of a bootstrap team. Debug builds only."
+    Requires = []
+    Values = [
+        ConfigKeys.Names.platformSurfaces, "team"
+        ConfigKeys.Names.acceptHeaderAuthInAuthMode, "true"
+        ConfigKeys.Names.initialPlatformAdmin, "dev-admin"
+        ConfigKeys.Names.initialTeamName, "Hello World team"
+        ConfigKeys.Names.initialTeamId, "helloworld"
+        // A loopback developer machine: no proxy in front, no secret worth
+        // keeping, and a notification stream with no JWT to carry. Each is
+        // the acknowledgement the preflight names, stated here rather than
+        // left for every developer to type.
+        ConfigKeys.Names.trustForwardedHeaders, "false"
+        ConfigKeys.Names.acceptPlaintextSecrets, "true"
+        ConfigKeys.Names.acceptQueryParamSseAuthInAuthMode, "true"
+    ]
+}
+
+/// Whether the development identity profile is the one in force.
+let private devIdentitySelected () =
+    ConfigResolution.profile ()
+    |> Option.exists (fun selected -> selected.Name = devIdentityProfile.Name)
+#endif
+
 [<EntryPoint>]
 let main _ =
+#if DEBUG
+    // Profiles are declared before the logger reads its first key.
+    ConfigProfiles.declare devIdentityProfile
+#endif
     let logger = ConsoleLogger.fromEnv ()
-    let config = ServerConfig.fromEnv logger ServerConfigOverrides.referenceApp
+
+    let config = {
+        ServerConfig.fromEnv logger ServerConfigOverrides.referenceApp with
+            ModuleVisibility = SurfacingModuleVisibility
+            Notifications = InMemoryNotifications
+    }
 
     // `ServerModule.Name` is the module's ID TOKEN, not its display name —
     // it is the RBAC permission key, the `ServerConfig.ModuleNames` entry,
     // and it must equal the client `ClientModule.Definition.Id` (which
     // `ClientModule.create` derives from the display Name with spaces
-    // stripped: "Hello World" -> "HelloWorld"). Phase 582's
-    // `ModuleContract` parity law asserts the two agree.
+    // stripped: "Hello World" -> "HelloWorld"). The `ModuleContract`
+    // parity law asserts the two agree.
     let helloWorldModule =
         ServerModule.create "HelloWorld"
         |> ServerModule.withHandlers [ HelloWorldRoutes.routes ]
 
+    // The team surface refuses to start on the compose default's implicit
+    // header-trust provider; under the development identity it is named
+    // explicitly, so the choice is visible where the app is composed.
+    let withDevIdentityAuth (app: ServerApp) =
+#if DEBUG
+        if devIdentitySelected () then
+            app |> ServerApp.withAuth (HeaderAuthProvider.HeaderAuthProvider())
+        else
+            app
+#else
+        app
+#endif
+
     ServerApp.empty
     |> ServerApp.withConfig config
+    |> withDevIdentityAuth
     |> ServerApp.withLogger logger
     |> ServerApp.withMetricsSink (ConsoleMetricsSink())
     |> ServerApp.addModule helloWorldModule

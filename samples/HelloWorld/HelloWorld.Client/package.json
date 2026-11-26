@@ -1,0 +1,36 @@
+{
+    "name": "helloworld-client",
+    "private": true,
+    "version": "0.0.1",
+    "type": "module",
+    "engines": {
+        "node": ">=20 || >=22 || >=24 || >=25"
+    },
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build"
+    },
+    "//1": "dependencies and the three non-styling devDependencies mirror samples/MinimalClient/package.json: the npm packages the ToolUp.Platform.Client bundle imports, at the versions the SDK pins. Move them when you move the SDK, not separately.",
+    "//2": "tailwindcss and @tailwindcss/vite are the canonical styling block's pinned toolchain (client-styling/tailwind/deps.json), exact, held by client-styling/check-drift.ps1.",
+    "//3": "The lockfile is committed and every install is `npm ci`, so the bundle the browser-smoke gate serves is reproducible from this tree. Regenerate after editing a range with `npm install --package-lock-only --no-fund --no-audit` and commit both files together.",
+    "dependencies": {
+        "@clerk/react": "^6.6.4",
+        "@dnd-kit/core": "^6.3.1",
+        "@dnd-kit/sortable": "^10.0.0",
+        "@dnd-kit/utilities": "^3.2.2",
+        "ag-charts-community": "13.3.0",
+        "ag-charts-react": "13.3.0",
+        "ag-grid-community": "35.3.0",
+        "ag-grid-react": "35.3.0",
+        "react": "~19.2.6",
+        "react-dom": "~19.2.6",
+        "yjs": "^13.6.27"
+    },
+    "devDependencies": {
+        "@tailwindcss/vite": "4.3.0",
+        "@vitejs/plugin-react": "^6.0.2",
+        "tailwindcss": "4.3.0",
+        "vite": "^8.0.13",
+        "vite-plugin-svgr": "^5.2.0"
+    }
+}

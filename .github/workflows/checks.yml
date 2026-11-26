@@ -1153,12 +1153,21 @@ jobs:
   #
   # ── Each scenario carries its own go-red ───────────────────────────
   #
-  # Two of the eight scenarios drive a FAULT SWITCH — `?fault=relay`
+  # Two of the twelve scenarios drive a FAULT SWITCH — `?fault=relay`
   # cuts the co-editing fan-out, `?fault=queue` cuts the offline queue's
   # hold — and assert that the thing under test then does NOT happen.
   # Both cut a seam the deployment supplies, not SDK code, so the red is
   # about the mechanism rather than about a mock. A go-red observed once
   # by hand is not evidence anyone can re-check; these run every time.
+  #
+  # ── The shell, run as a deployment serves it ───────────────────────
+  #
+  # Four scenarios start the HelloWorld sample's server on the sample's
+  # claimed port, serving its client bundle under the development
+  # identity, and open the team manager, the module-visibility editor,
+  # Platform Management and the command palette from the shell's own
+  # navigation. The target builds both halves; this job only caches the
+  # sample's npm tree beside the fixture's.
   #
   # ── Trigger ────────────────────────────────────────────────────────
   #
@@ -1167,8 +1176,8 @@ jobs:
   # gate would almost never run, and a gate that does not run is worse
   # than no gate because it reports green.
   #
-  # Measured cost: ~2 minutes on the dev machine — ~25s of scenarios and
-  # ~55s of Fable compile, the rest npm and the harness build. Budget
+  # Measured cost: ~7 minutes on the dev machine — ~45s of scenarios and
+  # two Fable compiles of ~2 minutes each, the rest npm and the builds. Budget
   # generously on a 2-core runner; `timeout-minutes` stays finite so a
   # hung browser fails loudly rather than burning the 6-hour default.
   #
@@ -1189,7 +1198,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: tests/BrowserSmoke/fixture/package-lock.json
+          cache-dependency-path: |
+            tests/BrowserSmoke/fixture/package-lock.json
+            samples/HelloWorld/HelloWorld.Client/package-lock.json
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
@@ -1215,8 +1226,9 @@ jobs:
       - name: Create empty local-feed dir (CI workaround)
         run: mkdir -p ../../local-nuget-feed
 
-      # The target owns npm ci, the Fable compile, the Vite bundle, the
-      # harness build, Playwright's Chromium install and the run — one
+      # The target owns npm ci, the Fable compiles, the Vite bundles, the
+      # HelloWorld server build, the harness build, Playwright's Chromium
+      # install and the run — one
       # invocation, so this job and a developer necessarily run the same
       # thing (the VerifyFable precedent).
       - name: Run the browser smoke scenarios (VerifyBrowserSmoke)
