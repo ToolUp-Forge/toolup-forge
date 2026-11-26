@@ -259,25 +259,10 @@ let private orElse (ofAnswer: 'result -> Msg) (ofFailure: string -> Msg) (reply:
     | Ok answer -> ofAnswer answer
     | Error ex -> ofFailure ex.Message
 
-/// The poll timer's site label: a timer has no value form until the
-/// runtime's standard vocabulary arrives.
-[<Literal>]
-let private PollSite = "KnowledgeBase.schedulePoll"
-
 /// Schedule a delayed `PollStatuses` dispatch. Used to drive a 2s polling
 /// loop while at least one document is non-terminal — the loop self-terminates
 /// once every doc reaches `Complete` / `Failed`.
-let private schedulePoll () : Steps = [
-    Do(
-        RemoteEffect.legacy PollSite (fun dispatch ->
-            Async.StartImmediate(
-                async {
-                    do! Async.Sleep 2000
-                    dispatch PollStatuses
-                }
-            ))
-    )
-]
+let private schedulePoll () : Steps = [ Do(RemoteEffect.delay "KnowledgeBase.schedulePoll" 2000 PollStatuses) ]
 
 // ─── Original-bytes → browser ──────────
 //

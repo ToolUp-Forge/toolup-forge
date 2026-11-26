@@ -17,8 +17,12 @@ namespace ToolUp.Platform
 //     reply are functions and take no part. Name the method as the API
 //     record and its field: interceptors route on it.
 //   * `RemoteEffect.await` — a named one-shot operation that is not a
-//     remote call (a plain HTTP read, a delay, a resolver).
-//   * `RemoteEffect.legacy` — code with no value form yet; it must
+//     remote call (a plain HTTP read, a resolver, fresh ids and the clock).
+//   * `RemoteEffect.delay` — a message sent after a wait, compared by its
+//     name and the wait.
+//   * `RemoteEffect.readFile` — a browser file's text, compared by its name
+//     and the file.
+//   * `RemoteEffect.legacy` — obsolete: code with no value form, which must
 //     dispatch exactly once.
 //   * `RemoteEffect.signal` — code that answers nothing (a redirect, a
 //     download, a beacon).
@@ -137,11 +141,22 @@ type RemoteCallSite(methodName: string, argument: obj, retry: RemoteRetryPolicy 
 /// `RemoteEffect.callWithRetry`.
 [<Sealed>]
 type RemoteCall<'msg>
-    internal (methodName: string, argument: obj, retry: RemoteRetryPolicy option, send: ('msg -> unit) -> unit) =
+    internal
+    (
+        methodName: string,
+        argument: obj,
+        retry: RemoteRetryPolicy option,
+        send: ('msg -> unit) -> unit,
+        answer: Result<obj, exn> -> 'msg
+    ) =
     inherit RemoteCallSite(methodName, argument, retry)
 
     /// Send the call; its one reply is delivered through the callback.
     member internal _.Send = send
+
+    /// The message an outcome is answered with, so a test can read what a
+    /// result or a failure sends without performing the call.
+    member internal _.Answer = answer
 
 /// Code that dispatches nothing (a browser redirect, a beacon), compared by
 /// its site label as a `LegacyEffect` is.
@@ -159,10 +174,10 @@ type RemoteEffect<'msg> =
     /// A remote call.
     | Invoke of RemoteCall<'msg>
     /// A one-shot asynchronous operation that is not a remote call (a plain
-    /// HTTP read, a delay, a resolver), named and compared as a call is; it
+    /// HTTP read, a delay, a file read, a resolver), named and compared as a call is; it
     /// does not pass the remoting interceptor chain.
     | Await of RemoteCall<'msg>
-    /// Code with no value form yet (a timer, say), which dispatches once.
+    /// Code with no value form, which dispatches once.
     | Legacy of LegacyEffect<'msg>
     /// Code that dispatches nothing, performed as a signal.
     | Fire of SignalEffect
@@ -372,6 +387,9 @@ module RemoteEffect =
             | None, None -> reply (Error(exn "RemoteEffect.callWithRetry: no result and no error"))
         }
 
+    let private answerWith (reply: Result<'result, exn> -> 'msg) (outcome: Result<obj, exn>) : 'msg =
+        reply (Result.map unbox<'result> outcome)
+
     /// A remote call: the method's name, the proxy field, its argument and
     /// the constructor that turns the reply into the module's message.
     let call
@@ -385,7 +403,8 @@ module RemoteEffect =
                 methodName,
                 box arg,
                 None,
-                fun dispatch -> Async.StartImmediate(sendOnce methodName proxyCall arg (reply >> dispatch))
+                (fun dispatch -> Async.StartImmediate(sendOnce methodName proxyCall arg (reply >> dispatch))),
+                answerWith reply
             )
         )
 
@@ -402,7 +421,9 @@ module RemoteEffect =
                 methodName,
                 box arg,
                 Some policy,
-                fun dispatch -> Async.StartImmediate(sendWithRetry methodName policy proxyCall arg (reply >> dispatch))
+                (fun dispatch ->
+                    Async.StartImmediate(sendWithRetry methodName policy proxyCall arg (reply >> dispatch))),
+                answerWith reply
             )
         )
 
@@ -421,7 +442,7 @@ module RemoteEffect =
                 name,
                 box arg,
                 None,
-                fun dispatch ->
+                (fun dispatch ->
                     Async.StartImmediate(
                         async {
                             let! outcome = Async.Catch(operation arg)
@@ -430,12 +451,40 @@ module RemoteEffect =
                             | Choice1Of2 result -> dispatch (reply (Ok result))
                             | Choice2Of2 ex -> dispatch (reply (Error ex))
                         }
-                    )
+                    )),
+                answerWith reply
             )
         )
 
-    /// Code with no value form yet, under a site label unique to it. The
-    /// body must dispatch exactly once.
+    /// `elapsed`, sent once after `milliseconds`, under a name unique to the
+    /// wait. Two are equal when they name the same wait of the same length;
+    /// an interrupted wait sends `elapsed` too.
+    let delay (name: string) (milliseconds: int) (elapsed: 'msg) : RemoteEffect<'msg> =
+        await name (fun (wait: int) -> Async.Sleep wait) milliseconds (fun _ -> elapsed)
+
+    /// The text of a file the reader chose, under a name unique to the read,
+    /// with the constructor that turns the text or the reader's failure into
+    /// the module's message. Two are equal when they name the same read of
+    /// the same file. The reader's callbacks answer directly rather than
+    /// through an `Async`, whose continuation start Fable does not run here.
+    let readFile (name: string) (file: Browser.Types.File) (reply: Result<string, exn> -> 'msg) : RemoteEffect<'msg> =
+        Await(
+            RemoteCall(
+                name,
+                box file,
+                None,
+                (fun dispatch ->
+                    let reader = Browser.Dom.FileReader.Create()
+                    reader.onload <- fun _ -> dispatch (reply (Ok(reader.result :?> string)))
+                    reader.onerror <- fun _ -> dispatch (reply (Error(exn ("could not read " + file.name))))
+                    reader.readAsText file),
+                answerWith reply
+            )
+        )
+
+    /// Code with no value form, under a site label unique to it. The body
+    /// must dispatch exactly once.
+    [<System.Obsolete("Use RemoteEffect.delay, RemoteEffect.readFile or RemoteEffect.await, each a value a test can state. Removed in a future major.")>]
     let legacy (site: string) (body: Dispatch<'msg> -> unit) : RemoteEffect<'msg> = Legacy(LegacyEffect(site, body))
 
     /// Code that answers nothing (a redirect, a beacon), under a site label
@@ -454,9 +503,25 @@ module RemoteEffect =
     let map (f: 'a -> 'b) (effect: RemoteEffect<'a>) : RemoteEffect<'b> =
         match effect with
         | Invoke call ->
-            Invoke(RemoteCall(call.Method, call.Argument, call.Retry, (fun dispatch -> call.Send(f >> dispatch))))
+            Invoke(
+                RemoteCall(
+                    call.Method,
+                    call.Argument,
+                    call.Retry,
+                    (fun dispatch -> call.Send(f >> dispatch)),
+                    call.Answer >> f
+                )
+            )
         | Await call ->
-            Await(RemoteCall(call.Method, call.Argument, call.Retry, (fun dispatch -> call.Send(f >> dispatch))))
+            Await(
+                RemoteCall(
+                    call.Method,
+                    call.Argument,
+                    call.Retry,
+                    (fun dispatch -> call.Send(f >> dispatch)),
+                    call.Answer >> f
+                )
+            )
         | Legacy legacy -> Legacy(LegacyEffect(legacy.Site, (fun dispatch -> legacy.Run(f >> dispatch))))
         | Fire signal -> Fire signal
 
@@ -481,7 +546,8 @@ module RemoteEffect =
     [<Literal>]
     let CallKind = "toolup.remote.call"
 
-    /// The kind of a named one-shot operation that is not a remote call.
+    /// The kind of a named one-shot operation that is not a remote call: a
+    /// read, a wait, a file read, or fresh ids and the clock.
     [<Literal>]
     let AwaitKind = "toolup.await"
 
@@ -510,7 +576,7 @@ module RemoteEffect =
     /// subscriptions. The runtime refuses a step naming any other.
     let kinds: EffectKind list = [
         kind CallKind Call [ Network ]
-        kind AwaitKind Call [ Network; Clock ]
+        kind AwaitKind Call [ Network; Clock; Random ]
         kind LegacyKind Call [ Network; Clock; Random ]
         kind SignalKind Shape.Signal []
         kind SubscriptionKind Stream [ Network; Clock ]

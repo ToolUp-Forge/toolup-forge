@@ -23,9 +23,6 @@ let private noCall () : Async<'T> = async { return failwith "not called in this 
 let private call (methodName: string) (arg: 'a) : RemoteEffect<'msg> =
     RemoteEffect.call methodName (fun (_: 'a) -> noCall ()) arg (fun (_: Result<obj, exn>) -> Unchecked.defaultof<'msg>)
 
-/// The expected value of a legacy body: it compares by its site label.
-let private legacy (site: string) : RemoteEffect<'msg> = RemoteEffect.legacy site ignore
-
 /// The expected value of a one-shot operation that is not a remote call.
 let private await (name: string) (arg: 'a) : RemoteEffect<'msg> =
     RemoteEffect.await name (fun (_: 'a) -> noCall ()) arg (fun (_: Result<obj, exn>) -> Unchecked.defaultof<'msg>)
@@ -205,15 +202,6 @@ let private fileManagerTests =
             match followUps deleted with
             | [ FileManagerUI.LoadFiles(Start()) ] -> ()
             | other -> failwithf "expected one LoadFiles follow-up, got %A" other
-
-        testCase "choosing a file reads it through the one legacy body"
-        <| fun () ->
-            let model = fst (FileManagerUI.init ClientModuleContext.empty)
-
-            let _, steps =
-                FileManagerUI.update (FileManagerUI.SelectFile(Start(Unchecked.defaultof<Browser.Types.File>))) model
-
-            same (effects steps) [ legacy "FileManagerUI.readFile" ] "the read"
     ]
 
 let private teamConfigTests =

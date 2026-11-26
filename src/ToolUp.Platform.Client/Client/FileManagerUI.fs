@@ -100,11 +100,6 @@ let private orApiError (ofAnswer: 'result -> Msg) (reply: Result<'result, exn>) 
     | Ok answer -> ofAnswer answer
     | Error ex -> ApiError ex.Message
 
-/// The file reader's site label: reading a browser file has no value form
-/// until the runtime's standard vocabulary arrives.
-[<Literal>]
-let private ReadFileSite = "FileManagerUI.readFile"
-
 let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list =
     ({
         UploadedFiles = Map.empty
@@ -124,34 +119,22 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
     | SelectFile action ->
         match action with
         | Start file ->
-            // Read via a direct effect, not an `Async` built with
-            // `Async.FromContinuations`. Under Fable 5 that async path
-            // silently no-ops (the deferred async start never runs the
-            // reader), so the upload hangs with no error. The body runs
-            // synchronously and dispatches once, from whichever reader
-            // callback fires.
             {
                 model with
                     CurrentUpload = Loading None
             },
             [
                 Do(
-                    RemoteEffect.legacy ReadFileSite (fun dispatch ->
-                        let reader = Browser.Dom.FileReader.Create()
-
-                        reader.onload <-
-                            fun _ ->
-                                let upload = {
+                    RemoteEffect.readFile "FileManagerUI.readFile" file (function
+                        | Ok contents ->
+                            SelectFile(
+                                Finished {
                                     filename = file.name
-                                    contents = reader.result :?> string
+                                    contents = contents
                                     dataType = "UnrecognisedData"
                                 }
-
-                                dispatch (SelectFile(Finished upload))
-
-                        reader.onerror <- fun _ -> dispatch (ApiError(model.Messages.FileReadError file.name))
-
-                        reader.readAsText file)
+                            )
+                        | Error _ -> ApiError(model.Messages.FileReadError file.name))
                 )
             ]
 

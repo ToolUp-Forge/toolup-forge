@@ -1440,20 +1440,12 @@ let private orApiError (ofAnswer: 'result -> Msg) (reply: Result<'result, exn>) 
     | Ok answer -> ofAnswer answer
     | Error ex -> ApiError ex.Message
 
-/// Read a chosen file through a direct effect rather than an `Async`
-/// built with `Async.FromContinuations`: under Fable 5 that
-/// async path silently no-ops (the deferred start never runs the reader,
-/// so `FileChosen` is never dispatched and the import hangs with no error).
-/// The body runs synchronously when the effect is performed, and
-/// dispatches once, from whichever reader callback fires — no trampoline,
-/// no swallowed errors.
+/// Read a chosen file: its text as `FileChosen`, or the read failure.
 let private readFile (msgs: MappingDataManagerMessages) (file: Browser.Types.File) : Step<Msg, RemoteEffect<Msg>> =
     Do(
-        RemoteEffect.legacy "MappingDataManagerUI.readFile" (fun dispatch ->
-            let reader = Browser.Dom.FileReader.Create()
-            reader.onload <- fun _ -> dispatch (FileChosen(file.name, reader.result :?> string))
-            reader.onerror <- fun _ -> dispatch (ApiError(msgs.FileReadFailed file.name))
-            reader.readAsText file)
+        RemoteEffect.readFile "MappingDataManagerUI.readFile" file (function
+            | Ok contents -> FileChosen(file.name, contents)
+            | Error _ -> ApiError(msgs.FileReadFailed file.name))
     )
 
 /// Frictionless re-import when the structure is already known: apply every
