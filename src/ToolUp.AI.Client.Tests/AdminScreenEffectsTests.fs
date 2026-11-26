@@ -31,8 +31,9 @@ let private expectCall (methodName: string) (arg: 'a) : Step<'msg, RemoteEffect<
             Unchecked.defaultof<'msg>)
     )
 
-/// The expected value of code with no value form yet: compared by its site.
-let private expectLegacy (site: string) : Step<'msg, RemoteEffect<'msg>> = Do(RemoteEffect.legacy site ignore)
+/// The expected value of a wait: compared by its name and its length.
+let private expectDelay (name: string) (milliseconds: int) : Step<'msg, RemoteEffect<'msg>> =
+    Do(RemoteEffect.delay name milliseconds Unchecked.defaultof<'msg>)
 
 /// The expected value of a one-shot operation that is not a remote call.
 let private expectAwait (name: string) (arg: 'a) : Step<'msg, RemoteEffect<'msg>> =
@@ -95,7 +96,7 @@ let tests =
             let m1, started =
                 DataSubjectRequestAdminUI.update (DataSubjectRequestAdminUI.AsyncExportStarted(Ok "ticket-1")) m0
 
-            same started [ expectLegacy "DataSubjectRequestAdminUI.pollDelay" ] "the poll timer, by its site"
+            same started [ expectDelay "DataSubjectRequestAdminUI.pollDelay" 1500 ] "the poll wait"
 
             let _, polled =
                 DataSubjectRequestAdminUI.update DataSubjectRequestAdminUI.PollTicket m1
@@ -143,7 +144,7 @@ let tests =
                 accepted
                 [
                     expectCall "JobApi.GetRecentRuns" (id, JobsAdminUI.recentAttemptCount)
-                    expectLegacy ("JobsAdminUI.poll " + string id)
+                    expectDelay ("JobsAdminUI.poll " + string id) JobsAdminUI.pollIntervalMs
                 ]
                 "the attempts read, then the poll timer"
 

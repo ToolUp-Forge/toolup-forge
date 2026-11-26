@@ -3,6 +3,9 @@
 
 module ToolUp.AI.Client.Tests.RemoteEffectTests
 
+// `RemoteEffect.legacy` is obsolete; this pack still pins what it does.
+#nowarn "44"
+
 // ─── Remote calls as effect values ───────────────────────────────────
 //
 // Run on the TRANSPILED client, where the ported modules run:
@@ -16,7 +19,9 @@ module ToolUp.AI.Client.Tests.RemoteEffectTests
 //     message it names;
 //   * an effect value compares by method, argument and retry numbers, so a
 //     test can state it;
-//   * a ported `update` returns the effect values a test can state.
+//   * a ported `update` returns the effect values a test can state, and
+//     a wait or a file read answers with the message the module names for
+//     its result and for its failure.
 
 open Fuaran.MVU
 open ToolUp.Remoting.Client
@@ -117,6 +122,34 @@ let private expectCall (methodName: string) (arg: 'a) : Step<'msg, RemoteEffect<
         RemoteEffect.call methodName (fun (_: 'a) -> noCall ()) arg (fun (_: Result<obj, exn>) ->
             Unchecked.defaultof<'msg>)
     )
+
+/// The one wait or read a step list asks for, and the messages its result
+/// and its failure answer with, read without performing it.
+let private answers (result: obj) (steps: Step<'msg, RemoteEffect<'msg>> list) : RemoteEffect<'msg> * 'msg * 'msg =
+    match
+        steps
+        |> List.choose (function
+            | Do(Await call as effect) -> Some(effect, call)
+            | _ -> None)
+    with
+    | [ effect, call ] -> effect, call.Answer(Ok result), call.Answer(Error(exn "it failed"))
+    | other -> failwithf "expected one awaited effect, got %d" (List.length other)
+
+/// A file the reader chose, as the browser hands it over.
+let private chosenFile (name: string) : Browser.Types.File =
+    Fable.Core.JsInterop.createObj [ "name", box name ] |> unbox
+
+let private narrativeView: ToolUp.AI.NarrativePromptView = {
+    RunKey = "summary"
+    DisplayName = "Summary"
+    Title = "Summary"
+    DeclaredPrompt = "Write it."
+    DeclaredSections = []
+    Current = None
+    LatestVersion = 0
+    Rules = ""
+    LastRun = None
+}
 
 let private pendingDocument: SharedTypes.KnowledgeDocument = {
     Id = "doc-1"
@@ -432,7 +465,10 @@ let tests =
                 let _, steps =
                     ClientModel.update (ClientModel.LoadDocuments(Finished [ pendingDocument ])) m0
 
-                same steps [ Do(RemoteEffect.legacy "KnowledgeBase.schedulePoll" ignore) ] "the timer, by its site")
+                let effect, elapsed, interrupted = answers (box ()) steps
+                same effect (RemoteEffect.delay "KnowledgeBase.schedulePoll" 2000 ClientModel.PollStatuses) "the wait"
+                same elapsed ClientModel.PollStatuses "the wait ends in a status poll"
+                same interrupted ClientModel.PollStatuses "and so does an interrupted wait")
 
             testCase "the platform knowledge admin: a delete names its document" (fun () ->
                 let m0, _ = PlatformKnowledgeAdminUI.init ()
@@ -441,6 +477,154 @@ let tests =
                     PlatformKnowledgeAdminUI.update (PlatformKnowledgeAdminUI.RequestDelete "doc-9") m0
 
                 same steps [ expectCall "IPlatformKnowledgeApi.DeletePlatformDocument" "doc-9" ] "one call")
+        ]
+
+        testList "a wait and a file read are values" [
+            testCase "the data-subject admin: a queued export waits, then polls its ticket" (fun () ->
+                let m0, _ = DataSubjectRequestAdminUI.init ClientModuleContext.empty
+
+                let _, steps =
+                    DataSubjectRequestAdminUI.update (DataSubjectRequestAdminUI.AsyncExportStarted(Ok "ticket-1")) m0
+
+                let effect, elapsed, interrupted = answers (box ()) steps
+
+                same
+                    effect
+                    (RemoteEffect.delay "DataSubjectRequestAdminUI.pollDelay" 1500 DataSubjectRequestAdminUI.PollTicket)
+                    "the wait"
+
+                same elapsed DataSubjectRequestAdminUI.PollTicket "the wait ends in a ticket poll"
+                same interrupted DataSubjectRequestAdminUI.PollTicket "and so does an interrupted wait")
+
+            testCase "the jobs admin: an accepted re-run waits, then polls the job" (fun () ->
+                let id = System.Guid.NewGuid()
+                let m0, _ = JobsAdminUI.init ()
+                let _, steps = JobsAdminUI.update (JobsAdminUI.RerunAccepted(id, Ok())) m0
+                let effect, elapsed, interrupted = answers (box ()) steps
+
+                same
+                    effect
+                    (RemoteEffect.delay
+                        ("JobsAdminUI.poll " + string id)
+                        JobsAdminUI.pollIntervalMs
+                        (JobsAdminUI.PollJob id))
+                    "the wait"
+
+                same elapsed (JobsAdminUI.PollJob id) "the wait ends in a job poll"
+                same interrupted (JobsAdminUI.PollJob id) "and so does an interrupted wait")
+
+            testCase "the narrative prompt admin: an accepted regeneration waits, then looks at its run" (fun () ->
+                let m0, _ = ToolUp.AI.Client.NarrativePromptAdminUI.init ()
+
+                let opened = {
+                    m0 with
+                        Open = Some(ToolUp.AI.Client.NarrativePromptAdminUI.Loaded narrativeView)
+                }
+
+                let _, steps =
+                    ToolUp.AI.Client.NarrativePromptAdminUI.update
+                        (ToolUp.AI.Client.NarrativePromptAdminUI.RegenerateAccepted(Ok(System.Guid.NewGuid())))
+                        opened
+
+                let effect, elapsed, interrupted = answers (box ()) steps
+
+                same
+                    effect
+                    (RemoteEffect.delay
+                        "ToolUp.AI.Client.NarrativePromptAdminUI.pollDelay"
+                        ToolUp.AI.Client.NarrativePromptAdminUI.pollIntervalMs
+                        (ToolUp.AI.Client.NarrativePromptAdminUI.Poll "summary"))
+                    "the wait"
+
+                same
+                    elapsed
+                    (ToolUp.AI.Client.NarrativePromptAdminUI.Poll "summary")
+                    "the wait ends in a look at the run"
+
+                same
+                    interrupted
+                    (ToolUp.AI.Client.NarrativePromptAdminUI.Poll "summary")
+                    "and so does an interrupted wait")
+
+            testCase "the file manager: a chosen file is read, then uploaded; a failed read is reported" (fun () ->
+                let file = chosenFile "sales.csv"
+                let m0, _ = FileManagerUI.init ClientModuleContext.empty
+                let _, steps = FileManagerUI.update (FileManagerUI.SelectFile(Start file)) m0
+                let effect, read, failed = answers (box "a,b") steps
+
+                same
+                    effect
+                    (RemoteEffect.readFile "FileManagerUI.readFile" file (fun _ -> Unchecked.defaultof<_>))
+                    "the read, of that file"
+
+                same
+                    read
+                    (FileManagerUI.SelectFile(
+                        Finished {
+                            filename = "sales.csv"
+                            contents = "a,b"
+                            dataType = "UnrecognisedData"
+                        }
+                    ))
+                    "the text, as an upload"
+
+                same failed (FileManagerUI.ApiError(m0.Messages.FileReadError "sales.csv")) "the failure, by file")
+
+            testCase "the mapping manager: a chosen file is read; a failed read is reported" (fun () ->
+                let file = chosenFile "rates.csv"
+                let m0, _ = MappingDataManagerUI.init ClientModuleContext.empty
+
+                let _, steps =
+                    MappingDataManagerUI.update [] (MappingDataManagerUI.SelectFile file) m0
+
+                let effect, read, failed = answers (box "x,y") steps
+
+                same
+                    effect
+                    (RemoteEffect.readFile "MappingDataManagerUI.readFile" file (fun _ -> Unchecked.defaultof<_>))
+                    "the read, of that file"
+
+                same read (MappingDataManagerUI.FileChosen("rates.csv", "x,y")) "the text, by file"
+
+                same
+                    failed
+                    (MappingDataManagerUI.ApiError(m0.Messages.FileReadFailed "rates.csv"))
+                    "the failure, by file")
+
+            testCase "the assistant: a submission reads its ids and clock in one awaited effect" (fun () ->
+                let m0, _ = ToolUp.AI.Client.AIAssistantUI.init ()
+
+                let _, steps =
+                    ToolUp.AI.Client.AIAssistantUI.update (ToolUp.AI.Client.AIAssistantUI.SubmitMessage "hello") m0
+
+                let prepared: ToolUp.AI.Client.AIAssistantUI.PreparedSubmission = {
+                    Content = "hello"
+                    ConversationId = System.Guid.NewGuid()
+                    MessageId = System.Guid.NewGuid()
+                    Timestamp = System.DateTime(2026, 11, 26, 9, 0, 0, System.DateTimeKind.Utc)
+                    WatchdogId = System.Guid.NewGuid()
+                }
+
+                let effect, ready, failed = answers (box prepared) steps
+
+                same
+                    effect
+                    (RemoteEffect.await
+                        "AIAssistantUI.prepareSubmission"
+                        (fun (_: string * System.Guid option) -> noCall ())
+                        ("hello", None)
+                        (fun _ -> Unchecked.defaultof<_>))
+                    "one read, of the message and the conversation"
+
+                // The assistant's messages carry functions, so they are matched.
+                match ready with
+                | ToolUp.AI.Client.AIAssistantUI.SubmitMessagePrepared answered ->
+                    same answered prepared "the prepared submission"
+                | other -> failwithf "expected the prepared submission, got %A" other
+
+                match failed with
+                | ToolUp.AI.Client.AIAssistantUI.ApiError reason -> same reason "it failed" "the failure, as an error"
+                | other -> failwithf "expected an error, got %A" other)
         ]
 
         testList "the knowledge base surfaces a failed call" [

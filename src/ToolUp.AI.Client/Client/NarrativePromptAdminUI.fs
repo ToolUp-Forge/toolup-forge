@@ -208,15 +208,7 @@ let private loadLearning (runKey: string) =
 /// The wait before the next look at a regeneration's run. It dispatches
 /// once.
 let private pollDelay (runKey: string) : Steps = [
-    Do(
-        RemoteEffect.legacy "NarrativePromptAdminUI.pollDelay" (fun dispatch ->
-            Async.StartImmediate(
-                async {
-                    do! Async.Sleep pollIntervalMs
-                    dispatch (Poll runKey)
-                }
-            ))
-    )
+    Do(RemoteEffect.delay "NarrativePromptAdminUI.pollDelay" pollIntervalMs (Poll runKey))
 ]
 
 let init () : Model * Step<Msg, RemoteEffect<Msg>> list =

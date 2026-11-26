@@ -27,9 +27,6 @@ let private noCall () : Async<'T> = async { return failwith "not called in this 
 let private call (methodName: string) (arg: 'a) : RemoteEffect<'msg> =
     RemoteEffect.call methodName (fun (_: 'a) -> noCall ()) arg (fun (_: Result<obj, exn>) -> Unchecked.defaultof<'msg>)
 
-/// The expected value of a legacy body: it compares by its site label.
-let private legacy (site: string) : RemoteEffect<'msg> = RemoteEffect.legacy site ignore
-
 /// The expected value of a signal: it compares by its site label.
 let private signal (site: string) : RemoteEffect<'msg> = RemoteEffect.signal site ignore
 
@@ -192,12 +189,6 @@ let private assistantTests =
                     call "AISettingsApi.GetMyConfig" ()
                 ]
                 "three reads, in the order the runtime performs them"
-
-        testCase "a submission reads its ids and clock in one legacy body"
-        <| fun () ->
-            let m0, _ = AIAssistantUI.init ()
-            let _, steps = AIAssistantUI.update (AIAssistantUI.SubmitMessage "hello") m0
-            same (effects steps) [ legacy "AIAssistantUI.prepareSubmission" ] "one body, by its site"
 
         testCase "a prepared submission arms the watchdog, then asks the fast path"
         <| fun () ->

@@ -266,6 +266,25 @@ let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
 // ─── Update ───────────────────────────────────────────────────────
 
 /// The transitions, with their effects as values.
+/// A submission's fresh ids and time of sending, read by the effect and
+/// answered as `SubmitMessagePrepared`.
+let private prepareSubmission (content: string) (conversation: Guid option) : RemoteEffect<Msg> =
+    RemoteEffect.await
+        "AIAssistantUI.prepareSubmission"
+        (fun (content, conversation) -> async {
+            return {
+                Content = content
+                ConversationId = conversation |> Option.defaultWith Guid.NewGuid
+                MessageId = Guid.NewGuid()
+                Timestamp = DateTime.UtcNow
+                WatchdogId = Guid.NewGuid()
+            }
+        })
+        (content, conversation)
+        (function
+         | Ok prepared -> SubmitMessagePrepared prepared
+         | Error ex -> ApiError ex.Message)
+
 let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadConversations action ->
@@ -341,26 +360,10 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
         | Finished messages -> { model with Messages = messages }, []
 
     | SubmitMessage content ->
-        // MVU purity (2026-07 idiom sweep): `Guid.NewGuid()` /
-        // `DateTime.UtcNow` are non-deterministic and belong in the
-        // `Cmd` layer, not in the pure `update`. The effect generates
-        // the ids/timestamp and immediately re-dispatches the prepared
-        // submission; `SubmitMessagePrepared` below is the pure fold.
-        model,
-        [
-            Do(
-                RemoteEffect.legacy "AIAssistantUI.prepareSubmission" (fun dispatch ->
-                    dispatch (
-                        SubmitMessagePrepared {
-                            Content = content
-                            ConversationId = model.ActiveConversation |> Option.defaultWith Guid.NewGuid
-                            MessageId = Guid.NewGuid()
-                            Timestamp = DateTime.UtcNow
-                            WatchdogId = Guid.NewGuid()
-                        }
-                    ))
-            )
-        ]
+        // Fresh ids and the clock are not read in `update`: the effect
+        // reads them and answers with the prepared submission, which
+        // `SubmitMessagePrepared` folds.
+        model, [ Do(prepareSubmission content model.ActiveConversation) ]
 
     | SubmitMessagePrepared prepared ->
         let content = prepared.Content

@@ -178,17 +178,7 @@ type internal Steps = Step<Msg, RemoteEffect<Msg>> list
 
 /// Re-poll the active background-export ticket after a short
 /// delay. The loop runs while a ticket stays `Preparing`.
-let internal pollDelay: Steps = [
-    Do(
-        RemoteEffect.legacy "DataSubjectRequestAdminUI.pollDelay" (fun dispatch ->
-            Async.StartImmediate(
-                async {
-                    do! Async.Sleep 1500
-                    dispatch PollTicket
-                }
-            ))
-    )
-]
+let internal pollDelay: Steps = [ Do(RemoteEffect.delay "DataSubjectRequestAdminUI.pollDelay" 1500 PollTicket) ]
 
 let internal requestExport (input: ExportRequestInput) : Steps = [
     Do(
