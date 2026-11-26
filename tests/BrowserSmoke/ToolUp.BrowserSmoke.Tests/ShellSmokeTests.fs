@@ -183,9 +183,22 @@ let private artifactRoot () =
     Directory.CreateDirectory dir |> ignore
     dir
 
-/// The shell is up once its navigation rail has drawn: every rail stop
-/// carries `data-toolup-rail-stop`.
-let private shellReady = "[data-toolup-rail-stop^='group:']"
+/// The navigation rail has two forms. Collapsed, each group is a `group:`
+/// stop; while the pointer is over the rail it expands, and each group is a
+/// `header:` stop instead (the other form stays in the page, hidden). Which
+/// one a fresh page shows depends on where the pointer happens to start, so
+/// every wait and click below holds in either.
+let private groupStop (group: string) =
+    sprintf "[data-toolup-rail-stop='group:%s'], [data-toolup-rail-stop='header:%s']" group group
+
+/// The shell is up once its navigation rail has drawn, in either form.
+let private shellReady =
+    "[data-toolup-rail-stop^='group:'], [data-toolup-rail-stop^='header:']"
+
+/// A point well inside the page, clear of the rail, so the page starts
+/// from the same state wherever the browser put the pointer.
+let private offRail (page: IPage) =
+    page.Mouse.MoveAsync(1000.0f, 600.0f) |> Async.AwaitTask
 
 /// One attempt: a fresh host, a fresh browser, the page opened at the shell,
 /// the body, then the page's own errors. A trace and a screenshot are kept on
@@ -228,6 +241,7 @@ let private runAttempt (scenarioName: string) (attemptIndex: int) (body: IPage -
 
             try
                 let! _ = page.GotoAsync(host.BaseUrl + "/") |> Async.AwaitTask
+                do! offRail page
 
                 do!
                     page.WaitForSelectorAsync(shellReady, PageWaitForSelectorOptions(Timeout = 30_000.0f))
@@ -311,16 +325,18 @@ let private shellScenario (name: string) (body: IPage -> Async<unit>) : Test =
 /// page's left edge, so the pointer then leaves it, as a person's does on
 /// the way to the page.
 let private openFromRail (page: IPage) (group: string) (moduleId: string) = async {
-    let row = page.Locator(sprintf "[data-toolup-rail-stop='row:%s:%s']" group moduleId)
+    let row =
+        page.Locator(sprintf "[data-toolup-rail-stop='row:%s:%s']" group moduleId).Locator("visible=true")
+
     let! shown = row.CountAsync() |> Async.AwaitTask
 
     if shown = 0 then
         do!
-            page.Locator(sprintf "[data-toolup-rail-stop='group:%s']" group).ClickAsync()
+            page.Locator(groupStop group).Locator("visible=true").First.ClickAsync()
             |> Async.AwaitTask
 
-    do! row.ClickAsync() |> Async.AwaitTask
-    do! page.Mouse.MoveAsync(1000.0f, 600.0f) |> Async.AwaitTask
+    do! row.First.ClickAsync() |> Async.AwaitTask
+    do! offRail page
 }
 
 let private count (page: IPage) (selector: string) = async {
