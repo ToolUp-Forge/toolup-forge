@@ -40,7 +40,7 @@
          the nupkg; Fable's package loader extracts and compiles source
          directly. Mirrors the Feliz / Fable.Elmish convention. -->
     <ItemGroup>
-        <Content Include="**\*.fsproj;**\*.fs;**\*.svg;**\*.png;**\TreeLoweringRuntime.js;**\TeamManagerTree.js;**\ModuleVisibilityAdminTree.js;**\CommandPaletteTree.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg;**\*.png;**\TreeLoweringRuntime.js;**\TeamManagerTree.js;**\ModuleVisibilityAdminTree.js;**\PlatformAdminTree.js;**\CommandPaletteTree.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
@@ -300,6 +300,7 @@
         <Compile Include="Client\UI\TreeSurface.fs" />
         <Compile Include="Client\UI\TreeLoweringRuntime.fs" />
         <Compile Include="Client\UI\TreeLowering.fs" />
+        <Compile Include="Client\UI\KeepScoped.fs" />
         <!-- Phase 278 — hosted-tree render-cost budget gate: HostRenderBudget
              (max nodes / depth / render-time) + a generic measureTree + an
              evaluate that names each breach; reports over-budget through the
@@ -424,6 +425,7 @@
         <Compile Include="Client\ServiceStatusBoardUI.fs" />
         <Compile Include="Client\PlatformAdmin\PublicUtilityWidgets.fs" />
         <Compile Include="Client\PlatformAdminUI.fs" />
+        <Compile Include="Client\PlatformAdminTree.fs" />
         <Compile Include="Client\PermissionsAdminUI.fs" />
         <Compile Include="Client\UsageDashboard.fs" />
         <!-- Phase 529 - audit-trail viewer admin module over

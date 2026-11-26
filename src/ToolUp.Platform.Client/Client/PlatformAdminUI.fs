@@ -4,8 +4,8 @@
 module PlatformAdminUI
 
 open Fuaran.MVU
-open Feliz
-open Toolup.UIToolkit
+open Fable.Core
+open Fable.Core.JsInterop
 open ToolUp.Platform
 
 // ─── Built-in Platform Admin module ──────────────────────────────────
@@ -99,52 +99,28 @@ module AssignConfirm =
             },
             []
 
-    let view (msgs: PlatformAdminMessages) (directory: UserDirectory.Model) (model: Model) (dispatch: Msg -> unit) =
-        let label = UserDirectory.email directory model.TargetUserId
-        let resolved = label <> model.TargetUserId
+    /// What the deferred confirmation takes.
+    type internal SurfaceProps = {|
+        Messages: PlatformAdminMessages
+        Directory: UserDirectory.Model
+        Model: Model
+        Dispatch: Msg -> unit
+    |}
 
-        Modal.confirm
-            ({
-                Title = msgs.GrantHeading
-                Confirm = msgs.GrantConfirm
-                Busy = msgs.GrantConfirm
-                Cancel = msgs.Cancel
-            }
-            : ConfirmMessages)
-            [
-                Html.p [
-                    prop.className [ "text-sm"; Tokens.Text.secondary ]
-                    prop.text msgs.GrantBody
-                ]
-                Html.div [
-                    prop.className [ "rounded border border-border px-3 py-2"; Tokens.Bg.subtle ]
-                    prop.children [
-                        Html.span [
-                            prop.className [ "text-xs"; Tokens.Text.secondary ]
-                            prop.text (if resolved then msgs.UserLabel else msgs.UserIdLabel)
-                        ]
-                        Html.span [
-                            prop.className [
-                                "text-sm"
-                                Tokens.Text.primary
-                                if not resolved then
-                                    "font-mono break-all"
-                            ]
-                            prop.text label
-                        ]
-                        // Keep the raw id visible for traceability when an
-                        // email resolved above it.
-                        if resolved then
-                            Html.div [
-                                prop.className [ "text-[10px] font-mono mt-1 break-all"; Tokens.Text.secondary ]
-                                prop.text model.TargetUserId
-                            ]
-                    ]
-                ]
-            ]
-            (fun () -> dispatch Confirm)
-            (fun () -> dispatch Cancel)
-            model.InFlight
+    [<Emit("$0.then(m => m.AssignConfirmSurface)")>]
+    let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
+
+    /// The confirmation, drawn by `PlatformAdminTree` when it is first shown.
+    let view (msgs: PlatformAdminMessages) (directory: UserDirectory.Model) (model: Model) (dispatch: Msg -> unit) =
+        TreeSurface.deferred
+            "PlatformAdminTree.AssignConfirmSurface"
+            (fun () -> surfaceOf (importDynamic "./PlatformAdminTree.fs"))
+            {|
+                Messages = msgs
+                Directory = directory
+                Model = model
+                Dispatch = dispatch
+            |}
 
 /// Delete-team confirmation — only reachable from an archived row. Echoes
 /// the team name as a brake on accidental destruction; the purge removes
@@ -203,37 +179,26 @@ module ConfirmDeleteTeam =
             },
             []
 
+    /// What the deferred confirmation takes.
+    type internal SurfaceProps = {|
+        Messages: PlatformAdminMessages
+        Model: Model
+        Dispatch: Msg -> unit
+    |}
+
+    [<Emit("$0.then(m => m.DeleteTeamSurface)")>]
+    let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
+
+    /// The confirmation, drawn by `PlatformAdminTree` when it is first shown.
     let view (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
-        Modal.confirm
-            ({
-                Title = msgs.DeleteTeamHeading
-                Confirm = msgs.DeleteTeam
-                Busy = msgs.DeleteTeam
-                Cancel = msgs.Cancel
-            }
-            : ConfirmMessages)
-            [
-                Html.p [
-                    prop.className [ "text-sm"; Tokens.Text.secondary ]
-                    prop.text msgs.DeleteTeamBody
-                ]
-                Html.div [
-                    prop.className [ "rounded border border-border px-3 py-2"; Tokens.Bg.subtle ]
-                    prop.children [
-                        Html.span [
-                            prop.className [ "text-xs"; Tokens.Text.secondary ]
-                            prop.text msgs.TeamLabel
-                        ]
-                        Html.span [
-                            prop.className [ "text-sm font-medium"; Tokens.Text.primary ]
-                            prop.text model.TeamName
-                        ]
-                    ]
-                ]
-            ]
-            (fun () -> dispatch Confirm)
-            (fun () -> dispatch Cancel)
-            model.InFlight
+        TreeSurface.deferred
+            "PlatformAdminTree.DeleteTeamSurface"
+            (fun () -> surfaceOf (importDynamic "./PlatformAdminTree.fs"))
+            {|
+                Messages = msgs
+                Model = model
+                Dispatch = dispatch
+            |}
 
 // ─── Model ───────────────────────────────────────────────────────────
 
@@ -734,475 +699,57 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
 
 /// A user id rendered through the directory: the email when resolved (the
 /// raw id on hover), the id in monospace when not.
-let private userIdSpan (model: Model) (size: string) (userId: string) =
-    let label = UserDirectory.email model.Directory userId
+// ─── View ────────────────────────────────────────────────────────────
 
-    Html.span [
-        prop.className [
-            size
-            Tokens.Text.primary
-            "break-all"
-            if label = userId then
-                "font-mono"
-        ]
-        prop.title userId
-        prop.text label
-    ]
+/// The signed-in operator, for the "Self" owner affordance: their id and the
+/// label it shows (their email, else their display name, else the id).
+type internal Caller = { UserId: string; Display: string }
 
-/// A card's header row: its heading and a Refresh link.
-let private cardHeader (heading: string) (refreshLabel: string) (onRefresh: unit -> unit) =
-    Html.div [
-        prop.className "flex items-center justify-between px-3 py-2 border-b border-border"
-        prop.children [
-            Html.h3 [
-                prop.className [ "text-sm font-medium"; Tokens.Text.primary ]
-                prop.text heading
-            ]
-            Html.button [
-                prop.className "text-xs text-brand hover:underline"
-                prop.text refreshLabel
-                prop.onClick (fun _ -> onRefresh ())
-            ]
-        ]
-    ]
+let internal caller () : Caller =
+    let id = UserSession.getUserId ()
 
-let private noticeOf (notice: Notice option) =
-    match notice with
-    | Some notice -> StateViews.noticeStatic notice
-    | None -> Html.none
-
-let private adminRow (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) (userId: string) =
-    Html.div [
-        prop.className "py-2 px-3 border-b border-border last:border-0"
-        prop.children [
-            Html.div [
-                prop.className "flex items-center justify-between gap-3"
-                prop.children [
-                    userIdSpan model "text-sm" userId
-                    Forms.Button.dangerWith Forms.Button.Enabled msgs.Revoke (fun () -> dispatch (RequestRevoke userId))
-                ]
-            ]
-            noticeOf (model.RevokeError |> Map.tryFind userId)
-        ]
-    ]
-
-let private adminsTabView (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
-    Html.div [
-        prop.className "p-4 flex flex-col gap-4"
-        prop.children [
-            // Assign form
-            Html.div [
-                prop.className "flex flex-col gap-2 p-3 rounded border border-border bg-white"
-                prop.children [
-                    Html.h3 [
-                        prop.className [ "text-sm font-medium"; Tokens.Text.primary ]
-                        prop.text msgs.AssignHeading
-                    ]
-                    Html.p [
-                        prop.className [ "text-xs"; Tokens.Text.secondary ]
-                        prop.text msgs.AssignHelp
-                    ]
-                    Html.div [
-                        prop.className "flex gap-2 items-start"
-                        prop.children [
-                            Html.div [
-                                prop.className "flex-1"
-                                prop.children [
-                                    UserDirectoryTypeahead.userTypeahead
-                                        model.AssignInput
-                                        (UpdateAssignInput >> dispatch)
-                                        msgs.UserPickerPlaceholder
-                                        UserDirectoryTypeahead.pickUserId
-                                ]
-                            ]
-                            Forms.Button.primaryWith Forms.Button.Enabled msgs.Assign (fun () ->
-                                dispatch RequestAssignConfirm)
-                        ]
-                    ]
-                    noticeOf model.AssignError
-                ]
-            ]
-
-            // Admin list
-            Html.div [
-                prop.className "rounded border border-border bg-white"
-                prop.children [
-                    cardHeader msgs.CurrentAdminsHeading msgs.Refresh (fun () -> dispatch RefreshAdmins)
-                    match model.Admins with
-                    | Remote.NotAsked
-                    | Remote.Loading
-                    | Remote.Reloading _ ->
-                        Html.p [
-                            prop.className [ "text-sm p-3"; Tokens.Text.secondary ]
-                            prop.text msgs.Loading
-                        ]
-                    | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
-                    | Remote.Loaded [] ->
-                        Html.p [
-                            prop.className [ "text-sm p-3"; Tokens.Text.secondary ]
-                            prop.text msgs.NoAdmins
-                        ]
-                    | Remote.Loaded admins ->
-                        Html.div [
-                            prop.className "divide-y divide-border"
-                            prop.children (admins |> List.map (adminRow msgs model dispatch))
-                        ]
-                ]
-            ]
-        ]
-    ]
-
-// ─── All-teams admin table ───────────────────────────────────────────
-
-let private formatDate (d: System.DateTime) =
-    // Explicit components, not `ToString(format)` — custom-format
-    // DateTime rendering is unreliable under Fable across runtimes.
-    sprintf "%04d-%02d-%02d" d.Year d.Month d.Day
-
-/// One entry per line — emails read better stacked than comma-joined.
-let private userIdList (model: Model) (ids: string list) =
-    match ids with
-    | [] -> Html.span [ prop.className Tokens.Text.secondary; prop.text "—" ]
-    | _ ->
-        Html.div [
-            prop.className "flex flex-col gap-0.5"
-            prop.children [ for id in ids -> userIdSpan model "text-xs" id ]
-        ]
-
-let private teamNameCell (msgs: PlatformAdminMessages) (team: TeamSummary) =
-    Html.div [
-        prop.children [
-            Html.div [
-                prop.className "flex items-center gap-2"
-                prop.children [
-                    Html.span [
-                        prop.className [ "text-sm font-medium"; Tokens.Text.primary ]
-                        prop.text team.Name
-                    ]
-                    if team.Archived then
-                        Html.span [
-                            prop.className
-                                "px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded bg-amber-100 text-amber-800"
-                            prop.text msgs.ArchivedBadge
-                        ]
-                ]
-            ]
-            Html.span [
-                prop.className [ "font-mono text-[10px] break-all"; Tokens.Text.secondary ]
-                prop.text team.TeamId
-            ]
-        ]
-    ]
-
-/// The row's actions, with the row's last action error under them.
-let private teamActionsCell (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) (team: TeamSummary) =
-    let pending = model.TeamActionPending |> Set.contains team.TeamId
-
-    let stateFor label =
-        Forms.Button.stateOf pending label false
-
-    Html.div [
-        prop.className "flex flex-col gap-2 items-end"
-        prop.children [
-            Html.div [
-                prop.className "flex flex-wrap gap-2 justify-end"
-                prop.children [
-                    if team.Archived then
-                        Forms.Button.secondaryWith (stateFor msgs.Restore) msgs.Restore (fun () ->
-                            dispatch (SetTeamArchived(team.TeamId, false)))
-
-                        Forms.Button.dangerWith (stateFor msgs.Delete) msgs.Delete (fun () ->
-                            dispatch (RequestDeleteTeam team.TeamId))
-                    else
-                        Forms.Button.secondaryWith (stateFor msgs.Archive) msgs.Archive (fun () ->
-                            dispatch (SetTeamArchived(team.TeamId, true)))
-                ]
-            ]
-            noticeOf (model.TeamActionError |> Map.tryFind team.TeamId)
-        ]
-    ]
-
-let private teamsTableView (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
-    let column header align cell : Data.Column<TeamSummary> = {
-        Header = header
-        Align = align
-        Cell = cell
+    {
+        UserId = id
+        Display =
+            UserSession.getEmail ()
+            |> Option.orElse (UserSession.getDisplayName ())
+            |> Option.defaultValue id
     }
 
-    let columns = [
-        column msgs.ColumnTeam Data.Left (teamNameCell msgs)
-        column msgs.ColumnCreated Data.Left (fun team ->
-            Html.span [
-                prop.className [ "whitespace-nowrap"; Tokens.Text.secondary ]
-                prop.text (formatDate team.CreatedAt)
-            ])
-        column msgs.ColumnMembers Data.Center (fun team -> Html.text (string team.MemberCount))
-        column msgs.ColumnOwners Data.Left (fun team -> userIdList model team.Owners)
-        column msgs.ColumnAdmins Data.Left (fun team -> userIdList model team.Admins)
-        column msgs.ColumnActions Data.Right (teamActionsCell msgs model dispatch)
-    ]
+/// What the deferred tree component takes.
+type internal SurfaceProps = {|
+    Caller: Caller
+    Model: Model
+    Dispatch: Msg -> unit
+    Messages: PlatformAdminMessages
+    Widgets: PublicUtilityWidgetsMessages
+    Config: PublicUtilityConfig
+    Locale: string
+|}
 
-    Html.div [
-        prop.className "rounded border border-border bg-white"
-        prop.children [
-            cardHeader msgs.AllTeamsHeading msgs.Refresh (fun () -> dispatch RefreshTeams)
-            match model.Teams with
-            | Remote.NotAsked
-            | Remote.Loading
-            | Remote.Reloading _ ->
-                Html.p [
-                    prop.className [ "text-sm p-3"; Tokens.Text.secondary ]
-                    prop.text msgs.LoadingTeams
-                ]
-            | Remote.Failed msg ->
-                Html.div [
-                    prop.className "p-3"
-                    prop.children [ StateViews.noticeStatic (Notice.Problem msg) ]
-                ]
-            | Remote.Loaded [] ->
-                Html.p [
-                    prop.className [ "text-sm p-3"; Tokens.Text.secondary ]
-                    prop.text msgs.NoTeamsYet
-                ]
-            | Remote.Loaded teams -> Data.table columns teams
-        ]
-    ]
+[<Emit("$0.then(m => m.Surface)")>]
+let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
 
-let private fieldLabel (text: string) =
-    Html.label [
-        prop.className [ "text-xs font-medium"; Tokens.Text.secondary ]
-        prop.text text
-    ]
-
-let private teamsTabView (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
-    let selfId = UserSession.getUserId ()
-
-    // Prefer the operator's email for the "Self" affordance; fall back to
-    // display name, then the raw id.
-    let selfDisplay =
-        UserSession.getEmail ()
-        |> Option.orElse (UserSession.getDisplayName ())
-        |> Option.defaultValue selfId
-
-    let ownerEntered = model.NewTeamOwnerUserId.Trim()
-    let ownerIsSelf = ownerEntered = selfId
-
-    Html.div [
-        prop.className "p-4 flex flex-col gap-4"
-        prop.children [
-            Html.div [
-                prop.className "flex flex-col gap-3 p-3 rounded border border-border bg-white"
-                prop.children [
-                    Html.h3 [
-                        prop.className [ "text-sm font-medium"; Tokens.Text.primary ]
-                        prop.text msgs.CreateTeamHeading
-                    ]
-                    Html.p [
-                        prop.className [ "text-xs"; Tokens.Text.secondary ]
-                        prop.text msgs.CreateTeamHelp
-                    ]
-
-                    Html.div [
-                        prop.className "flex flex-col gap-1"
-                        prop.children [
-                            fieldLabel msgs.TeamNameLabel
-                            Forms.Input.text model.NewTeamName (SetNewTeamName >> dispatch) msgs.TeamNamePlaceholder
-                        ]
-                    ]
-
-                    Html.div [
-                        prop.className "flex flex-col gap-1"
-                        prop.children [
-                            fieldLabel msgs.InitialOwnerLabel
-                            Html.div [
-                                prop.className "flex gap-2 items-start"
-                                prop.children [
-                                    Html.div [
-                                        prop.className "flex-1"
-                                        prop.children [
-                                            UserDirectoryTypeahead.userTypeahead
-                                                model.NewTeamOwnerUserId
-                                                (SetNewTeamOwnerUserId >> dispatch)
-                                                msgs.UserPickerPlaceholder
-                                                UserDirectoryTypeahead.pickUserId
-                                        ]
-                                    ]
-                                    Html.button [
-                                        prop.className [
-                                            "px-3 py-1 text-sm font-medium rounded border transition-colors"
-                                            if ownerIsSelf then
-                                                "bg-brand/10 text-brand border-brand"
-                                            else
-                                                "bg-white border-border hover:bg-gray-50 " + Tokens.Text.primary
-                                        ]
-                                        prop.title (msgs.SelfTooltip selfDisplay)
-                                        prop.text (if ownerIsSelf then msgs.SelfChecked else msgs.SelfUnchecked)
-                                        prop.onClick (fun _ -> dispatch UseSelfAsTeamOwner)
-                                    ]
-                                ]
-                            ]
-                            // Confirmation line — the resolved email, so the
-                            // operator sees who the entered id belongs to. The
-                            // input itself carries the stable user id (the
-                            // CreateTeamWithOwner API keys on it).
-                            if ownerIsSelf then
-                                Html.span [
-                                    prop.className [ "text-xs"; Tokens.Text.secondary ]
-                                    prop.text (msgs.SelfOwnerConfirm selfDisplay)
-                                ]
-                            elif ownerEntered <> "" then
-                                let label = UserDirectory.email model.Directory ownerEntered
-
-                                if label <> ownerEntered then
-                                    Html.span [
-                                        prop.className [ "text-xs"; Tokens.Text.secondary ]
-                                        prop.text (msgs.OwnerConfirm label)
-                                    ]
-                                else
-                                    Html.none
-                        ]
-                    ]
-
-                    Html.div [
-                        prop.className "flex justify-end gap-2"
-                        prop.children [
-                            Forms.Button.primaryWith
-                                (Forms.Button.stateOf model.CreateTeamInFlight msgs.Creating false)
-                                msgs.CreateTeam
-                                (fun () -> dispatch SubmitCreateTeam)
-                        ]
-                    ]
-
-                    noticeOf model.CreateTeamError
-                ]
-            ]
-            teamsTableView msgs model dispatch
-        ]
-    ]
-
-let private platformKnowledgeBaseLabel (msgs: PlatformAdminMessages) (mode: FeatureMode) =
-    match mode with
-    | FeatureMode.Enabled -> msgs.Enabled
-    | FeatureMode.Disabled -> msgs.Disabled
-
-let private platformKnowledgeBaseToggle (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
-    let renderToggle (current: FeatureMode) =
-        let toggle =
-            match current with
-            | FeatureMode.Enabled ->
-                Forms.Button.dangerWith Forms.Button.Enabled msgs.DisableAction (fun () ->
-                    dispatch (TogglePlatformKnowledgeBase FeatureMode.Disabled))
-            | FeatureMode.Disabled ->
-                Forms.Button.primaryWith Forms.Button.Enabled msgs.EnableAction (fun () ->
-                    dispatch (TogglePlatformKnowledgeBase FeatureMode.Enabled))
-
-        Html.div [
-            prop.className "flex items-center justify-between gap-3"
-            prop.children [
-                Html.div [
-                    prop.className "flex flex-col gap-0.5"
-                    prop.children [
-                        Html.span [
-                            prop.className [ "text-sm font-medium"; Tokens.Text.primary ]
-                            prop.text msgs.PlatformKnowledgeBaseHeading
-                        ]
-                        Html.span [
-                            prop.className [ "text-xs"; Tokens.Text.secondary ]
-                            prop.text (msgs.KnowledgeBaseStatus(platformKnowledgeBaseLabel msgs current))
-                        ]
-                    ]
-                ]
-                toggle
-            ]
-        ]
-
-    Html.div [
-        prop.className "rounded border border-border bg-white p-4"
-        prop.children [
-            Html.h3 [
-                prop.className [ "text-sm font-medium mb-3"; Tokens.Text.primary ]
-                prop.text msgs.PlatformKnowledgeBaseHeading
-            ]
-            match model.PlatformKnowledgeBase with
-            | Remote.NotAsked
-            | Remote.Loading
-            | Remote.Reloading _ ->
-                Html.p [
-                    prop.className [ "text-sm"; Tokens.Text.secondary ]
-                    prop.text msgs.LoadingCurrentState
-                ]
-            | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
-            | Remote.Loaded current -> renderToggle current
-            noticeOf model.SettingsError
-        ]
-    ]
-
-let private settingsTabView (msgs: PlatformAdminMessages) (model: Model) (dispatch: Msg -> unit) =
-    Html.div [
-        prop.className "p-4 flex flex-col gap-4"
-        prop.children [
-            platformKnowledgeBaseToggle msgs model dispatch
-            Html.div [
-                prop.className "rounded border border-border bg-white p-4"
-                prop.children [
-                    Html.h3 [
-                        prop.className [ "text-sm font-medium mb-2"; Tokens.Text.primary ]
-                        prop.text msgs.OtherSettingsHeading
-                    ]
-                    Html.p [
-                        prop.className [ "text-sm"; Tokens.Text.secondary ]
-                        prop.text msgs.OtherSettingsBody
-                    ]
-                ]
-            ]
-        ]
-    ]
-
-// ─── View ────────────────────────────────────────────────────────────
+/// The tree's file, fetched on demand with the node vocabulary and the
+/// renderer, so the shell's first load pays nothing for them.
+let private loadSurface () : JS.Promise<obj> =
+    surfaceOf (importDynamic "./PlatformAdminTree.fs")
 
 /// The page, closed over the deployment's `PublicUtilityConfig` so the
 /// public-utility widgets (appended below the tabs under
 /// `PublicUtilityPlatformAdminProfile`) can read ad / premium substrate state.
 let private view (config: PublicUtilityConfig) (model: Model) (ctx: RenderContext<Msg>) : PageContent =
-    let msgs = ctx.Messages.PlatformAdmin
-    let dispatch = ctx.Dispatch
-
-    let content =
-        match model.ActiveTab with
-        | AdminsTab -> adminsTabView msgs model dispatch
-        | TeamsTab -> teamsTabView msgs model dispatch
-        | SettingsTab -> settingsTabView msgs model dispatch
-
-    let publicUtilitySection =
-        ToolUp.Platform.PlatformAdmin.PublicUtilityWidgets.render ctx.Messages.PublicUtilityWidgets config
-
-    PageContent.FullWidth
-    <| Html.div [
-        prop.className "flex flex-col h-full"
-        prop.children [
-            Html.div [
-                prop.className "bg-white px-4"
-                prop.children [
-                    Tabs.bar
-                        [
-                            AdminsTab, msgs.AdminsTab
-                            TeamsTab, msgs.TeamsTab
-                            SettingsTab, msgs.SettingsTab
-                        ]
-                        model.ActiveTab
-                        (SwitchTab >> dispatch)
-                ]
-            ]
-            content
-            publicUtilitySection
-            match model.AssignConfirm with
-            | Some confirm -> AssignConfirm.view msgs model.Directory confirm (AssignConfirmMsg >> dispatch)
-            | None -> Html.none
-            match model.ConfirmDeleteTeam with
-            | Some confirm -> ConfirmDeleteTeam.view msgs confirm (DeleteTeamMsg >> dispatch)
-            | None -> Html.none
-        ]
-    ]
+    PageContent.FullWidth(
+        TreeSurface.deferred "PlatformAdminTree.Surface" loadSurface {|
+            Caller = caller ()
+            Model = model
+            Dispatch = ctx.Dispatch
+            Messages = ctx.Messages.PlatformAdmin
+            Widgets = ctx.Messages.PublicUtilityWidgets
+            Config = config
+            Locale = ctx.Locale
+        |}
+    )
 
 
 // ─── Module creation ─────────────────────────────────────────────────

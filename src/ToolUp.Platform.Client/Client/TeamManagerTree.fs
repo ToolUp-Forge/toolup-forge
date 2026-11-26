@@ -20,29 +20,7 @@ open Fuaran.UI.Types
 open Toolup.UIToolkit
 open ToolUp.Platform
 open TeamManagerUI
-
-/// A `Keep` for rows whose node also shows what the row does not carry (the
-/// catalog's strings, the active team, the caller's role): one table per
-/// context, replaced when the context changes, so a row node is reused only
-/// while both its row and its context are the same.
-type private Scoped<'Ctx, 'Row, 'Msg when 'Row: not struct>
-    (same: 'Ctx -> 'Ctx -> bool, build: 'Ctx -> 'Row -> Node<'Msg>) =
-    // Sanctioned module-level mutable state: the table for the context last
-    // drawn, as `Keep` holds its own table.
-    let mutable current: ('Ctx * Keep<'Row, 'Msg>) option = None
-
-    member _.List (context: 'Ctx) (rows: 'Row seq) : Node<'Msg> list =
-        let keep =
-            match current with
-            | Some(drawn, keep) when same drawn context -> keep
-            | _ ->
-                let keep = Keep.create (build context)
-                current <- Some(context, keep)
-                keep
-
-        Keep.list keep rows
-
-let private sameObject (a: 'T) (b: 'T) = obj.ReferenceEquals(box a, box b)
+open KeepScoped
 
 /// A role-picker row of buttons, the picked role shown as the primary one.
 let private roleButtons
@@ -103,7 +81,7 @@ type private TeamsContext = {
 }
 
 let private teamRows =
-    Scoped(
+    Rows(
         (fun (a: TeamsContext) b -> sameObject a.Msgs b.Msgs && a.Active = b.Active),
         fun context (team: TeamInfo) ->
             let msgs = context.Msgs
@@ -150,7 +128,7 @@ type private MembersContext = {
 }
 
 let private memberRows =
-    Scoped(
+    Rows(
         (fun (a: MembersContext) b ->
             sameObject a.Msgs b.Msgs
             && sameObject a.Directory b.Directory
@@ -390,7 +368,7 @@ type private InvitesContext = {
 }
 
 let private pendingRows =
-    Scoped(
+    Rows(
         (fun (a: InvitesContext) b -> sameObject a.Msgs b.Msgs && a.TeamId = b.TeamId),
         fun context (email: string, entry: PendingInviteByEmail) ->
             let msgs = context.Msgs
@@ -420,7 +398,7 @@ type private ExpiredContext = {
 /// original role with the default lifetime; the row then moves back to the
 /// live list.
 let private expiredRows =
-    Scoped(
+    Rows(
         (fun (a: ExpiredContext) b ->
             sameObject a.Msgs b.Msgs
             && a.TeamId = b.TeamId

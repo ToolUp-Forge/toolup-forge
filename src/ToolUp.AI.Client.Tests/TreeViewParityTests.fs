@@ -17,11 +17,10 @@ module ToolUp.AI.Client.Tests.TreeViewParityTests
 //      tree expose the same controls and headings by role and name, in the
 //      same tab order.
 //
-// The subject is the team manager: its Feliz view as it ships, against its
-// tree built on the node toolkit for the same `Model` and `Msg`. The tree
-// is a fixture here until the view itself moves; it is then the module's
-// own and this file points at it. After the subject, the kit's own go-red
-// proofs: each assertion fails, by name, on the defect it exists for.
+// The subjects are the views that moved: each module's own tree against
+// the Feliz page it replaced (`FelizReferenceViews`), for the same `Model`
+// and `Msg`. After the subjects, the kit's own go-red proofs: each
+// assertion fails, by name, on the defect it exists for.
 //
 // The tree is drawn through the renderer's component directly
 // (`lowerTree`), the way a deferred surface's own file draws it: the
@@ -95,12 +94,20 @@ let private find (selector: string) (name: string) (host: obj) : obj =
             name
             (candidates |> Array.map nameOfElement |> String.concat "; "))
 
+/// React's own blur handler for `element`: leaving a field, which is when a
+/// field that holds its text as display state commits it.
+[<Emit("$0[Object.keys($0).find(k => k.startsWith('__reactProps'))].onBlur({ target: $0, currentTarget: $0 })")>]
+let private invokeBlur (element: obj) : unit = jsNative
+
 /// React's own change handler for `element`, called with `value`. The mount
 /// installs jsdom after React has loaded, so a real `input` event takes
 /// React's legacy path and never reaches `onChange`; the handler is the
 /// wiring under test.
 [<Emit("$0[Object.keys($0).find(k => k.startsWith('__reactProps'))].onChange({ target: { value: $1, valueAsNumber: Number($1), checked: $1 === 'true' }, currentTarget: { value: $1, valueAsNumber: Number($1), checked: $1 === 'true' } })")>]
 let private invokeChange (element: obj) (value: string) : unit = jsNative
+
+[<Import("flushSync", "react-dom")>]
+let private flushSync (work: unit -> unit) : unit = jsNative
 
 /// The drivers `Interact` runs against a mounted host.
 [<RequireQualifiedAccess>]
@@ -114,6 +121,18 @@ module Drive =
     /// Edit the field named `name` to `value`, as a user's keystrokes do.
     let edit (name: string) (value: string) (host: obj) : unit =
         invokeChange (find "input, select, textarea" name host) value
+
+    /// Type `value` into the field named `name` and let the page render it
+    /// before the next gesture, as a browser does between two events: a field
+    /// the renderer buffers is read by a later gesture (a submit) at its value
+    /// then, and one interaction does not otherwise flush between its steps.
+    let typeInto (name: string) (value: string) (host: obj) : unit =
+        flushSync (fun () -> edit name value host)
+
+    /// Leave the field named `name`, rendered before the next gesture, as a
+    /// pointer press on another control does first in a browser.
+    let leave (name: string) (host: obj) : unit =
+        flushSync (fun () -> invokeBlur (find "input, select, textarea" name host))
 
     /// Submit the first form in the host.
     let submit (host: obj) : unit =
@@ -145,135 +164,13 @@ let private expectThrows (body: unit -> unit) (what: string) : string =
 
 let private msgs = MessageCatalog.english.TeamManager
 
-/// The Feliz page the module's own tree replaced, kept as this kit's reference.
+/// The Feliz page the module's tree replaced, kept as this kit's reference.
 let private felizView (model: TeamManagerUI.Model) (dispatch: TeamManagerUI.Msg -> unit) : Feliz.ReactElement =
-    TeamManagerUI.felizBody msgs model dispatch
+    FelizReferenceViews.TeamManager.body msgs model dispatch
 
-/// The team manager as a tree: the spike's shape on the node toolkit, over
-/// today's model. Every row id comes from the team's own id and every row
-/// message carries it.
-module private TeamTree =
-
-    let private row (team: TeamInfo) (active: bool) : Node<TeamManagerUI.Msg> =
-        let id = Nodes.Ids.keyed "team" team.TeamId
-
-        Nodes.Layout.row id [
-            Nodes.Layout.column (Nodes.Ids.child id "about") [
-                Nodes.text (Nodes.Ids.child id "name") team.Name
-                if active then
-                    Nodes.text (Nodes.Ids.child id "active") msgs.ActiveBadge
-                Nodes.text (Nodes.Ids.child id "id") (msgs.TeamIdLabel team.TeamId)
-            ]
-            Nodes.Layout.row (Nodes.Ids.child id "actions") [
-                if not active then
-                    Nodes.Actions.secondary
-                        (Nodes.Ids.child id "switch")
-                        msgs.Switch
-                        (TeamManagerUI.SwitchActiveTeam team.TeamId)
-                Nodes.Actions.secondary (Nodes.Ids.child id "manage") msgs.Manage (TeamManagerUI.SelectTeam team.TeamId)
-            ]
-        ]
-
-    let private myTeams (model: TeamManagerUI.Model) : Node<TeamManagerUI.Msg> =
-        Nodes.Panel.card "my-teams" msgs.MyTeamsPanel [
-            if model.Teams.IsEmpty then
-                Nodes.text "my-teams-none" msgs.NoTeamsYet
-            else
-                for team in model.Teams do
-                    row team (model.ActiveTeamId = Some team.TeamId)
-        ]
-
-    let private teamName (model: TeamManagerUI.Model) (teamId: string) =
-        model.Teams
-        |> List.tryFind (fun t -> t.TeamId = teamId)
-        |> Option.map _.Name
-        |> Option.defaultValue teamId
-
-    let private issueByEmail (state: TeamManagerUI.IssueByEmail.Model) : Node<TeamManagerUI.Msg> =
-        let send msg = TeamManagerUI.IssueByEmailMsg msg
-
-        Fuaran.modal "issue-by-email" {
-            Defaults.modal with
-                Open = Binding.Static(Some true)
-                Heading = Some(Nodes.literal msgs.InviteByEmailHeading)
-                OnDismiss = Some(Action.dispatch (send TeamManagerUI.IssueByEmail.Close))
-                Children = [
-                    Nodes.text "issue-by-email-help" msgs.InviteByEmailHelp
-                    Nodes.Forms.form
-                        "issue-by-email-form"
-                        (if state.Submitting then
-                             msgs.Issuing
-                         else
-                             msgs.IssueInvitation)
-                        state.Submitting
-                        (send TeamManagerUI.IssueByEmail.Submit)
-                        [
-                            Nodes.Forms.text "email" msgs.EmailPlaceholder state.Email (fun v ->
-                                send (TeamManagerUI.IssueByEmail.SetEmail v))
-                            |> Nodes.Forms.required
-                            Nodes.Forms.number "expires" msgs.ExpiresInDays (float state.ExpiresInDays) (fun v ->
-                                send (TeamManagerUI.IssueByEmail.SetExpiresInDays(int v)))
-                        ]
-                    match state.SubmitError with
-                    | Some error -> Nodes.text "issue-by-email-error" error
-                    | None -> ()
-                    Nodes.Actions.secondary "issue-by-email-cancel" msgs.Cancel (send TeamManagerUI.IssueByEmail.Close)
-                ]
-        }
-
-    let private pendingInvites (teamId: string) (model: TeamManagerUI.Model) : Node<TeamManagerUI.Msg> =
-        Nodes.Layout.column "pending" [
-            Nodes.Layout.row "pending-crumbs" [
-                Nodes.Actions.button
-                    "pending-back"
-                    ButtonVariant.Tertiary
-                    msgs.BreadcrumbMembers
-                    false
-                    (TeamManagerUI.SelectTeam teamId)
-                Nodes.text "pending-team" (teamName model teamId)
-            ]
-            Nodes.Panel.card "pending-invites" msgs.PendingInvitesPanel [
-                Nodes.Actions.primary "pending-invite" msgs.InviteByEmail (TeamManagerUI.OpenIssueByEmail teamId)
-                match Map.tryFind teamId model.PendingByEmail with
-                | None -> Nodes.text "pending-loading" msgs.PendingInvitesLoading
-                | Some [] -> Nodes.text "pending-none" msgs.NoPendingInvites
-                | Some rows ->
-                    for email, _ in rows do
-                        Nodes.Layout.row (Nodes.Ids.keyed "pending" email) [
-                            Nodes.text (Nodes.Ids.keyed "pending-email" email) email
-                            Nodes.Actions.secondary
-                                (Nodes.Ids.keyed "pending-revoke" email)
-                                msgs.RevokeInvite
-                                (TeamManagerUI.OpenRevokeByEmail(teamId, email))
-                        ]
-            ]
-            match model.IssueByEmail with
-            | Some state when state.TeamId = teamId -> issueByEmail state
-            | _ -> ()
-        ]
-
-    let private notice (model: TeamManagerUI.Model) : Node<TeamManagerUI.Msg> list =
-        match model.Error with
-        | Some(Notice.Problem text) -> [
-            Nodes.Actions.banner "notice" ToneVariant.Critical text msgs.Dismiss TeamManagerUI.DismissError
-          ]
-        | Some(Notice.Info text) -> [
-            Nodes.Actions.banner "notice" ToneVariant.Info text msgs.Dismiss TeamManagerUI.DismissError
-          ]
-        | None -> []
-
-    /// The page: the notice above the current sub-view. Team details is not
-    /// in the fixture; a model on it is not one this file asserts over.
-    let tree (model: TeamManagerUI.Model) : Node<TeamManagerUI.Msg> =
-        Nodes.Layout.column "team-manager" [
-            yield! notice model
-            match model.CurrentView with
-            | TeamManagerUI.MyTeams -> myTeams model
-            | TeamManagerUI.PendingInvites teamId -> pendingInvites teamId model
-            | TeamManagerUI.TeamDetails teamId -> Nodes.text "team-details" teamId
-        ]
-
-let private treeView = lowered lowerTree TeamTree.tree
+/// The module's own tree, drawn as its deferred surface draws it.
+let private treeView (model: TeamManagerUI.Model) (dispatch: TeamManagerUI.Msg -> unit) : Feliz.ReactElement =
+    lowerTree dispatch (TeamManagerTree.tree msgs model dispatch)
 
 let private team (id: string) (name: string) : TeamInfo = {
     TeamId = id
@@ -394,6 +291,319 @@ let private subjectTests =
                  + TreeViewParity.report differences))
     ]
 
+// ─── The subject: the module-visibility editor ───────────────────────
+
+let private visibilityMsgs = MessageCatalog.english.ModuleVisibilityAdmin
+
+let private visibilityFeliz
+    (model: ModuleVisibilityAdminUI.Model)
+    (dispatch: ModuleVisibilityAdminUI.Msg -> unit)
+    : Feliz.ReactElement =
+    FelizReferenceViews.ModuleVisibilityAdmin.body visibilityMsgs model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let visibilityTree
+    (model: ModuleVisibilityAdminUI.Model)
+    (dispatch: ModuleVisibilityAdminUI.Msg -> unit)
+    : Feliz.ReactElement =
+    lowerTree dispatch (ModuleVisibilityAdminTree.tree visibilityMsgs model dispatch)
+
+let visibilityInit () =
+    fromUnitInit (fun () -> ModuleVisibilityAdminUI.init ClientModuleContext.empty) ModuleVisibilityAdminUI.update
+
+/// Two registered modules, no stored profile, and the resolution beside them.
+let visibilityLoaded () =
+    (visibilityInit ())
+        .Dispatch(ModuleVisibilityAdminUI.RegisteredLoaded(Ok [ "alpha"; "_sdk.Team_Manager" ]))
+        .Dispatch(ModuleVisibilityAdminUI.ProfileLoaded(Ok None))
+        .Dispatch(
+            ModuleVisibilityAdminUI.ResolutionLoaded(
+                Ok(
+                    Some {
+                        GovernedModuleIds = [ "_sdk.Team_Manager" ]
+                        SelectedModuleIds = [ "alpha" ]
+                        ExcludedEntryIds = []
+                        ContributingScopes = []
+                    }
+                )
+            )
+        )
+
+let private visibilityStates () = [
+    "loading", visibilityInit ()
+    "two modules, no profile", visibilityLoaded ()
+    "one module picked", (visibilityLoaded ()).Dispatch(ModuleVisibilityAdminUI.ToggleModule "alpha")
+]
+
+let private visibilityTests =
+    testList "the module-visibility editor as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            for name, harness in visibilityStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, visibilityTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "assertion 2: a checkbox and the kind reach update, asserted on the model" (fun () ->
+            (visibilityLoaded ())
+                .Interact(
+                    ViewMount.mountAndInteract,
+                    visibilityTree,
+                    Drive.edit ("alpha" + visibilityMsgs.VisibleNow) "true"
+                )
+                .AssertModelWith("the candidate's checkbox adds it to the rule", fun m -> m.Selection = [ "alpha" ])
+            |> ignore
+
+            (visibilityLoaded ())
+                .Interact(ViewMount.mountAndInteract, visibilityTree, Drive.click visibilityMsgs.DenyLabel)
+                .AssertModelWith(
+                    "the Deny choice sets the rule's kind",
+                    fun m -> m.Kind = ModuleVisibilityAdminUI.RuleKind.Deny
+                )
+            |> ignore)
+
+        testCase "assertion 2: the note is the island's until the save, which carries it" (fun () ->
+            let typed =
+                (visibilityLoaded ())
+                    .Dispatched(
+                        ViewMount.mountAndInteract,
+                        visibilityTree,
+                        Drive.edit visibilityMsgs.NoteLabel "for the pilot"
+                    )
+
+            Expect.isEmpty typed "typing in the note dispatches nothing"
+
+            let saved =
+                (visibilityLoaded ())
+                    .Dispatched(
+                        ViewMount.mountAndInteract,
+                        visibilityTree,
+                        fun host ->
+                            Drive.typeInto visibilityMsgs.NoteLabel "for" host
+                            Drive.typeInto visibilityMsgs.NoteLabel "for the pilot" host
+                            Drive.leave visibilityMsgs.NoteLabel host
+                            Drive.click visibilityMsgs.SaveProfile host
+                    )
+
+            Expect.equal saved [ ModuleVisibilityAdminUI.Save "for the pilot" ] "the save carries the note typed, once"
+
+            (visibilityLoaded ())
+                .Interact(ViewMount.mountAndInteract, visibilityTree, Drive.click visibilityMsgs.SaveProfile)
+                .AssertModelWith("the save reaches update and the editor is busy", fun m -> m.Busy)
+            |> ignore)
+
+        // Two differences, both judged. The Feliz page put each kind's
+        // description inside its button, so the button's name was the label and
+        // the sentence; the tree names the button by its label and shows the
+        // sentence beside it. The Feliz page's note sat beside a `<label>` not
+        // associated with it, so its name was its placeholder; the island's
+        // label wraps it. Parity must name exactly these, in every loaded state.
+        testCase "assertion 3: parity with the Feliz page names exactly the two judged differences" (fun () ->
+            let m = visibilityMsgs
+
+            let expected =
+                Set.ofList [
+                    "missing", "button", sprintf "%s %s" m.AllowLabel m.AllowDescription
+                    "missing", "button", sprintf "%s %s" m.DenyLabel m.DenyDescription
+                    "missing", "textbox", m.NotePlaceholder
+                    "extra", "button", m.AllowLabel
+                    "extra", "button", m.DenyLabel
+                    "extra", "textbox", m.NoteLabel
+                ]
+
+            let named (differences: TreeViewParity.Difference list) =
+                differences
+                |> List.choose (function
+                    | TreeViewParity.MissingFromTree s -> Some("missing", s.Role, defaultArg s.Name "")
+                    | TreeViewParity.ExtraInTree s -> Some("extra", s.Role, defaultArg s.Name "")
+                    | TreeViewParity.TabOrderDiffers _ -> None)
+                |> Set.ofList
+
+            for name, harness in visibilityStates () do
+                let differences =
+                    harness.CheckViewParity(ViewMount.mount, visibilityFeliz, visibilityTree)
+
+                if name = "loading" then
+                    Expect.isEmpty differences "while loading the two pages announce the same"
+                else
+                    Expect.equal
+                        (Set.toList (named differences))
+                        (Set.toList expected)
+                        (sprintf
+                            "state \"%s\": named %A, expected %A"
+                            name
+                            (Set.toList (named differences))
+                            (Set.toList expected)))
+    ]
+
+// ─── The subject: Platform Management ────────────────────────────────
+
+let private adminMsgs = MessageCatalog.english.PlatformAdmin
+let private widgetMsgs = MessageCatalog.english.PublicUtilityWidgets
+
+/// The operator a test signs in as; the session store is not reachable from a
+/// test document.
+let private operator: PlatformAdminUI.Caller = {
+    UserId = "op"
+    Display = "op@example.com"
+}
+
+let private adminFeliz (model: PlatformAdminUI.Model) (dispatch: PlatformAdminUI.Msg -> unit) : Feliz.ReactElement =
+    FelizReferenceViews.PlatformAdmin.body PublicUtilityConfig.defaults operator adminMsgs widgetMsgs model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let adminTree (model: PlatformAdminUI.Model) (dispatch: PlatformAdminUI.Msg -> unit) : Feliz.ReactElement =
+    lowerTree
+        dispatch
+        (PlatformAdminTree.tree adminMsgs widgetMsgs PublicUtilityConfig.defaults operator model dispatch)
+
+let adminInit () =
+    fromUnitInit (fun () -> PlatformAdminUI.init ClientModuleContext.empty) PlatformAdminUI.update
+
+let private summary (id: string) (name: string) (archived: bool) : TeamSummary = {
+    TeamId = id
+    Name = name
+    CreatedAt = System.DateTime(2026, 1, 1)
+    Archived = archived
+    MemberCount = 2
+    Owners = [ "owner-" + id ]
+    Admins = []
+}
+
+let adminTeams () =
+    (adminInit ())
+        .Dispatch(PlatformAdminUI.SwitchTab PlatformAdminUI.TeamsTab)
+        .Dispatch(PlatformAdminUI.TeamsLoaded(Ok [ summary "t1" "Alpha" false; summary "t2" "Beta" true ]))
+
+/// The states Platform Management is held to, each reached through the
+/// module's real `update`.
+let adminStates () = [
+    "loading", adminInit ()
+    "two admins", (adminInit ()).Dispatch(PlatformAdminUI.AdminsLoaded(Ok [ "u1"; "u2" ]))
+    "a revoke failed",
+    (adminInit ())
+        .Dispatch(PlatformAdminUI.AdminsLoaded(Ok [ "u1"; "u2" ]))
+        .Dispatch(PlatformAdminUI.RevokeResolved("u2", Error "not permitted"))
+    "granting",
+    (adminInit ()).Dispatch(PlatformAdminUI.UpdateAssignInput "u3").Dispatch(PlatformAdminUI.RequestAssignConfirm)
+    "the teams tab", adminTeams ()
+    "deleting an archived team", (adminTeams ()).Dispatch(PlatformAdminUI.RequestDeleteTeam "t2")
+    "the settings tab",
+    (adminInit ())
+        .Dispatch(PlatformAdminUI.SwitchTab PlatformAdminUI.SettingsTab)
+        .Dispatch(PlatformAdminUI.PlatformKnowledgeBaseLoaded(Ok FeatureMode.Enabled))
+]
+
+let private adminTests =
+    testList "Platform Management as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            for name, harness in adminStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, adminTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "assertion 2: a tab, a kept row's button and a field edit reach update" (fun () ->
+            (adminInit ())
+                .Interact(ViewMount.mountAndInteract, adminTree, Drive.click adminMsgs.TeamsTab)
+                .AssertModelWith("the Teams tab is shown", fun m -> m.ActiveTab = PlatformAdminUI.TeamsTab)
+            |> ignore
+
+            (adminTeams ())
+                .Interact(ViewMount.mountAndInteract, adminTree, Drive.click adminMsgs.Archive)
+                .AssertModelWith(
+                    "the live team's Archive is in flight for that team",
+                    fun m -> m.TeamActionPending = Set.ofList [ "t1" ]
+                )
+            |> ignore
+
+            (adminTeams ())
+                .Interact(ViewMount.mountAndInteract, adminTree, Drive.click adminMsgs.Delete)
+                .AssertModelWith(
+                    "the archived team's Delete opens its confirmation",
+                    fun m -> m.ConfirmDeleteTeam |> Option.exists (fun c -> c.TeamId = "t2")
+                )
+            |> ignore
+
+            (adminTeams ())
+                .Interact(
+                    ViewMount.mountAndInteract,
+                    adminTree,
+                    fun host ->
+                        Drive.typeInto adminMsgs.TeamNameLabel "Gamma" host
+                        Drive.leave adminMsgs.TeamNameLabel host
+                )
+                .AssertModelWith("the team name reaches the model on leaving it", fun m -> m.NewTeamName = "Gamma")
+            |> ignore
+
+            (adminInit ())
+                .Dispatch(PlatformAdminUI.AdminsLoaded(Ok [ "u1"; "u2" ]))
+                .Interact(ViewMount.mountAndInteract, adminTree, Drive.click adminMsgs.Revoke)
+                .AssertSteps(fun steps -> not (List.isEmpty steps))
+            |> ignore)
+
+        // Three differences, all judged, and nothing else. (1) Tabs: the Feliz
+        // bar put every tab in the tab order; the tree's tabs are one stop, the
+        // active tab, with its panel after it, as a tab list's keyboard pattern
+        // asks. (2) Names: the Feliz page's "Team name" and "Initial owner"
+        // labels were not associated with their inputs, which were named by
+        // their placeholders; the tree's labels wrap them. (3) Confirmations:
+        // the renderer's modal is a dialog with a close control and its heading
+        // at level 2, where the Feliz confirmation was a dialog headed at level
+        // 3. Every other control and heading, and the buttons' order, match.
+        testCase "assertion 3: parity with the Feliz page, but for the three judged differences" (fun () ->
+            let m = adminMsgs
+
+            let renamed =
+                Set.ofList [
+                    "textbox", m.TeamNamePlaceholder
+                    "textbox", m.TeamNameLabel
+                    "textbox", m.InitialOwnerLabel
+                ]
+
+            let judged (difference: TreeViewParity.Difference) =
+                match difference with
+                | TreeViewParity.TabOrderDiffers _ -> true
+                | TreeViewParity.MissingFromTree s
+                | TreeViewParity.ExtraInTree s ->
+                    s.Role = "dialog"
+                    || s.Role = "tabpanel"
+                    || (s.Role.StartsWith "heading"
+                        && (s.Name = Some m.GrantHeading || s.Name = Some m.DeleteTeamHeading))
+                    || (s.Role = "button" && s.Name = Some "Close")
+                    || renamed.Contains(s.Role, defaultArg s.Name "")
+                    // The owner typeahead's placeholder name, on the Feliz side only.
+                    || (s.Role = "textbox"
+                        && s.Name = Some m.UserPickerPlaceholder
+                        && (match difference with
+                            | TreeViewParity.MissingFromTree _ -> true
+                            | _ -> false))
+
+            let buttons (outline: TreeViewParity.Outline) =
+                outline.TabOrder
+                |> List.filter (fun stop -> stop.Role = "button" && stop.Name <> Some "Close")
+                |> List.map _.Name
+
+            for name, harness in adminStates () do
+                let unjudged =
+                    harness.CheckViewParity(ViewMount.mount, adminFeliz, adminTree)
+                    |> List.filter (judged >> not)
+
+                Expect.isEmpty unjudged (sprintf "state \"%s\": %s" name (TreeViewParity.report unjudged))
+
+                let outline view =
+                    harness.RenderViewHtml(ViewMount.mount, view) |> TreeViewParity.ofHtml
+
+                Expect.equal
+                    (buttons (outline adminTree))
+                    (buttons (outline adminFeliz))
+                    (sprintf "state \"%s\": the buttons, in tab order" name))
+    ]
+
 // ─── The kit's own go-red proofs ─────────────────────────────────────
 
 type private ToyModel = { Text: string; Saved: int }
@@ -435,6 +645,47 @@ let private felizActions (_: ToyModel) (dispatch: ToyMsg -> unit) : Feliz.ReactE
 
 let private goRedTests =
     testList "the kit's go-red proofs" [
+
+        // Why the note is still an island: the renderer's local buffer flushed
+        // on submit keeps the submit listener of every render of the buffer, so
+        // a submit commits each value the field held, in order, the empty one
+        // first. When this goes red the buffer can replace the island.
+        testCase "the renderer's submit-flushed buffer commits every value the field held" (fun () ->
+            let form (model: ToyModel) : Node<ToyMsg> =
+                Fuaran.form "toy-form" {
+                    Defaults.form with
+                        Fields = [
+                            {
+                                Defaults.formField with
+                                    Id = "note"
+                                    Label = Nodes.literal "Note"
+                                    Kind =
+                                        FormFieldKind.textControl (
+                                            binding.local
+                                                (Binding.Static(Some model.Text))
+                                                LocalFlushTrigger.OnSubmit
+                                                (SetText >> Action.dispatch)
+                                                None
+                                                Ok
+                                        )
+                            }
+                        ]
+                        OnSubmit = Action.none
+                        SubmitLabel = Nodes.literal "Save"
+                }
+
+            let committed =
+                (fromUnitInit toyInit toyUpdate)
+                    .Dispatched(
+                        ViewMount.mountAndInteract,
+                        lowered lowerTree form,
+                        fun host ->
+                            Drive.typeInto "Note" "a" host
+                            Drive.typeInto "Note" "ab" host
+                            Drive.submit host
+                    )
+
+            Expect.equal committed [ SetText ""; SetText "a"; SetText "ab" ] "one commit per value the buffer held")
 
         testCase "a tree missing a label fails the floor, naming the rule" (fun () ->
             let toy = fromUnitInit toyInit toyUpdate
@@ -565,4 +816,10 @@ let private nameTests =
     ]
 
 let tests =
-    testList "the migration kit: accessible, behaves, at parity" [ subjectTests; goRedTests; nameTests ]
+    testList "the migration kit: accessible, behaves, at parity" [
+        subjectTests
+        visibilityTests
+        adminTests
+        goRedTests
+        nameTests
+    ]

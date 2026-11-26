@@ -170,6 +170,8 @@
              through ModuleHarness's real init/update and its own `view` —
              the half the rail's floor left open (it covered the shell rail only,
              and `AssertAccessible` still needed a hand-supplied render). -->
+        <!-- The Feliz pages the shipped trees replaced: the parity reference. -->
+        <Compile Include="FelizReferenceViews.fs" />
         <!-- The migration kit's three assertions over a view moving to a tree:
              accessibility through the lowering, behaviour through update,
              parity with the view it replaces; and the kit's go-red proofs.

@@ -265,12 +265,6 @@ let private visibilityMsgs = MessageCatalog.english.ModuleVisibilityAdmin
 let private teamTree (model: TeamManagerUI.Model) (dispatch: TeamManagerUI.Msg -> unit) : ReactElement =
     TreeViewParityTests.lowerTree dispatch (TeamManagerTree.tree teamMsgs model dispatch)
 
-let private visibilityTree
-    (model: ModuleVisibilityAdminUI.Model)
-    (dispatch: ModuleVisibilityAdminUI.Msg -> unit)
-    : ReactElement =
-    TreeViewParityTests.lowerTree dispatch (ModuleVisibilityAdminTree.tree visibilityMsgs model dispatch)
-
 let private on = System.DateTime(2026, 11, 26)
 
 let private teamInit () =
@@ -343,26 +337,6 @@ let private teamStates () = [
     "revoking an invite", (invites ()).Dispatch(TeamManagerUI.OpenRevokeByEmail("t1", "a@example.com"))
 ]
 
-let private visibilityInit () =
-    fromUnitInit (fun () -> ModuleVisibilityAdminUI.init ClientModuleContext.empty) ModuleVisibilityAdminUI.update
-
-let private visibilityLoaded () =
-    (visibilityInit ())
-        .Dispatch(ModuleVisibilityAdminUI.RegisteredLoaded(Ok [ "alpha"; "_sdk.Team_Manager" ]))
-        .Dispatch(ModuleVisibilityAdminUI.ProfileLoaded(Ok None))
-        .Dispatch(
-            ModuleVisibilityAdminUI.ResolutionLoaded(
-                Ok(
-                    Some {
-                        GovernedModuleIds = [ "_sdk.Team_Manager" ]
-                        SelectedModuleIds = [ "alpha" ]
-                        ExcludedEntryIds = []
-                        ContributingScopes = []
-                    }
-                )
-            )
-        )
-
 let private paletteProps: Components.CommandPalette.CommandPaletteProps = {
     IsOpen = true
     Query = ""
@@ -387,8 +361,12 @@ let private treeSurfaceTests =
                     failwithf "state \"%s\": %s" name e.Message)
 
         testCase "every module-visibility state passes the Strict floor as a tree" (fun () ->
-            for harness in [ visibilityInit (); visibilityLoaded () ] do
-                harness.AssertAccessibleView(ViewMount.mount, visibilityTree, Accessibility.Strict)
+            for harness in
+                [
+                    TreeViewParityTests.visibilityInit ()
+                    TreeViewParityTests.visibilityLoaded ()
+                ] do
+                harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.visibilityTree, Accessibility.Strict)
                 |> ignore)
 
         testCase "the palette's tree, its overlay an island, passes the Strict floor" (fun () ->
@@ -401,7 +379,10 @@ let private treeSurfaceTests =
                 "and the island drew the overlay")
 
         testCase "a module id reads as itself through the Text node" (fun () ->
-            let html = (visibilityLoaded ()).RenderViewHtml(ViewMount.mount, visibilityTree)
+            let html =
+                (TreeViewParityTests.visibilityLoaded ())
+                    .RenderViewHtml(ViewMount.mount, TreeViewParityTests.visibilityTree)
+
             Expect.isTrue (html.Contains "_sdk.Team_Manager") "the id is not read as emphasis"
             Expect.isFalse (html.Contains "<em>") "and nothing in the page is parsed as markdown")
 
@@ -414,10 +395,10 @@ let private treeSurfaceTests =
                 )
             |> ignore
 
-            (visibilityLoaded ())
+            (TreeViewParityTests.visibilityLoaded ())
                 .Interact(
                     ViewMount.mountAndInteract,
-                    visibilityTree,
+                    TreeViewParityTests.visibilityTree,
                     TreeViewParityTests.Drive.click visibilityMsgs.DenyLabel
                 )
                 .AssertModelWith(

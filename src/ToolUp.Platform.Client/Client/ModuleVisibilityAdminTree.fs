@@ -8,7 +8,11 @@
 ///
 /// The editor's form stays an island: its note is display state a hook owns
 /// (committed on save, so free typing does not round-trip through `update`),
-/// and its candidate checkboxes sit inside the same form.
+/// and its candidate checkboxes sit inside the same form. The renderer's local
+/// buffer (`Binding.local` flushed on submit) is not yet a replacement: its
+/// submit listener outlives each render of the buffer, so a submit commits
+/// every value the field held, the first of them empty. The rule's kind and
+/// the resolution are kept on the model sub-values they show.
 module internal ModuleVisibilityAdminTree
 
 open Feliz
@@ -17,6 +21,7 @@ open Fuaran.UI.Types
 open Toolup.UIToolkit
 open ToolUp.Platform
 open ModuleVisibilityAdminUI
+open KeepScoped
 
 /// One candidate: the module id, its membership of the edited rule, and,
 /// once the resolution has landed, whether the server admits it now.
@@ -116,53 +121,83 @@ let private notice (id: string) (msgs: ModuleVisibilityAdminMessages) (notice: N
     | Some(Notice.Info text) -> [ Nodes.Actions.banner id ToneVariant.Info text msgs.Dismiss dismiss ]
     | None -> []
 
-/// The rule's two shapes, each a button with what it means beside it.
-let private kind (msgs: ModuleVisibilityAdminMessages) (model: Model) : Node<Msg> =
-    let choice (id: string) (label: string) (description: string) (value: RuleKind) =
-        Nodes.Layout.column id [
-            Nodes.Actions.button
-                (Nodes.Ids.child id "pick")
-                (if model.Kind = value then
-                     ButtonVariant.Primary
-                 else
-                     ButtonVariant.Secondary)
-                label
-                false
-                (SetKind value)
-            Nodes.text (Nodes.Ids.child id "means") description
-        ]
+// ─── The rule's kind ─────────────────────────────────────────────────
 
-    Nodes.Layout.row "visibility-kind" [
-        choice "visibility-allow" msgs.AllowLabel msgs.AllowDescription RuleKind.Allow
-        choice "visibility-deny" msgs.DenyLabel msgs.DenyDescription RuleKind.Deny
-    ]
+type private KindContext = {
+    Msgs: ModuleVisibilityAdminMessages
+    Kind: RuleKind
+}
+
+/// The rule's two shapes, each a button with what it means beside it.
+let private kind =
+    One(
+        (fun (a: KindContext) b -> sameObject a.Msgs b.Msgs && a.Kind = b.Kind),
+        fun context ->
+            let msgs = context.Msgs
+
+            let choice (id: string) (label: string) (description: string) (value: RuleKind) =
+                Nodes.Layout.column id [
+                    Nodes.Actions.button
+                        (Nodes.Ids.child id "pick")
+                        (if context.Kind = value then
+                             ButtonVariant.Primary
+                         else
+                             ButtonVariant.Secondary)
+                        label
+                        false
+                        (SetKind value)
+                    Nodes.text (Nodes.Ids.child id "means") description
+                ]
+
+            Nodes.Layout.row "visibility-kind" [
+                choice "visibility-allow" msgs.AllowLabel msgs.AllowDescription RuleKind.Allow
+                choice "visibility-deny" msgs.DenyLabel msgs.DenyDescription RuleKind.Deny
+            ]
+    )
+
+// ─── The resolution ──────────────────────────────────────────────────
+
+type private ResolvedContext = {
+    Msgs: ModuleVisibilityAdminMessages
+    Resolved: ModuleVisibilityResolution option
+    Loaded: bool
+}
 
 /// The resolved answer beside the editable profile: what makes "I allowed it
 /// and it still does not appear" answerable without leaving the page.
-let private resolved (msgs: ModuleVisibilityAdminMessages) (model: Model) : Node<Msg> =
-    let items (id: string) (label: int -> string) (values: string list) =
-        Nodes.Layout.column id [
-            Nodes.text (Nodes.Ids.child id "label") (label (List.length values))
-            if List.isEmpty values then
-                Nodes.text (Nodes.Ids.child id "none") msgs.NoItems
-            else
-                Nodes.Layout.row (Nodes.Ids.child id "items") [
-                    for value in values do
-                        Nodes.text (Nodes.Ids.keyed id value) value
-                ]
-        ]
+let private resolved =
+    One(
+        (fun (a: ResolvedContext) b ->
+            sameObject a.Msgs b.Msgs
+            && sameObject a.Resolved b.Resolved
+            && a.Loaded = b.Loaded),
+        fun context ->
+            let msgs = context.Msgs
 
-    Nodes.Panel.section "visibility-resolved" msgs.ResolvedForYouHeading [
-        Nodes.text "visibility-resolved-help" msgs.ResolvedForYouHelp
-        match model.Resolved with
-        | None when not model.ResolvedLoaded -> Nodes.text "visibility-resolved-loading" msgs.Loading
-        | None -> Nodes.text "visibility-resolved-none" msgs.NoResolutionYet
-        | Some r ->
-            items "visibility-governed" msgs.GovernedModules r.GovernedModuleIds
-            items "visibility-selected" msgs.SelectedAfterEveryLayer r.SelectedModuleIds
-            items "visibility-excluded" msgs.ExcludedEntries r.ExcludedEntryIds
-            items "visibility-scopes" msgs.ContributingScopes (r.ContributingScopes |> List.map FlagScope.slug)
-    ]
+            let items (id: string) (label: int -> string) (values: string list) =
+                Nodes.Layout.column id [
+                    Nodes.text (Nodes.Ids.child id "label") (label (List.length values))
+                    if List.isEmpty values then
+                        Nodes.text (Nodes.Ids.child id "none") msgs.NoItems
+                    else
+                        Nodes.Layout.row (Nodes.Ids.child id "items") [
+                            for value in values do
+                                Nodes.text (Nodes.Ids.keyed id value) value
+                        ]
+                ]
+
+            Nodes.Panel.section "visibility-resolved" msgs.ResolvedForYouHeading [
+                Nodes.text "visibility-resolved-help" msgs.ResolvedForYouHelp
+                match context.Resolved with
+                | None when not context.Loaded -> Nodes.text "visibility-resolved-loading" msgs.Loading
+                | None -> Nodes.text "visibility-resolved-none" msgs.NoResolutionYet
+                | Some r ->
+                    items "visibility-governed" msgs.GovernedModules r.GovernedModuleIds
+                    items "visibility-selected" msgs.SelectedAfterEveryLayer r.SelectedModuleIds
+                    items "visibility-excluded" msgs.ExcludedEntries r.ExcludedEntryIds
+                    items "visibility-scopes" msgs.ContributingScopes (r.ContributingScopes |> List.map FlagScope.slug)
+            ]
+    )
 
 /// The page. `dispatch` reaches the editor's island only; every node sends its
 /// message through the tree.
@@ -177,10 +212,14 @@ let tree (msgs: ModuleVisibilityAdminMessages) (model: Model) (dispatch: Msg -> 
         else
             Nodes.Panel.section "visibility-profile" msgs.YourProfileHeading [
                 Nodes.text "visibility-profile-help" msgs.YourProfileHelp
-                kind msgs model
+                kind.Node { Msgs = msgs; Kind = model.Kind }
                 TreeLowering.island "visibility-editor" (fun () -> EditorForm msgs model dispatch)
             ]
-        resolved msgs model
+        resolved.Node {
+            Msgs = msgs
+            Resolved = model.Resolved
+            Loaded = model.ResolvedLoaded
+        }
     ]
 
 /// The deferred component `ModuleVisibilityAdminUI`'s view mounts.
