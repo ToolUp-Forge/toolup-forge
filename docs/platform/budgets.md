@@ -504,18 +504,20 @@ fall. [`feliz-census.json`](../../feliz-census.json) at the repository root hold
 
 | Class | One cell per | Counts | May it rise? |
 |---|---|---|---|
-| `sources` | project | non-test `.fs` / `.fsx` files with an `open Feliz` line | no |
+| `sources` | project | non-test `.fs` / `.fsx` files that depend on Feliz | no |
 | `tests` | project | the same, over test files | yes, recorded |
 | `baselines` | assembly | lines of `api-baselines/<assembly>.approved.txt` naming `ReactElement` | no |
 
-**What it counts.** A file counts once, however much Feliz it uses, when a line of it is `open Feliz`:
-the React DSL itself. Its cell is the nearest directory above it holding a `.fsproj`. A baseline line
+**What it counts.** A file counts once, however much Feliz it uses, when its code depends on the React
+DSL itself: a line `open Feliz`, or a qualified name such as `Feliz.Html.div`, `Feliz.prop.className`,
+`[<Feliz.ReactComponent>]` or `open type Feliz.prop`. Its cell is the nearest directory above it holding a `.fsproj`. A baseline line
 naming `ReactElement` is public surface a consumer's code is written against, so a view that leaves
 Feliz but still hands out a `ReactElement` has not left it.
 
-**What it does not count.** `open Feliz.AgGrid`, `open Feliz.AgCharts`, `open Feliz.ViewEngine` and the
-other `Feliz.*` namespaces, which are separate packages with their own exits; a file that names a Feliz
-type fully qualified, without the open; build output and tooling directories (`bin`, `obj`,
+**What it does not count.** The namespaces of the other packages that share the prefix, opened or
+qualified: `Feliz.AgGrid` (and its Enterprise companion), `Feliz.AgCharts`, their runtime modules and
+`Feliz.ViewEngine`, which have their own exits; a mention in a comment or a string literal, which is not
+code; a `namespace` or `module` declaration line, which is the file naming itself; build output and tooling directories (`bin`, `obj`,
 `node_modules`, `fable_modules`, `output`, `artifacts`, any directory starting with `.`); and the
 documentation fragments under `docs-snippets/`, which the documentation gates hold as prose. A test file
 (a path segment named `tests`, or a project directory ending `.Tests`) is counted in `tests`, apart from
@@ -535,9 +537,20 @@ pwsh ./dev-scripts/feliz-ratchet.ps1 -Write    # rewrite the census from the tre
 
 Both run the build driver's `FelizRatchet` target (`dotnet run --project Build.fsproj -- FelizRatchet
 [--write]`). The writer refuses, and writes nothing, when it would raise a `sources` or `baselines`
-cell. The one way up is a hand edit of the committed file, which a reviewer sees. The first census,
-written 2026-11-20, was 145 source files, 29 test files and 320 baseline lines. When the migration
-ends, the gate becomes a ban.
+cell beyond what an allowance admits. The one way up is an **allowance**: an entry in the census's
+`allowances` list, added by hand and reviewed, with its date, its reason and the cells and amounts it
+admits. The next write admits a rise up to those amounts and marks every allowance `spent`, so it
+admits nothing again; the gate is red while an allowance sits unspent, so none can be staged for a
+later rise. The first census, written 2026-11-20, was 145 source files, 29 test files and 320 baseline
+lines. When the migration ends, the gate becomes a ban.
+
+**The counting rule widened on 2026-11-26.** Until then a file counted only when it had an `open Feliz`
+line, so a file reaching Feliz by qualified name alone (the tree views' kept islands, a component
+attribute) was invisible, and a file could leave the count by rewriting its `open` line. The rule now
+counts a dependency either way, once per file, and strips comments and strings before it looks. The
+census rose once, from 144 source files, 31 test files and 307 baseline lines to 147, 38 and 307: three
+client files that were already in the tree, admitted by the census's first allowance and spent by the
+same rewrite. No Feliz was new; after the rewrite, a rise is refused exactly as before.
 
 ---
 
