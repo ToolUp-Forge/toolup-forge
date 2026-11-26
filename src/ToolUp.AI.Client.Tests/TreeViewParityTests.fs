@@ -604,6 +604,119 @@ let private adminTests =
                     (sprintf "state \"%s\": the buttons, in tab order" name))
     ]
 
+// ─── What a dispatch constructs ──────────────────────────────────────
+
+/// Of the nodes of `after`, how many are new objects, built for this dispatch,
+/// and how many there are in all. A node that is the same object as one of
+/// `before`'s was served from a `Keep`, and so is everything under it.
+let constructed (before: Node<'Msg>) (after: Node<'Msg>) : int * int =
+    let previous = System.Collections.Generic.HashSet<obj>(HashIdentity.Reference)
+
+    let rec mark (node: Node<'Msg>) =
+        previous.Add(box node) |> ignore
+        Fuaran.UI.Generated.children node |> List.iter mark
+
+    mark before
+
+    let rec count (node: Node<'Msg>) : int * int =
+        let below = Fuaran.UI.Generated.children node |> List.map count
+        let size = 1 + List.sumBy snd below
+
+        if previous.Contains(box node) then
+            0, size
+        else
+            1 + List.sumBy fst below, size
+
+    count after
+
+/// A dispatch through the module's real `update`, and the tree before and
+/// after it.
+let private across (tree: 'Model -> Node<'Msg>) (harness: ModuleHarness<'Model, 'Msg>) (msg: 'Msg) =
+    let before = tree harness.Model
+    let after = tree (harness.Dispatch msg).Model
+    constructed before after
+
+let private manyTeams (count: int) : TeamInfo list =
+    List.init count (fun i -> team (sprintf "t%03d" i) (sprintf "Team %03d" i))
+
+let private manySummaries (count: int) : TeamSummary list =
+    List.init count (fun i -> summary (sprintf "t%03d" i) (sprintf "Team %03d" i) (i % 2 = 1))
+
+let private renamed (index: int) (rows: 'Row list) (rename: 'Row -> 'Row) =
+    rows |> List.mapi (fun i row -> if i = index then rename row else row)
+
+let private constructedTests =
+    testList "a dispatch constructs the subtree it changed" [
+
+        testCase "the team manager: one team renamed among 200 builds that row" (fun () ->
+            let teams = manyTeams 200
+            let harness = (teamInit ()).Dispatch(TeamManagerUI.TeamsLoaded teams)
+
+            let built, total =
+                across
+                    (fun m -> TeamManagerTree.tree msgs m ignore)
+                    harness
+                    (TeamManagerUI.TeamsLoaded(renamed 7 teams (fun t -> { t with Name = "Renamed" })))
+
+            let rowSize, _ =
+                across
+                    (fun m -> TeamManagerTree.tree msgs m ignore)
+                    (teamInit ())
+                    (TeamManagerUI.TeamsLoaded [ team "x" "X" ])
+
+            Expect.isTrue (built <= rowSize) (sprintf "built %d of %d (a one-row page builds %d)" built total rowSize)
+            Expect.isTrue (total > 1000) "the page holds the 200 rows")
+
+        testCase "the visibility editor: the rule's kind rebuilds its own section" (fun () ->
+            let harness = visibilityLoaded ()
+
+            let built, total =
+                across
+                    (fun m -> ModuleVisibilityAdminTree.tree visibilityMsgs m ignore)
+                    harness
+                    (ModuleVisibilityAdminUI.SetKind(
+                        if harness.Model.Kind = ModuleVisibilityAdminUI.RuleKind.Allow then
+                            ModuleVisibilityAdminUI.RuleKind.Deny
+                        else
+                            ModuleVisibilityAdminUI.RuleKind.Allow
+                    ))
+
+            let resolvedKept, _ =
+                across
+                    (fun m -> ModuleVisibilityAdminTree.tree visibilityMsgs m ignore)
+                    harness
+                    ModuleVisibilityAdminUI.DismissStatus
+
+
+            Expect.isTrue
+                (resolvedKept < built)
+                (sprintf
+                    "a dispatch that moves nothing shown builds less (%d) than one that moves the kind"
+                    resolvedKept)
+
+            Expect.isTrue (built < total) (sprintf "built %d of %d" built total))
+
+        testCase "Platform Management: one team renamed among 200 builds that row" (fun () ->
+            let teams = manySummaries 200
+
+            let harness =
+                (adminInit ())
+                    .Dispatch(PlatformAdminUI.SwitchTab PlatformAdminUI.TeamsTab)
+                    .Dispatch(PlatformAdminUI.TeamsLoaded(Ok teams))
+
+            let tree m =
+                PlatformAdminTree.tree adminMsgs widgetMsgs PublicUtilityConfig.defaults operator m ignore
+
+            let built, total =
+                across
+                    tree
+                    harness
+                    (PlatformAdminUI.TeamsLoaded(Ok(renamed 7 teams (fun t -> { t with Name = "Team 007b" }))))
+
+            Expect.isTrue (built < 80) (sprintf "built %d of %d" built total)
+            Expect.isTrue (total > 4000) "the page holds the 200 rows")
+    ]
+
 // ─── The kit's own go-red proofs ─────────────────────────────────────
 
 type private ToyModel = { Text: string; Saved: int }
@@ -820,6 +933,7 @@ let tests =
         subjectTests
         visibilityTests
         adminTests
+        constructedTests
         goRedTests
         nameTests
     ]

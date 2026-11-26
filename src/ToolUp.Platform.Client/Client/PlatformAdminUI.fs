@@ -718,7 +718,6 @@ let internal caller () : Caller =
 
 /// What the deferred tree component takes.
 type internal SurfaceProps = {|
-    Caller: Caller
     Model: Model
     Dispatch: Msg -> unit
     Messages: PlatformAdminMessages
@@ -741,7 +740,6 @@ let private loadSurface () : JS.Promise<obj> =
 let private view (config: PublicUtilityConfig) (model: Model) (ctx: RenderContext<Msg>) : PageContent =
     PageContent.FullWidth(
         TreeSurface.deferred "PlatformAdminTree.Surface" loadSurface {|
-            Caller = caller ()
             Model = model
             Dispatch = ctx.Dispatch
             Messages = ctx.Messages.PlatformAdmin

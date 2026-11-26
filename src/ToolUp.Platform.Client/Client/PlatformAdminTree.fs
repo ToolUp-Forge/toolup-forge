@@ -465,7 +465,7 @@ let Surface (props: PlatformAdminUI.SurfaceProps) : Fable.React.ReactElement =
         TreeLowering.treeProps
             (hostOf props.Locale)
             props.Dispatch
-            (tree props.Messages props.Widgets props.Config props.Caller props.Model props.Dispatch)
+            (tree props.Messages props.Widgets props.Config (PlatformAdminUI.caller ()) props.Model props.Dispatch)
     )
 
 /// The deferred component `PlatformAdminUI.AssignConfirm.view` mounts.

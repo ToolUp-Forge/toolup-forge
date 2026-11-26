@@ -369,6 +369,14 @@ let private treeSurfaceTests =
                 harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.visibilityTree, Accessibility.Strict)
                 |> ignore)
 
+        testCase "every Platform Management state passes the Strict floor as a tree" (fun () ->
+            for name, harness in TreeViewParityTests.adminStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.adminTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
         testCase "the palette's tree, its overlay an island, passes the Strict floor" (fun () ->
             let html = ViewMount.mount (Components.CommandPaletteTree.Surface paletteProps)
             let node = Accessibility.ofHtml html
@@ -420,7 +428,27 @@ let private treeSurfaceTests =
                 (teamPage.Contains "role=\"status\"" && teamPage.Contains "aria-busy=\"true\"")
                 "the team manager shows the loading state until its tree arrives"
 
-            Expect.isFalse (teamPage.Contains teamMsgs.MyTeamsPanel) "and draws nothing of the tree synchronously")
+            Expect.isFalse (teamPage.Contains teamMsgs.MyTeamsPanel) "and draws nothing of the tree synchronously"
+
+            let adminPage =
+                match (PlatformAdminUI.builtIn PublicUtilityConfig.defaults).View with
+                | BuiltInView.Page view ->
+                    match
+                        view
+                            (TreeViewParityTests.adminInit ()).Model
+                            (RenderContext.create MessageCatalog.english ignore)
+                    with
+                    | PageContent.FullWidth element -> ViewMount.mount element
+                    | other -> failwithf "a full-width page, not %A" other
+                | BuiltInView.Pages _ -> failwith "one page"
+
+            Expect.isTrue
+                (adminPage.Contains "role=\"status\"" && adminPage.Contains "aria-busy=\"true\"")
+                "Platform Management shows the loading state until its tree arrives"
+
+            Expect.isFalse
+                (adminPage.Contains MessageCatalog.english.PlatformAdmin.AssignHeading)
+                "and draws nothing of the tree synchronously")
     ]
 
 // ─── Cases ───────────────────────────────────────────────────────────
