@@ -18,7 +18,7 @@ $env:TOOLUP_BROWSER_SMOKE_SKIP_INSTALL='1'; dotnet run --project Build.fsproj --
 That one command owns every step — `npm ci`, the Fable compiles, the Vite bundles (the
 fixture's and the HelloWorld sample's), the sample's server build, the harness build,
 Playwright's Chromium install, and the run — so CI and a developer cannot drift. It takes
-about **five minutes**, of which the scenarios themselves are ~35 seconds and the two Fable
+about **seven minutes**, of which the scenarios themselves are ~45 seconds and the two Fable
 compiles are most of the rest.
 
 ## Scope — smoke, not an e2e suite

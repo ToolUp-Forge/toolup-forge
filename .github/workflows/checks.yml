@@ -1176,7 +1176,7 @@ jobs:
   # gate would almost never run, and a gate that does not run is worse
   # than no gate because it reports green.
   #
-  # Measured cost: ~5 minutes on the dev machine — ~35s of scenarios and
+  # Measured cost: ~7 minutes on the dev machine — ~45s of scenarios and
   # two Fable compiles of ~2 minutes each, the rest npm and the builds. Budget
   # generously on a 2-core runner; `timeout-minutes` stays finite so a
   # hung browser fails loudly rather than burning the 6-hour default.
