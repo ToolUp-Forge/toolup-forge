@@ -265,7 +265,6 @@ let init () : Model * Step<Msg, RemoteEffect<Msg>> list =
 
 // ─── Update ───────────────────────────────────────────────────────
 
-/// The transitions, with their effects as values.
 /// A submission's fresh ids and time of sending, read by the effect and
 /// answered as `SubmitMessagePrepared`.
 let private prepareSubmission (content: string) (conversation: Guid option) : RemoteEffect<Msg> =
@@ -285,6 +284,7 @@ let private prepareSubmission (content: string) (conversation: Guid option) : Re
          | Ok prepared -> SubmitMessagePrepared prepared
          | Error ex -> ApiError ex.Message)
 
+/// The transitions, with their effects as values.
 let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
     | LoadConversations action ->
