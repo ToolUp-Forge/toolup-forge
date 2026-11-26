@@ -41,6 +41,10 @@ module ToolUp.Platform.Tests.InProcess.OpenCoreVocabularyNeutralityTests
 //
 // A new packable project is therefore covered on the commit that adds
 // it, with no edit here — the same property the publish workflow has.
+//
+// Each class is read through git's view of the checkout: a file an ignore
+// rule covers (a Fable `output` folder, a local probe) is never published
+// and is not surface, while an untracked file no rule covers still is.
 
 open System
 open System.IO
@@ -68,17 +72,50 @@ let private label (path: string) =
     else
         full.Replace('\\', '/')
 
-let private enumerate (dir: string) (pattern: string) =
+/// The files git counts as the checkout at `root`: tracked, plus untracked
+/// files no ignore rule covers, as lower-cased absolute paths. An ignored
+/// file (a Fable `output` folder, a local probe) is never published, so it
+/// is not surface. Untracked-but-not-ignored files stay in, so a leak in a
+/// file not yet committed is still caught. `None` when git cannot answer
+/// (no CLI, not a work tree); the walk then keeps only its prune list.
+let checkoutFiles (root: string) : Set<string> option =
+    try
+        let r =
+            ToolUp.Platform.Build.Git.run root [
+                "-c"
+                "core.quotepath=off"
+                "--no-optional-locks"
+                "ls-files"
+                "--cached"
+                "--others"
+                "--exclude-standard"
+            ]
+
+        if r.ExitCode = 0 then
+            ToolUp.Platform.Build.Lines.ofOutput r.StdOut
+            |> List.map (fun rel -> Path.GetFullPath(Path.Combine(root, rel)).ToLowerInvariant())
+            |> Set.ofList
+            |> Some
+        else
+            None
+    with _ ->
+        None
+
+let private enumerateIn (checkout: Set<string> option) (dir: string) (pattern: string) =
     if Directory.Exists dir then
         Directory.EnumerateFiles(dir, pattern, SearchOption.AllDirectories)
         |> Seq.filter (isBuildOutput >> not)
+        |> Seq.filter (fun f ->
+            match checkout with
+            | Some files -> files.Contains(Path.GetFullPath(f).ToLowerInvariant())
+            | None -> true)
         |> List.ofSeq
     else
         []
 
 /// Every `.fsproj` under `src/`, paired with whether it packs.
-let private projects () =
-    enumerate (Path.Combine(repoRoot, "src")) "*.fsproj"
+let private projects enumerate (root: string) =
+    enumerate (Path.Combine(root, "src")) "*.fsproj"
     |> List.map (fun proj ->
         let packable =
             not ((File.ReadAllText proj).Replace(" ", "").Contains "<IsPackable>false</IsPackable>")
@@ -98,10 +135,12 @@ let private nearestProject (projects: (string * bool) list) (file: string) =
         | [] -> None
         | candidates -> candidates |> List.maxBy (fst >> String.length) |> Some
 
-/// The publishable surface: absolute paths, deduplicated, ordered.
-let publishableFiles () : string list =
-    let projs = projects ()
-    let srcDir = Path.Combine(repoRoot, "src")
+/// The publishable surface of the checkout at `root`: absolute paths,
+/// deduplicated, ordered.
+let publishableFilesUnder (root: string) : string list =
+    let enumerate = enumerateIn (checkoutFiles root)
+    let projs = projects enumerate root
+    let srcDir = Path.Combine(root, "src")
 
     let packableSource =
         enumerate srcDir "*.fs"
@@ -116,20 +155,23 @@ let publishableFiles () : string list =
         |> List.map (fun (dir, _) -> Path.Combine(dir, "README.md"))
         |> List.filter File.Exists
 
-    let docs = enumerate (Path.Combine(repoRoot, "docs")) "*.md"
+    let docs = enumerate (Path.Combine(root, "docs")) "*.md"
 
     let rootDocs =
         [ "README.md"; "CONTRIBUTING.md"; "SECURITY.md" ]
-        |> List.map (fun n -> Path.Combine(repoRoot, n))
+        |> List.map (fun n -> Path.Combine(root, n))
         |> List.filter File.Exists
 
-    let samplesDir = Path.Combine(repoRoot, "samples")
+    let samplesDir = Path.Combine(root, "samples")
     let samples = enumerate samplesDir "*.fs" @ enumerate samplesDir "*.md"
 
     packableSource @ packableReadmes @ docs @ rootDocs @ samples
     |> List.map Path.GetFullPath
     |> List.distinctBy _.ToLowerInvariant()
     |> List.sort
+
+/// The publishable surface of this checkout.
+let publishableFiles () : string list = publishableFilesUnder repoRoot
 
 // ─── The guard ────────────────────────────────────────────────────────
 
@@ -294,6 +336,59 @@ let private gitIn (cwd: string) (args: string list) =
     let r = ToolUp.Platform.Build.Git.run cwd args
     Expect.equal r.ExitCode 0 (sprintf "git %s failed: %s%s" (String.concat " " args) r.StdOut r.StdErr)
 
+let private walkTests =
+    testList "the surface walk" [
+
+        testCase "an ignored file is not surface; a tracked or untracked-unignored one is, and is reported"
+        <| fun _ ->
+            use scratch = ToolUp.Platform.Testing.TempDir.create "neutrality-walk"
+            let root = scratch.Path
+            gitIn root [ "init"; "-b"; "main" ]
+            gitIn root [ "config"; "user.email"; "neutrality@example.invalid" ]
+            gitIn root [ "config"; "user.name"; "Neutrality probe" ]
+
+            let write (rel: string) (text: string) =
+                let path = Path.Combine(root, rel)
+                Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
+                File.WriteAllText(path, text)
+
+            let leak = $"# probe\n\nsee {NeutralityTokens.Canary} here\n"
+            write ".gitignore" "output/\n"
+            write "samples/App/tracked.md" leak
+            write "samples/App/output/ignored.md" leak
+            gitIn root [ "add"; ".gitignore"; "samples/App/tracked.md" ]
+            gitIn root [ "commit"; "-m"; "base" ]
+            write "samples/App/pending.md" leak
+
+            let surface =
+                publishableFilesUnder root
+                |> List.map (fun f -> Path.GetRelativePath(root, f).Replace('\\', '/'))
+
+            Expect.equal
+                surface
+                [ "samples/App/pending.md"; "samples/App/tracked.md" ]
+                "the ignored file is out; the tracked and the untracked-unignored files are in"
+
+            let hits =
+                publishableFilesUnder root
+                |> List.collect (fun path -> NeutralityTokens.scanFile (Path.GetFileName path) path)
+
+            Expect.equal
+                (hits |> List.map _.File |> List.distinct)
+                [ "pending.md"; "tracked.md" ]
+                "a refused token in a tracked file is still reported"
+
+        testCase "outside a work tree the walk keeps every file it finds"
+        <| fun _ ->
+            use scratch = ToolUp.Platform.Testing.TempDir.create "neutrality-nogit"
+            let path = Path.Combine(scratch.Path, "samples", "output", "probe.md")
+            Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
+            File.WriteAllText(path, "probe\n")
+
+            Expect.isNone (checkoutFiles scratch.Path) "git cannot answer outside a work tree"
+            Expect.equal (publishableFilesUnder scratch.Path) [ path ] "the walk falls back to the prune list"
+    ]
+
 let private sourceTests =
     testList "the token source" [
 
@@ -381,4 +476,4 @@ let private sourceTests =
     ]
 
 let tests =
-    testList "OpenCoreVocabularyNeutrality (Phase 477)" [ surfaceTests; goRedTests; sourceTests ]
+    testList "OpenCoreVocabularyNeutrality (Phase 477)" [ surfaceTests; goRedTests; walkTests; sourceTests ]
