@@ -165,7 +165,11 @@ the dispatch after it, where the kept table costs what the Feliz table does. Of 
 5. **Islands are for hook-owning components only.** A component that owns a hook (display state for a text input, a
    document-wide listener, focus or scrolling, its own requests) stays React behind `TreeLowering.island`; anything
    that is a function of the model is a node. The team manager's directory typeahead and transfer filter, the
-   visibility editor's form (its note is display state) and the command palette's overlay are the cases on main.
+   visibility editor's form (its note is display state), Platform Management's team-name input, typeaheads and
+   public-utility widgets, and the command palette's overlay are the cases on main. The renderer's local buffer
+   (`Binding.local`) does not replace a text input's island yet: flushed on submit, its submit listener outlives each
+   render of the buffer, so a submit commits every value the field held, the empty one first (pinned in
+   `TreeViewParityTests`).
 
 ### A surface the shell imports at boot is deferred
 
