@@ -457,7 +457,7 @@ let private adminFeliz (model: PlatformAdminUI.Model) (dispatch: PlatformAdminUI
 let adminTree (model: PlatformAdminUI.Model) (dispatch: PlatformAdminUI.Msg -> unit) : Feliz.ReactElement =
     lowerTree
         dispatch
-        (PlatformAdminTree.tree adminMsgs widgetMsgs PublicUtilityConfig.defaults operator model dispatch)
+        (PlatformAdminTree.tree adminMsgs widgetMsgs PublicUtilityConfig.defaults (fun () -> operator) model dispatch)
 
 let adminInit () =
     fromUnitInit (fun () -> PlatformAdminUI.init ClientModuleContext.empty) PlatformAdminUI.update
@@ -705,7 +705,7 @@ let private constructedTests =
                     .Dispatch(PlatformAdminUI.TeamsLoaded(Ok teams))
 
             let tree m =
-                PlatformAdminTree.tree adminMsgs widgetMsgs PublicUtilityConfig.defaults operator m ignore
+                PlatformAdminTree.tree adminMsgs widgetMsgs PublicUtilityConfig.defaults (fun () -> operator) m ignore
 
             let built, total =
                 across

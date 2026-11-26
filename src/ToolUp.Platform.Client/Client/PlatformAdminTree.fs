@@ -409,13 +409,14 @@ let private settingsTab (msgs: PlatformAdminMessages) (model: Model) : Node<Msg>
 let private tabs = [ AdminsTab; TeamsTab; SettingsTab ]
 
 /// The page: the three tabs, the active one's panel, the public-utility
-/// widgets and an open confirmation. `dispatch` reaches the islands only;
+/// widgets and an open confirmation. `caller` is read only while the Teams tab,
+/// whose "Self" affordance shows it, is drawn. `dispatch` reaches the islands only;
 /// every node sends its message through the tree.
 let tree
     (msgs: PlatformAdminMessages)
     (widgets: PublicUtilityWidgetsMessages)
     (config: PublicUtilityConfig)
-    (self: Caller)
+    (caller: unit -> Caller)
     (model: Model)
     (dispatch: Msg -> unit)
     : Node<Msg> =
@@ -425,7 +426,7 @@ let tree
         else
             match tab with
             | AdminsTab -> adminsTab msgs model dispatch
-            | TeamsTab -> teamsTab msgs self model dispatch
+            | TeamsTab -> teamsTab msgs (caller ()) model dispatch
             | SettingsTab -> settingsTab msgs model
 
     Nodes.Layout.column "platform-admin" [
@@ -465,7 +466,7 @@ let Surface (props: PlatformAdminUI.SurfaceProps) : Fable.React.ReactElement =
         TreeLowering.treeProps
             (hostOf props.Locale)
             props.Dispatch
-            (tree props.Messages props.Widgets props.Config (PlatformAdminUI.caller ()) props.Model props.Dispatch)
+            (tree props.Messages props.Widgets props.Config PlatformAdminUI.caller props.Model props.Dispatch)
     )
 
 /// The deferred component `PlatformAdminUI.AssignConfirm.view` mounts.
