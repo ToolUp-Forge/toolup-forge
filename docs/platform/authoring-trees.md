@@ -130,6 +130,82 @@ Islands are refreshed on every render of the tree, so an island must not sit ins
 the memo would serve the element it rendered first and the island would stop updating. Place islands
 in the part of the tree a view rebuilds.
 
+## Five rules, and what each shape costs
+
+Each rule below comes with the figure that makes it a rule. The figures are `ClientBench`'s tree lever
+(`levers.treeShapes` in the measurement document `perf-budget-gate.ps1` writes, recorded and not gated): the
+200-row table of the bench, a heading and per row a label, a value and a button, built and rendered to static markup
+under Node with React's production build, the minimum of three runs. `viewPerDispatchUs`'s ceiling, 4,400 µs, is the
+line a shape is read against; it times the Feliz table's construction alone, which is why every tree figure here is
+construction and render together (`renderToStaticMarkup`), beside the Feliz table timed the same way.
+
+| Shape: 200 rows, a label, a value and a button each | Build (µs) | Build and render to markup (µs) | Markup (characters) | Browser dispatch, desktop / 6x CPU (ms) |
+|---|---:|---:|---:|---:|
+| Feliz table, the reference | 313.3 | 433.3 | 12,960 | 1.72 / 10.61 |
+| `DataGrid`, a `CellKind.Button` column | 1.6 | 1,479.7 | 45,086 | 4.61 / 30.05 |
+| A row of boxes per record, `Text` cells | 67.0 | 4,471.8 | 170,033 | 7.79 / 60.67 |
+| The same, rows kept with `Keep` | 12.3 | 3,965.6 | 171,633 | 1.02 / 10.20 |
+| A row of boxes per record, `Markdown` cells | 66.8 | 6,971.6 | 183,633 | 9.84 / 97.18 |
+
+The browser column is `levers.browserDispatch`: one host dispatch of the same table in headless Edge, the view rebuilt,
+React's commit and a forced layout, the median of 30 samples, the minimum of three runs. Kept rows pay a first render
+in full (the Node column renders each pass from nothing, so the subtree memo has nothing to serve); what `Keep` buys is
+the dispatch after it, where the kept table costs what the Feliz table does. Of a tree's render, the renderer's own
+`RenderContext.create` is 64.0 µs for the boxes and 2.2 µs for the grid: the rest is the walk and React's elements.
+
+1. **The table form is `DataGrid`.** Rows of the same fields are a grid: `Fuaran.grid` with a column per field and,
+   for a per-row action, a `CellKind.Button` column whose message carries the row's identity. A row of boxes per
+   record is the shape that cost the original measurement its verdict: a node per cell, each with its own wrapper.
+2. **Running text is `Text`.** `Nodes.text` writes the vocabulary's `Text` node, which is never parsed. `Markdown`
+   is for text that carries formatting, and it pays a parse per cell and a raw-HTML sink React reparses on commit.
+3. **Boxes are for layout.** `Nodes.Layout.row` / `column` / `grid` arrange regions of a page (a header, a panel, an
+   action bar), not the cells of a table.
+4. **Every node needs a stable id.** A builder takes the id of the node it returns, a list item takes its id from the
+   item's identity (`Nodes.Ids.keyed`), and the id is what the renderer keys reconciliation and the subtree memo on.
+5. **Islands are for hook-owning components only.** A component that owns a hook (display state for a text input, a
+   document-wide listener, focus or scrolling, its own requests) stays React behind `TreeLowering.island`; anything
+   that is a function of the model is a node. The team manager's directory typeahead and transfer filter, the
+   visibility editor's form (its note is display state) and the command palette's overlay are the cases on main.
+
+### A surface the shell imports at boot is deferred
+
+The node vocabulary carries `Fuaran.Compute.DataFrame` and `Fuaran.Core.Column` in its closure, so a view that builds
+its tree in the module the shell reads at boot puts all of it in the first load, and the gate refuses that build by
+name. The team manager, the visibility editor and the palette are in the shell's boot closure, so each builds its tree
+in a file of its own (`TeamManagerTree`, `ModuleVisibilityAdminTree`, `CommandPaletteTree`) that its module mounts
+through `TreeSurface.deferred` with a dynamic import of the file:
+
+```fsharp skip=fragment
+[<Emit("$0.then(m => m.Surface)")>]
+let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
+
+let private loadSurface () = surfaceOf (importDynamic "./TeamManagerTree.fs")
+
+let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
+    PageContent.FullWidth(
+        TreeSurface.deferred "TeamManagerTree.Surface" loadSurface {|
+            Model = model
+            Dispatch = ctx.Dispatch
+            Messages = ctx.Messages.TeamManager
+            Locale = ctx.Locale
+        |}
+    )
+```
+
+Fable spells the import of an `.fs` file as the compiled module's path, so the static module needs no compile-time
+reference to the tree file, which comes after it. The tree file exports a `Surface` component that builds the tree and
+draws it with `TreeLoweringRuntime.Tree (TreeLowering.treeProps host props.Dispatch node)`, and ships a `.js` re-export
+beside it for a feed consumer, as `TreeLoweringRuntime.js` does. The palette is mounted this way only while it is
+open, so a shell that never opens it never fetches the renderer; its document-wide shortcut stays in the static module.
+
+### A row that shows more than its record
+
+The `Keep` rule asks a row's build to depend on its input alone, and a real row rarely does: a team row shows the
+catalog's strings and whether it is the active team, a member row the caller's role. The team manager keeps such rows
+with one `Keep` per context, replaced when the context changes (the catalog by identity, the scalars by value), so a
+row node is reused while both its record and its context are the same, and every row is rebuilt once when the context
+moves.
+
 ## A `Model` field or `Binding.State`
 
 - **A `Model` field** is anything `update` reads or the server must hear about: a form's values, a
