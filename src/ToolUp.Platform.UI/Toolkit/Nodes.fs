@@ -57,27 +57,28 @@ module Nodes =
     [<RequireQualifiedAccess>]
     module Layout =
 
-        /// A row of children, wrapping: the layout of an action bar.
+        /// A row of children, wrapping: the layout of an action bar. Its
+        /// children sit 8 px apart (the renderer writes a gap in pixels).
         let row (id: string) (children: Node<'Msg> list) : Node<'Msg> =
             Fuaran.box id {
                 Defaults.box with
-                    Layout = BoxLayout.Flex(Orientation.Horizontal, true, Some 2)
+                    Layout = BoxLayout.Flex(Orientation.Horizontal, true, Some 8)
                     Children = children
             }
 
-        /// A column of children.
+        /// A column of children, 12 px apart.
         let column (id: string) (children: Node<'Msg> list) : Node<'Msg> =
             Fuaran.box id {
                 Defaults.box with
-                    Layout = BoxLayout.Flex(Orientation.Vertical, false, Some 3)
+                    Layout = BoxLayout.Flex(Orientation.Vertical, false, Some 12)
                     Children = children
             }
 
-        /// A grid of `columns` equal columns.
+        /// A grid of `columns` equal columns, its cells 12 px apart.
         let grid (id: string) (columns: int) (children: Node<'Msg> list) : Node<'Msg> =
             Fuaran.box id {
                 Defaults.box with
-                    Layout = BoxLayout.Grid(columns, None, Some 3)
+                    Layout = BoxLayout.Grid(columns, None, Some 12)
                     Children = children
             }
 

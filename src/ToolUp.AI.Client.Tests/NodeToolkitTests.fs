@@ -252,6 +252,33 @@ let private panelTests =
             Expect.equal headings [ 3, "Limits" ] "the probe sees a known heading")
     ]
 
+/// Every `gap` the mounted markup of `node` declares, in document order: the
+/// style a browser reads, not the value the tree was built with.
+let private gapsOf (node: Node<obj>) : string list =
+    let html = ToolUp.Platform.Testing.ViewMount.mount (renderTree node)
+
+    [
+        for m in System.Text.RegularExpressions.Regex.Matches(html, @"gap:\s*([0-9.]+px)") do
+            m.Groups[1].Value
+    ]
+
+// The renderer writes a box's gap as pixels, so each shape's spacing is pinned
+// in the markup it draws, in the unit a browser reads.
+let private layoutTests =
+    let children: Node<obj> list = [ Nodes.text "a" "A"; Nodes.text "b" "B" ]
+
+    testList "the layout shapes" [
+
+        testCase "a row spaces its children 8 px apart" (fun () ->
+            Expect.equal (gapsOf (Nodes.Layout.row "r" children)) [ "8px" ] "row gap")
+
+        testCase "a column spaces its children 12 px apart" (fun () ->
+            Expect.equal (gapsOf (Nodes.Layout.column "c" children)) [ "12px" ] "column gap")
+
+        testCase "a grid spaces its cells 12 px apart" (fun () ->
+            Expect.equal (gapsOf (Nodes.Layout.grid "g" 2 children)) [ "12px" ] "grid gap")
+    ]
+
 let private contextTests =
     let keptRow: Node<obj> = Nodes.text "kept-row" "Kept"
 
@@ -336,4 +363,10 @@ let private contextTests =
     ]
 
 let tests =
-    testList "Node toolkit, Keep and the kept render context" [ toolkitTests; keepTests; panelTests; contextTests ]
+    testList "Node toolkit, Keep and the kept render context" [
+        toolkitTests
+        keepTests
+        panelTests
+        layoutTests
+        contextTests
+    ]
