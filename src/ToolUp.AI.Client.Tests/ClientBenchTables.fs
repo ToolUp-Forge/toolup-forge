@@ -73,11 +73,15 @@ let benchTree (model: BenchModel) : Fuaran.UI.Types.Node<BenchMsg> =
             ]
     ]
 
-/// The tree drawn as a deferred surface's file draws it: built and rendered in
-/// one render, through the renderer directly.
-let benchTreeView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactElement =
+/// A table's tree drawn as a deferred surface's file draws it: built and
+/// rendered in one render, through the renderer directly.
+let private drawTree
+    (tree: BenchModel -> Fuaran.UI.Types.Node<BenchMsg>)
+    (model: BenchModel)
+    (dispatch: BenchMsg -> unit)
+    : ReactElement =
     TreeLoweringRuntime.Tree(
-        TreeLowering.treeProps (TreeLowering.TreeHost.ofSources HostBindingSources.empty) dispatch (benchTree model)
+        TreeLowering.treeProps (TreeLowering.TreeHost.ofSources HostBindingSources.empty) dispatch (tree model)
     )
 
 /// One row of the kept table, built once per row record: the toolkit's idiom,
@@ -105,12 +109,6 @@ let benchKeptTree (model: BenchModel) : Fuaran.UI.Types.Node<BenchMsg> =
         Nodes.heading "tick" 2 (sprintf "Tick %d" model.Tick)
         yield! Keep.list keptRow model.Rows
     ]
-
-/// The kept table drawn as `benchTreeView` draws the rebuilt one.
-let benchKeptTreeView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactElement =
-    TreeLoweringRuntime.Tree(
-        TreeLowering.treeProps (TreeLowering.TreeHost.ofSources HostBindingSources.empty) dispatch (benchKeptTree model)
-    )
 
 /// The rows as boxes with each cell as `Markdown`: the text carrier the
 /// toolkit used before the `Text` node.
@@ -162,21 +160,6 @@ let benchGridTree (model: BenchModel) : Fuaran.UI.Types.Node<BenchMsg> =
                     ]
             }
     ]
-
-/// The grid drawn as `benchTreeView` draws the boxes.
-let benchGridTreeView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactElement =
-    TreeLoweringRuntime.Tree(
-        TreeLowering.treeProps (TreeLowering.TreeHost.ofSources HostBindingSources.empty) dispatch (benchGridTree model)
-    )
-
-/// The boxes with `Markdown` cells drawn the same way.
-let benchMarkdownTreeView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactElement =
-    TreeLoweringRuntime.Tree(
-        TreeLowering.treeProps
-            (TreeLowering.TreeHost.ofSources HostBindingSources.empty)
-            dispatch
-            (benchMarkdownTree model)
-    )
 
 /// The rows a run measures, deterministic so the two tables carry the same data.
 let benchRows (count: int) : Row[] =
@@ -392,10 +375,10 @@ let mount (kind: string) (rows: int) (container: obj) : obj =
 
     match kind with
     | "feliz" -> table benchView
-    | "tree" -> table benchTreeView
-    | "tree-kept" -> table benchKeptTreeView
-    | "tree-grid" -> table benchGridTreeView
-    | "tree-markdown" -> table benchMarkdownTreeView
+    | "tree" -> table (drawTree benchTree)
+    | "tree-kept" -> table (drawTree benchKeptTree)
+    | "tree-grid" -> table (drawTree benchGridTree)
+    | "tree-markdown" -> table (drawTree benchMarkdownTree)
     | "team-manager-feliz" ->
         mountModule container (fun m -> FelizReferenceViews.TeamManager.body teamMsgs m ignore) (teamManager ())
     | "team-manager-tree" ->
