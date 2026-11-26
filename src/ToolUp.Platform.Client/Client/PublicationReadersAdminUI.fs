@@ -123,11 +123,20 @@ let private ReadersPanel (msgs: TeamManagerMessages) =
                         ]
                     ]
 
-                    UserDirectoryTypeahead.userTypeahead
-                        userId
-                        setUserId
-                        msgs.PublicationReaderUserPlaceholder
-                        UserDirectoryTypeahead.pickUserId
+                    // The typeahead's input carries only a placeholder, so a
+                    // label that only assistive technology reads wraps it and
+                    // names it.
+                    Html.label [
+                        prop.className "block"
+                        prop.children [
+                            Html.span [ prop.className "sr-only"; prop.text msgs.PublicationReaderUserPlaceholder ]
+                            UserDirectoryTypeahead.userTypeahead
+                                userId
+                                setUserId
+                                msgs.PublicationReaderUserPlaceholder
+                                UserDirectoryTypeahead.pickUserId
+                        ]
+                    ]
 
                     Html.div [
                         Forms.Button.primaryWith
