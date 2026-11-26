@@ -12,7 +12,8 @@
 //      production build, as a deployment's is.
 //   2. Serves the bundle cross-origin isolated (so `performance.now()` resolves to 5 us) and drives the browser
 //      over the DevTools protocol with `--js-flags=--expose-gc`.
-//   3. Per profile (desktop; 6x CPU throttling, the study's low phone) and per arm (feliz, tree, the tree with its rows kept, then feliz again
+//   3. Per profile (desktop; 6x CPU throttling, the study's low phone) and per arm (feliz, tree, the tree with its rows kept, the rows as a DataGrid with a button column,
+//      the boxes with Markdown cells, then feliz again
 //      as the control for drift across the run): mounts the table, runs warm-ups, then samples one dispatch each:
 //      `gc()`, the next model rendered synchronously (`flushSync`), then `offsetHeight` forced. `render` is the
 //      rebuild, React's render and commit; `layout` the forced layout after it; `total` both.
@@ -42,7 +43,7 @@ const PROFILES = [
     { name: "desktop", cpu: 1 },
     { name: "low phone: 6x CPU", cpu: 6 },
 ];
-const ARMS = ["feliz", "tree", "tree-kept", "feliz-control"];
+const ARMS = ["feliz", "tree", "tree-kept", "tree-grid", "tree-markdown", "feliz-control"];
 
 const report = (value) => {
     console.log("CLIENTBENCH-BROWSER " + JSON.stringify(value));
@@ -249,7 +250,7 @@ try {
 }
 
 const medianOf = (prof, arm) => profiles.find((p) => p.profile === prof).arms.find((a) => a.arm === arm).totalMs.median;
-const summary = PROFILES.map((p) => `${p.name}: feliz ${medianOf(p.name, "feliz")} ms, tree ${medianOf(p.name, "tree")} ms, tree with kept rows ${medianOf(p.name, "tree-kept")} ms, feliz again ${medianOf(p.name, "feliz-control")} ms`).join("; ");
+const summary = PROFILES.map((p) => `${p.name}: feliz ${medianOf(p.name, "feliz")} ms, tree ${medianOf(p.name, "tree")} ms, tree with kept rows ${medianOf(p.name, "tree-kept")} ms, DataGrid ${medianOf(p.name, "tree-grid")} ms, boxes with Markdown ${medianOf(p.name, "tree-markdown")} ms, feliz again ${medianOf(p.name, "feliz-control")} ms`).join("; ");
 report({
     observed: refusals.length === 0,
     reason: refusals.length ? refusals.join("; ") : undefined,

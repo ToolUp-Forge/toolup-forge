@@ -109,6 +109,72 @@ let benchKeptTreeView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactEl
         TreeLowering.treeProps (TreeLowering.TreeHost.ofSources HostBindingSources.empty) dispatch (benchKeptTree model)
     )
 
+/// The rows as boxes with each cell as `Markdown`: the text carrier the
+/// toolkit used before the `Text` node.
+let benchMarkdownTree (model: BenchModel) : Fuaran.UI.Types.Node<BenchMsg> =
+    Nodes.Layout.column "bench" [
+        Nodes.heading "tick" 2 (sprintf "Tick %d" model.Tick)
+        for row in model.Rows do
+            let id = "r" + string row.Id
+
+            Nodes.Layout.row id [
+                Fuaran.UI.Fuaran.markdown (id + "-label") row.Label
+                Fuaran.UI.Fuaran.markdown (id + "-value") (string row.Value)
+                Nodes.Actions.button (id + "-bump") Fuaran.UI.Types.ButtonVariant.Secondary "+" false (Bump row.Id)
+            ]
+    ]
+
+/// The same rows as the vocabulary's table: a `DataGrid` whose third column is
+/// a button per row, the row's identity in its message. The table form a
+/// settings surface authors.
+let benchGridTree (model: BenchModel) : Fuaran.UI.Types.Node<BenchMsg> =
+    let cell (key: string) (row: Fuaran.UI.Types.Row) = string row[key]
+
+    Nodes.Layout.column "bench" [
+        Nodes.heading "tick" 2 (sprintf "Tick %d" model.Tick)
+        Fuaran.UI.Fuaran.grid
+            "bench-grid"
+            (fun (row: Row) ->
+                Map [
+                    "id", box (string row.Id)
+                    "label", box row.Label
+                    "value", box (string row.Value)
+                ])
+            {
+                Fuaran.UI.Defaults.grid with
+                    Source = Fuaran.UI.Types.Binding.Static(Some(Seq.ofArray model.Rows))
+                    RowKey = cell "id"
+                    Columns = [
+                        Fuaran.UI.Column.text "Label" (cell "label")
+                        Fuaran.UI.Column.text "Value" (cell "value")
+                        {
+                            Fuaran.UI.Defaults.column with
+                                Label = "Bump"
+                                Kind =
+                                    Fuaran.UI.Types.CellKind.Button(
+                                        Fuaran.UI.Types.TextSource.Literal "+",
+                                        fun row -> Fuaran.UI.Action.dispatch (Bump(int (cell "id" row)))
+                                    )
+                        }
+                    ]
+            }
+    ]
+
+/// The grid drawn as `benchTreeView` draws the boxes.
+let benchGridTreeView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactElement =
+    TreeLoweringRuntime.Tree(
+        TreeLowering.treeProps (TreeLowering.TreeHost.ofSources HostBindingSources.empty) dispatch (benchGridTree model)
+    )
+
+/// The boxes with `Markdown` cells drawn the same way.
+let benchMarkdownTreeView (model: BenchModel) (dispatch: BenchMsg -> unit) : ReactElement =
+    TreeLoweringRuntime.Tree(
+        TreeLowering.treeProps
+            (TreeLowering.TreeHost.ofSources HostBindingSources.empty)
+            dispatch
+            (benchMarkdownTree model)
+    )
+
 /// The rows a run measures, deterministic so the two tables carry the same data.
 let benchRows (count: int) : Row[] =
     Array.init count (fun i -> {
@@ -134,7 +200,7 @@ type private BodyProps = {|
 /// Both tables are built inside a component's render, as a module view is.
 let private Body (props: BodyProps) : ReactElement = props.View props.Model props.Dispatch
 
-/// Mount the table named `kind` (`feliz`, `tree` or `tree-kept`) into `container` and return
+/// Mount the table named `kind` (`feliz`, `tree`, `tree-kept`, `tree-grid` or `tree-markdown`) into `container` and return
 /// a handle whose `dispatch` renders the next model synchronously: one row's
 /// value bumped and the tick advanced, the view rebuilt whole, as a host
 /// dispatch rebuilds it. Layout is the caller's to force and time.
@@ -144,7 +210,9 @@ let mount (kind: string) (rows: int) (container: obj) : obj =
         | "feliz" -> benchView
         | "tree" -> benchTreeView
         | "tree-kept" -> benchKeptTreeView
-        | other -> failwithf "unknown table '%s': expected feliz, tree or tree-kept" other
+        | "tree-grid" -> benchGridTreeView
+        | "tree-markdown" -> benchMarkdownTreeView
+        | other -> failwithf "unknown table '%s': expected feliz, tree, tree-kept, tree-grid or tree-markdown" other
 
     let root = createRoot container
     let mutable model = { Rows = benchRows rows; Tick = 0 }

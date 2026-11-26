@@ -738,6 +738,117 @@ let private startLoop (rng: Lcg) (probe: LoopProbe) =
 
 // ─── The run ───────────────────────────────────────────────────────────
 
+// ─── The 200-row table as trees, per shape ───────────────────────────────
+//
+// Recorded, not gated: what each tree shape costs to build and render, beside
+// the Feliz table `viewPerDispatchUs` times. Building a Feliz view allocates
+// elements; a tree's element is a component React renders later, so each shape
+// is timed twice: building it, and building it plus `renderToStaticMarkup`,
+// which runs every component on both sides. The second figure is the one a
+// tree shape is compared on, and its markup size is the falsifier for a
+// renderer that defers work: the gap between the two figures stays small for
+// Feliz and carries the renderer's walk for a tree.
+
+[<Import("renderToStaticMarkup", "react-dom/server")>]
+let private renderToStaticMarkup (element: ReactElement) : string = jsNative
+
+/// The microseconds per pass, the minimum over `rounds` rounds of 200 passes.
+let private perPassUs (rounds: int) (pass: int -> unit) : float =
+    [
+        for _ in 1..rounds do
+            let start = now ()
+
+            for i in 1..200 do
+                pass i
+
+            (now () - start) * 1000.0 / 200.0
+    ]
+    |> List.min
+
+let private treeElement (node: Fuaran.UI.Types.Node<BenchMsg>) : ReactElement =
+    let props =
+        TreeLowering.treeProps (TreeLowering.TreeHost.ofSources HostBindingSources.empty) ignore<BenchMsg> node
+
+    ReactLegacy.createElement (unbox<ReactElement> TreeLoweringRuntime.Tree, box props)
+
+/// Each shape's build and build-plus-markup figures, the markup's size and the
+/// renderer's two pre-render stages for the tree shapes.
+let private measureTreeShapes (say: string -> unit) (rounds: int) : obj =
+    let rows = benchRows BenchRows
+    let modelAt (i: int) = { Rows = rows; Tick = i }
+    let markupRounds = max 1 (rounds / 3)
+
+    let figure (name: string) (build: BenchModel -> ReactElement) =
+        let buildUs = perPassUs rounds (fun i -> sink <- box (build (modelAt i)))
+
+        let markupUs =
+            perPassUs markupRounds (fun i -> sink <- box (renderToStaticMarkup (build (modelAt i))))
+
+        let sample = renderToStaticMarkup (build (modelAt 1))
+        let buttons = sample.Split("<button").Length - 1
+
+        say (
+            sprintf
+                "200-row table per pass, %s: build %s us · build + static markup %s us · %d chars, %d buttons"
+                name
+                (fmt buildUs)
+                (fmt markupUs)
+                sample.Length
+                buttons
+        )
+
+        name,
+        createObj [
+            "buildUs" ==> round3 buildUs
+            "buildAndMarkupUs" ==> round3 markupUs
+            "markupChars" ==> sample.Length
+            "buttons" ==> buttons
+        ]
+
+    let stages (name: string) (tree: BenchModel -> Fuaran.UI.Types.Node<BenchMsg>) =
+        let node = tree (modelAt 1)
+        let nodeUs = perPassUs rounds (fun i -> sink <- box (tree (modelAt i)))
+
+        let contextUs =
+            perPassUs rounds (fun _ ->
+                sink <-
+                    box (
+                        Fuaran.UI.Renderer.Render.RenderContext.create
+                            Fuaran.UI.Renderer.BindingResolver.empty
+                            ignore<BenchMsg>
+                            node
+                    ))
+
+        say (
+            sprintf
+                "%s stages per pass: build the Node value %s us · RenderContext.create %s us"
+                name
+                (fmt nodeUs)
+                (fmt contextUs)
+        )
+
+        name, createObj [ "nodeUs" ==> round3 nodeUs; "renderContextCreateUs" ==> round3 contextUs ]
+
+    let shapes = [
+        figure "feliz" (fun m -> benchView m ignore)
+        figure "boxes-markdown" (benchMarkdownTree >> treeElement)
+        figure "boxes-text" (benchTree >> treeElement)
+        figure "boxes-text-kept" (benchKeptTree >> treeElement)
+        figure "datagrid-button" (benchGridTree >> treeElement)
+    ]
+
+    let stageFigures = [
+        stages "boxes-markdown" benchMarkdownTree
+        stages "boxes-text" benchTree
+        stages "datagrid-button" benchGridTree
+    ]
+
+    createObj [
+        "rows" ==> BenchRows
+        "shapes" ==> createObj shapes
+        "stages" ==> createObj stageFigures
+    ]
+
 let private runAsync (argv: string[]) : Async<int> = async {
     let options = parseOptions argv
     let rng = Lcg options.Seed
@@ -1153,6 +1264,8 @@ let private runAsync (argv: string[]) : Async<int> = async {
             say "browser dispatch: not measured (pass --browser-dispatch; the perf-budget gate script does)"
             null
 
+    let treeShapes = measureTreeShapes say options.Rounds
+
     // ── The measurement document ──
     let samples = [|
         sample
@@ -1212,6 +1325,7 @@ let private runAsync (argv: string[]) : Async<int> = async {
             "renderScopeComposerStore" ==> ComposerScope.deltas composerStore
             "renderScopeShellContexts" ==> ComposerScope.deltas shellContexts
             "browserDispatch" ==> browserDispatch
+            "treeShapes" ==> treeShapes
         ]
 
     let document =
