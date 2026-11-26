@@ -42,6 +42,27 @@ module Memo =
         let memo = oneEntryBy sameRef compute
         fun input -> memo input
 
+    /// `incoming`, with every item that equals the item `held` has under the
+    /// same key replaced by that held object. A list loaded again arrives as new
+    /// objects whatever it says; folded into the model through this, an item
+    /// that did not change is still the object it was, so a memo or a kept row
+    /// keyed on it by reference holds across the reload. Order and content are
+    /// `incoming`'s; with nothing held it is `incoming` itself.
+    let internal keepEqual (key: 'T -> 'Key) (held: 'T list) (incoming: 'T list) : 'T list =
+        if held.IsEmpty then
+            incoming
+        else
+            let byKey = System.Collections.Generic.Dictionary<'Key, 'T>()
+
+            for item in held do
+                byKey[key item] <- item
+
+            incoming
+            |> List.map (fun item ->
+                match byKey.TryGetValue(key item) with
+                | true, was when was = item -> was
+                | _ -> item)
+
     /// `byRef` over two inputs, both compared by reference.
     let byRef2 (compute: 'a -> 'b -> 'v) : 'a -> 'b -> 'v =
         let memo =

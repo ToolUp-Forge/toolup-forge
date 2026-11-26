@@ -667,6 +667,26 @@ let private constructedTests =
             Expect.isTrue (built <= rowSize) (sprintf "built %d of %d (a one-row page builds %d)" built total rowSize)
             Expect.isTrue (total > 1000) "the page holds the 200 rows")
 
+        testCase "the team manager: the list loaded again with one team renamed builds that row" (fun () ->
+            // A server response's records are all new objects; `update` keeps
+            // the ones that say what the page already holds.
+            let harness = (teamInit ()).Dispatch(TeamManagerUI.TeamsLoaded(manyTeams 200))
+
+            let built, total =
+                across
+                    (fun m -> TeamManagerTree.tree msgs m ignore)
+                    harness
+                    (TeamManagerUI.TeamsLoaded(renamed 7 (manyTeams 200) (fun t -> { t with Name = "Renamed" })))
+
+            let rowSize, _ =
+                across
+                    (fun m -> TeamManagerTree.tree msgs m ignore)
+                    (teamInit ())
+                    (TeamManagerUI.TeamsLoaded [ team "x" "X" ])
+
+            Expect.isTrue (built <= rowSize) (sprintf "built %d of %d (a one-row page builds %d)" built total rowSize)
+            Expect.isTrue (total > 1000) "the page holds the 200 rows")
+
         testCase "the visibility editor: the rule's kind rebuilds its own section" (fun () ->
             let harness = visibilityLoaded ()
 

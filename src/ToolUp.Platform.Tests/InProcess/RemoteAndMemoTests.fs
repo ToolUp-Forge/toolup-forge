@@ -207,6 +207,26 @@ let private memoLaws =
             memo "xyz" |> ignore
             Expect.equal calls.Value 2 "a different key recomputes"
         }
+
+        test "keepEqual serves the held object for an item that did not change" {
+            let held = [ {| Id = "a"; Name = "Alpha" |}; {| Id = "b"; Name = "Beta" |} ]
+
+            let incoming = [
+                {| Id = "b"; Name = "Beta" |}
+                {| Id = "a"; Name = "Renamed" |}
+                {| Id = "c"; Name = "Gamma" |}
+            ]
+
+            let kept = Memo.keepEqual (fun item -> item.Id) held incoming
+            Expect.equal kept incoming "the list says what the incoming one says, in its order"
+            Expect.isTrue (obj.ReferenceEquals(kept[0], held[1])) "an equal item is the held object"
+            Expect.isTrue (obj.ReferenceEquals(kept[1], incoming[1])) "a changed item is the incoming one"
+            Expect.isTrue (obj.ReferenceEquals(kept[2], incoming[2])) "a new item is the incoming one"
+
+            Expect.isTrue
+                (obj.ReferenceEquals(Memo.keepEqual (fun item -> item.Id) [] incoming, incoming))
+                "nothing held"
+        }
     ]
 
 [<Tests>]

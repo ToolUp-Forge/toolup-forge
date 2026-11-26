@@ -598,7 +598,11 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
     match msg with
     | LoadTeams -> model, [ loadTeams ]
 
-    | TeamsLoaded teams -> { model with Teams = teams }, teams |> List.map (fun t -> loadMembers t.TeamId)
+    | TeamsLoaded teams ->
+        // A team the reload did not change stays the record the page already
+        // holds, so its row is not built again.
+        let teams = Memo.keepEqual (fun (t: TeamInfo) -> t.TeamId) model.Teams teams
+        { model with Teams = teams }, teams |> List.map (fun t -> loadMembers t.TeamId)
 
     | LoadActiveTeam -> model, [ loadActiveTeam ]
 
