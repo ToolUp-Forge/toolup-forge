@@ -40,6 +40,7 @@
         <Compile Include="CoEditSmokeTests.fs" />
         <Compile Include="OfflineSmokeTests.fs" />
         <Compile Include="InviteModalSmokeTests.fs" />
+        <Compile Include="PaletteSmokeTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\..\..\src\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />

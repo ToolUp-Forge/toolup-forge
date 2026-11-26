@@ -12,6 +12,7 @@ let private registeredTests =
         CoEditSmokeTests.tests
         OfflineSmokeTests.tests
         InviteModalSmokeTests.tests
+        PaletteSmokeTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

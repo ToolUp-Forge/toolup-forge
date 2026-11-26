@@ -14,7 +14,7 @@ open MinimalClient
 
 // ─── Phase 761 — the page the browser smoke harness drives ───────────
 //
-// One page, two scenarios, selected by query string. Everything of
+// One page, its scenarios selected by query string. Everything of
 // substance is imported: the CRDT pump is `ToolUp.Platform.CrdtSyncClient`,
 // the queue and the routed coordinator are `ToolUp.Offline.Client`, and
 // the wiring that joins them is `samples/MinimalClient`'s own — the
@@ -422,6 +422,63 @@ let private startInvite () =
     root?render (InvitePage())
     container.setAttribute ("data-ready", "true")
 
+// ─── The command palette, opened through its public component ──────
+//
+// `?mode=palette` mounts `Components.CommandPalette.CommandPalette` open,
+// as the shell does: its tree arrives on demand through the deferred surface,
+// so the page reaches the overlay by the same path a shell's first Ctrl+K
+// does. The page holds the query and the highlight as the shell model would;
+// `#palette-state` carries the query the model received.
+
+let private paletteEntry (id: string) (name: string) (group: string) : Components.CommandPalette.CommandPaletteEntry = {
+    SidebarId = id
+    ModuleName = name
+    PageTitle = None
+    Group = Some group
+    Icon = Feliz.Html.none
+}
+
+let private paletteEntries = [
+    paletteEntry "teams" "Team Manager" "Team Management"
+    paletteEntry "visibility" "Module Visibility" "Team Management"
+    paletteEntry "platform" "Platform Management" "Platform Management"
+    paletteEntry "kb" "Knowledge Base" "Workspace"
+]
+
+[<Feliz.ReactComponent>]
+let private PalettePage () : Feliz.ReactElement =
+    let query, setQuery = Feliz.React.useState (fun () -> "")
+    let highlight, setHighlight = Feliz.React.useState (fun () -> 0)
+    let isOpen, setOpen = Feliz.React.useState (fun () -> true)
+
+    Feliz.Html.div [
+        Feliz.Html.span [
+            Feliz.prop.id "palette-state"
+            Feliz.prop.custom ("data-query", query)
+            Feliz.prop.custom ("data-open", (if isOpen then "true" else "false"))
+        ]
+        Components.CommandPalette.CommandPalette {
+            IsOpen = isOpen
+            Query = query
+            Highlight = highlight
+            Entries = paletteEntries
+            OnOpen = fun () -> setOpen true
+            OnDismiss = fun () -> setOpen false
+            OnQueryChanged =
+                fun q ->
+                    setQuery q
+                    setHighlight 0
+            OnHighlightMoved = fun d -> setHighlight (highlight + d)
+            OnSelect = fun _ -> setOpen false
+        }
+    ]
+
+let private startPalette () =
+    let container = document.getElementById "fixture"
+    let root = createRoot container
+    root?render (PalettePage())
+    container.setAttribute ("data-ready", "true")
+
 // ─── Entry point ─────────────────────────────────────────────────────
 
 window?__smoke <- createObj [ "strayEntitySync" ==> 0 ]
@@ -438,4 +495,5 @@ do
     match queryParam "mode" "coedit" with
     | "offline" -> startOffline docId sessionId (fault = "queue")
     | "invite" -> startInvite ()
+    | "palette" -> startPalette ()
     | _ -> startCoEdit docId sessionId (fault = "relay")

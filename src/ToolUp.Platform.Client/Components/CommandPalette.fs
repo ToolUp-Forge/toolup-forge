@@ -349,6 +349,8 @@ let CommandPalette (props: CommandPaletteProps) =
     )
 
     if props.IsOpen then
-        TreeSurface.deferred "CommandPaletteTree.Surface" loadSurface props
+        // `deferred` hands its props to React as they are, and the surface's
+        // one parameter is read as the `props` field of that object.
+        TreeSurface.deferred "CommandPaletteTree.Surface" loadSurface {| props = props |}
     else
         Html.none

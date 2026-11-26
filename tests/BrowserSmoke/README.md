@@ -1,8 +1,9 @@
 # Browser smoke harness
 
-The repo's real-browser verification tier. Two scenarios: two contexts co-editing one
-document (Phase 535), and an edit made with the link down that queues and then applies
-(Phases 24 / 760).
+The repo's real-browser verification tier. Eight scenarios over four pages: two contexts
+co-editing one document, an edit made with the link down that queues and then applies,
+the team manager's invite dialog clicked inside and on its backdrop, and the command
+palette opened through its public component and narrowed by a query.
 
 ```powershell
 dotnet run --project Build.fsproj -- VerifyBrowserSmoke
@@ -35,8 +36,8 @@ gate slower without making it stronger:
 | that the **Offline** client tier still transpiles | **this gate's own fixture compile** — the only one in CI. See the tier table in [`docs/platform/testing-conventions.md`](../../docs/platform/testing-conventions.md); `samples/MinimalClient` covers it locally, but no CI job compiles the sample |
 | a seam's contract across implementations | the contract packs in `ToolUp.Platform.Tests/Contracts` |
 
-Two scenarios is not a target to grow past. If the count starts climbing, the question to
-ask is which of them could have been one of the rows above.
+The count is not a target to grow past. If it starts climbing, the question to ask is
+which of them could have been one of the rows above.
 
 ## How it fits together
 
@@ -48,9 +49,10 @@ tests/BrowserSmoke/
 └── ToolUp.BrowserSmoke.Tests/   the harness (an Expecto console runner)
     ├── FixtureHost.fs           HttpListener: the bundle, the co-edit API over a real ICrdtDocumentStore, and the SSE relay endpoint
     ├── Harness.fs               browser lifetime, the waits, the retry, the failure artefacts
-    ├── CoEditSmokeTests.fs      scenario 1
-    ├── OfflineSmokeTests.fs     scenario 2
-    └── InviteModalSmokeTests.fs scenario 3: the team manager's invite dialog, clicked inside and on its backdrop
+    ├── CoEditSmokeTests.fs      co-edit: two contexts on one document, and its go-red
+    ├── OfflineSmokeTests.fs     offline: an edit queued with the link down, and its go-red
+    ├── InviteModalSmokeTests.fs the team manager's invite dialog, clicked inside and on its backdrop
+    └── PaletteSmokeTests.fs     the command palette, opened through its deferred surface and narrowed by a query
 ```
 
 The code **under test** is the shipped source: `ToolUp.Platform.CrdtSyncClient`,
@@ -93,9 +95,10 @@ is untouched **by construction** rather than by convention.
 4. **Give it a go-red.** A scenario that has never been observed failing is a scenario that
    might be asserting nothing. Both existing scenarios ship with theirs as a permanent
    case — see below.
-5. **Bump `browserScenarioFloor` in `Build.fs`** in the same commit. The target fails below
-   it, which is what stops a runner with no browser reporting green while every scenario
-   silently skips.
+5. **Move the `BrowserSmoke` row's `Floor.Exactly` in `GateManifest.fs`** in the same
+   commit. It counts passed cases, the scenarios and the registration guard's two. The
+   target fails off it, which is what stops a runner with no browser reporting green while
+   every scenario silently skips.
 6. Rebuild the bundle: the target does it for you, but while iterating,
    `dotnet fable -o output --noCache` then `npm run build` inside `fixture/`.
 

@@ -546,13 +546,14 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
     ]
     // Eight real-browser scenarios, and the only CI transpile of
     // `ToolUp.Offline.Client`. The floor is exact: each scenario is
-    // expensive, so losing one silently is what it must catch.
+    // expensive, so losing one silently is what it must catch. It counts
+    // the passed cases, which are the eight and the registration guard's two.
     elsewhere "BrowserSmoke" (LegKind.Body b.BrowserSmoke) [ Site.Ci "browser-smoke" ] [
         Input.Tree
         Input.Node
         Input.Browser
     ]
-    |> floor' (Floor.Exactly 8)
+    |> floor' (Floor.Exactly 10)
     // The two measured gates: each script measures, then runs the SDK's
     // deciding target over the committed budget file.
     elsewhere "PerfBudget" (LegKind.Script "dev-scripts/perf-budget-gate.ps1") [ Site.Ci "perf-budget" ] [

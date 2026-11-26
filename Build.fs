@@ -923,8 +923,9 @@ let main args =
     // row puts on its TAP counts, and for the same reason. Unlike that
     // one the floor is the EXACT current count rather than a slack lower
     // bound: there are eight scenarios and each is expensive, so losing
-    // one silently is exactly what this must catch. Adding or removing a
-    // scenario edits the row's floor in the same commit.
+    // one silently is exactly what this must catch. The floor is ten: the
+    // harness's registration guard adds two passed cases to the eight.
+    // Adding or removing a scenario edits the row's floor in the same commit.
     let runVerifyBrowserSmoke () : Verdict =
         let fixtureDir = Path.getFullName "tests/BrowserSmoke/fixture"
 

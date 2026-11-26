@@ -662,6 +662,48 @@ let private deferredSurfaceTests =
                 Expect.equal totalLoads 2 "Reload asked for the code again"
                 Expect.equal drawnAfterReload 1 "and the surface's tree is drawn"
                 Expect.isTrue (title.Contains "Deferred surface") "with the props it was mounted with"
+
+        // The palette's public component, mounted open: its tree file arrives
+        // through `TreeSurface.deferred`, which hands the props object to
+        // React as they are. Calling the surface directly would wrap the
+        // record for it, which is why only this path shows what a shell sees.
+        testCaseDeferred "the command palette, mounted open, draws its overlay with the props it was given" 3000
+        <| fun () ->
+            let document = installDom "palette-f"
+            // jsdom does no layout, so it has no `scrollIntoView`; the overlay
+            // calls it to keep the highlighted row in view.
+            document?defaultView?HTMLElement?prototype?scrollIntoView <- ignore
+
+            let entry: Components.CommandPalette.CommandPaletteEntry = {
+                SidebarId = "kb"
+                ModuleName = "Knowledge Base"
+                PageTitle = None
+                Group = None
+                Icon = Html.none
+            }
+
+            let props: Components.CommandPalette.CommandPaletteProps = {
+                IsOpen = true
+                Query = ""
+                Highlight = 0
+                Entries = [ entry ]
+                OnOpen = ignore
+                OnDismiss = ignore
+                OnQueryChanged = ignore
+                OnHighlightMoved = ignore
+                OnSelect = ignore
+            }
+
+            mountCounter "palette-f" Fresh (fun _ _ -> Components.CommandPalette.CommandPalette props)
+
+            fun () ->
+                let input = document?querySelector "[data-toolup-palette='input']"
+
+                Expect.isFalse (isNull input) "the overlay's query box is drawn"
+
+                Expect.isTrue
+                    ((string document?body?textContent).Contains "Knowledge Base")
+                    "with the entry it was given"
     ]
 
 let tests =
