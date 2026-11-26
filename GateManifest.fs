@@ -908,6 +908,7 @@ let rowReads: (string * string list) list = [
         "proofs.json"
         "release-channel.json"
         "samples/PublicSite/cwv-budget.json"
+        "templates/*/.config/dotnet-tools.json"
         "v1-readiness.json"
         "version-groups.json"
     ]
@@ -933,8 +934,6 @@ let notRead: (string * string) list = [
     "named by the template gates (CI-only rows) and by AffectedLaneTests' fixture literals; no leg VerifyAll runs opens a template's own"
     "templates/*/nuget.config",
     "named by the template gates (CI-only rows) and by fixture literals in AffectedLaneTests and PublishedSmokeTests; no leg VerifyAll runs opens a template's own"
-    "templates/*/.config/dotnet-tools.json",
-    "named by the template gates (CI-only rows); the gate restores the root tool manifest only"
     "templates/*/run.ps1",
     "file-name literal: dotnetDefault here names the root run.ps1, a default input; a template's own is its scaffold's entry point, which no leg VerifyAll runs opens"
     "templates/*/compose.yml", "named by tools/ToolUp.PortGuard, which is outside the solution and which no leg runs"
