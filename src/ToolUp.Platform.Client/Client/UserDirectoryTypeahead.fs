@@ -31,7 +31,7 @@ open Toolup.UIToolkit
 //     threaded through the form.
 //
 // The component is shaped to swap-in cleanly for `Forms.Input.text`
-// in `TeamManagerUI.addMemberForm` and elsewhere. Future consumers
+// in the team manager's add-member form and elsewhere. Future consumers
 // (PermissionsAdminUI's per-member overrides, share-token issuance
 // UIs) can adopt the same component.
 
