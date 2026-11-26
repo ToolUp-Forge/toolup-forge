@@ -1,0 +1,83 @@
+/* >>> @toolup/client-styling canonical Fuaran bridge — DO NOT EDIT, copied verbatim <<<
+   The Fuaran-UI renderer's tokens, read from the shell's. A surface authored
+   as a Fuaran-UI tree is styled by `fuaran-reference.css` (shipped in the
+   Fuaran.UI.Renderer package's `content/`); every colour, radius, focus ring
+   and spacing step it reads is a `--fuaran-*` variable, and this file answers
+   those variables with the tokens the SDK shell already renders against. So a
+   tree takes the deployment's brand from the same `:root` values a Feliz view
+   does, and a per-team palette that sets `--color-brand` reaches both.
+
+   Load it AFTER the reference stylesheet, in the same layer, so these `:root`
+   values win over the reference defaults:
+
+     @import "@nuget/fuaran.ui.renderer/content/fuaran-reference.css" layer(base);
+     @import "./fuaran-bridge.css" layer(base);
+
+   A variable is bridged only when the shell has a token that means the same
+   thing. Warning and info tones, the typography scale and the focus ring's
+   width, offset and style keep the reference values. A shell token that is
+   not defined (a host without the canonical Tailwind block) leaves the
+   variable invalid, and the reference stylesheet's own `var(--x, fallback)`
+   sites then draw its default: the bridge never blanks a rule.
+
+   The plain `var(--shell-token)` lines are the table
+   `ToolUp.BrandKit.HostThemeTokens.fuaranBridge` holds; a test holds the two
+   together. The derived lines are written in `--fuaran-*` terms, so a value
+   a deployment sets through `HostThemeTokens` carries into them too. */
+
+:root {
+  /* tones the shell has */
+  --fuaran-tone-default-bg: var(--surface);
+  --fuaran-tone-default-fg: var(--text);
+  --fuaran-tone-default-border: var(--color-border);
+  --fuaran-tone-subdued-bg: var(--color-bg-light);
+  --fuaran-tone-subdued-fg: var(--muted);
+  --fuaran-tone-subdued-border: var(--color-separator);
+  --fuaran-tone-brand-fg: var(--color-brand);
+  --fuaran-tone-brand-hover-fg: var(--color-brand-dark);
+  --fuaran-tone-brand-active-fg: var(--color-brand-dark);
+  --fuaran-tone-success-fg: var(--pos);
+  --fuaran-tone-critical-fg: var(--neg);
+
+  /* the brand's soft surfaces, mixed from the brand over the surface, so a
+     purple shell never shows the reference's blue tints */
+  --fuaran-tone-brand-bg: color-mix(in srgb, var(--fuaran-tone-brand-fg) 8%, var(--fuaran-tone-default-bg));
+  --fuaran-tone-brand-border: color-mix(in srgb, var(--fuaran-tone-brand-fg) 40%, var(--fuaran-tone-default-bg));
+  --fuaran-tone-brand-hover-bg: color-mix(in srgb, var(--fuaran-tone-brand-fg) 14%, var(--fuaran-tone-default-bg));
+  --fuaran-tone-brand-active-bg: color-mix(in srgb, var(--fuaran-tone-brand-fg) 22%, var(--fuaran-tone-default-bg));
+  --fuaran-tone-brand-hover-border: color-mix(in srgb, var(--fuaran-tone-brand-fg) 60%, var(--fuaran-tone-default-bg));
+  --fuaran-tone-critical-hover-fg: color-mix(in srgb, var(--fuaran-tone-critical-fg) 85%, #000);
+  --fuaran-tone-critical-active-fg: color-mix(in srgb, var(--fuaran-tone-critical-fg) 70%, #000);
+
+  /* focus: the ring and a focused field's border are the brand */
+  --fuaran-focus-ring-color: var(--fuaran-tone-brand-fg);
+  --fuaran-tone-default-focus-border: var(--fuaran-focus-ring-color);
+
+  /* radii */
+  --fuaran-radius-sm: var(--radius);
+  --fuaran-radius-md: var(--radius);
+  --fuaran-radius-lg: var(--radius);
+  --fuaran-radius-full: var(--radius-pill);
+
+  /* spacing: the reference's 4 / 8 / 12 / 16 / 24 px steps on the shell's
+     Tailwind spacing unit (0.25rem), so density follows the shell's scale */
+  --fuaran-space-xs: calc(var(--spacing) * 1);
+  --fuaran-space-sm: calc(var(--spacing) * 2);
+  --fuaran-space-md: calc(var(--spacing) * 3);
+  --fuaran-space-lg: calc(var(--spacing) * 4);
+  --fuaran-space-xl: calc(var(--spacing) * 6);
+}
+
+/* The reference stylesheet is also a demo host's page sheet, and its `body`
+   rule sets the page's margin, background, colour, font size and line height.
+   In the shell those belong to the shell: put them back to what the page had
+   before the import (inherited from `html`, or the initial value). A tree's
+   own nodes carry their colours on their `fuaran-*` classes. */
+body {
+  margin: unset;
+  background: unset;
+  color: unset;
+  font-size: unset;
+  line-height: unset;
+}
+/* >>> end @toolup/client-styling canonical Fuaran bridge <<< */

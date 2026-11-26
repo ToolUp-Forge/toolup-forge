@@ -87,6 +87,7 @@
     "samples/FormsAndAI/src/FormsAndAI.Server/FormsAndAI.Server.fsproj",
     "samples/HelloWorld-AOT/HelloWorld.AOT.Contract/HelloWorld.AOT.Contract.fsproj",
     "samples/HelloWorld-AOT/HelloWorld.AOT/HelloWorld.AOT.fsproj",
+    "samples/HelloWorld/HelloWorld.Client/HelloWorld.Client.fsproj",
     "samples/HelloWorld/HelloWorld.Module/HelloWorld.Module.fsproj",
     "samples/HelloWorld/HelloWorld.Server/HelloWorld.Server.fsproj",
     "samples/MinimalApp/src/MinimalApp.Server/MinimalApp.Server.fsproj",
