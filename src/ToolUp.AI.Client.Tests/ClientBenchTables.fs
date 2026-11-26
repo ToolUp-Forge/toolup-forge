@@ -192,6 +192,17 @@ let private benchTeamCount = 200
 /// The team every dispatch renames, so one row changes per dispatch.
 let private renamedTeam = 7
 
+/// What one dispatch does to the list a page holds, given the list it was
+/// seeded with and the dispatch's tick.
+type private ListStep<'Row> = 'Row list -> int -> 'Row list
+
+/// One record replaced and every other record the same object: what a rename
+/// leaves, and the dispatch a kept row is built for.
+let private oneRenamed (rename: int -> 'Row -> 'Row) : ListStep<'Row> =
+    fun rows tick ->
+        rows
+        |> List.mapi (fun i row -> if i = renamedTeam then rename tick row else row)
+
 /// A team's name; `tick` below zero is the seed, before any rename.
 let private teamName (i: int) (tick: int) =
     if i = renamedTeam && tick >= 0 then
@@ -219,19 +230,42 @@ let private teamSummaries (tick: int) : TeamSummary list =
     })
 
 /// The team manager's list of 200 teams, one active, reached through its
-/// `update`; a dispatch renames one team.
-let private teamManager () =
+/// `update`; a dispatch loads the list `next` makes of the seeded one.
+let private teamManager (next: ListStep<TeamInfo>) =
+    let teams = teamInfos -1
+
     let seed =
         seedThrough TeamManagerUI.update (fst (TeamManagerUI.init ClientModuleContext.empty)) [
-            TeamManagerUI.TeamsLoaded(teamInfos -1)
+            TeamManagerUI.TeamsLoaded teams
             TeamManagerUI.ActiveTeamLoaded(Some "t000")
         ]
 
     seed,
     {
         Update = TeamManagerUI.update
-        Next = fun tick -> TeamManagerUI.TeamsLoaded(teamInfos tick)
+        Next = fun tick -> TeamManagerUI.TeamsLoaded(next teams tick)
     }
+
+/// One team renamed, the other 199 records kept.
+let private teamRenamed: ListStep<TeamInfo> =
+    oneRenamed (fun tick team -> {
+        team with
+            Name = teamName renamedTeam tick
+    })
+
+/// The whole list loaded again with one name changed: 200 new records, as a
+/// server response's are, so no row is the object it was.
+let private teamsReloaded: ListStep<TeamInfo> = fun _ tick -> teamInfos tick
+
+/// The same two dispatches over Platform Management's summaries.
+let private summaryRenamed: ListStep<TeamSummary> =
+    oneRenamed (fun tick team -> {
+        team with
+            Name = teamName renamedTeam tick
+    })
+
+let private summariesReloaded: ListStep<TeamSummary> =
+    fun _ tick -> teamSummaries tick
 
 /// The registered modules the visibility editor lists: 40, half selected by
 /// the resolution, so the page is a working list rather than the two rows
@@ -275,18 +309,20 @@ let private visibilityEditor () =
     }
 
 /// Platform Management's teams tab with 200 teams, reached through its
-/// `update`; a dispatch renames one team.
-let private platformTeams () =
+/// `update`; a dispatch loads the list `next` makes of the seeded one.
+let private platformTeams (next: ListStep<TeamSummary>) =
+    let teams = teamSummaries -1
+
     let seed =
         seedThrough PlatformAdminUI.update (fst (PlatformAdminUI.init ClientModuleContext.empty)) [
             PlatformAdminUI.SwitchTab PlatformAdminUI.TeamsTab
-            PlatformAdminUI.TeamsLoaded(Ok(teamSummaries -1))
+            PlatformAdminUI.TeamsLoaded(Ok teams)
         ]
 
     seed,
     {
         Update = PlatformAdminUI.update
-        Next = fun tick -> PlatformAdminUI.TeamsLoaded(Ok(teamSummaries tick))
+        Next = fun tick -> PlatformAdminUI.TeamsLoaded(Ok(next teams tick))
     }
 
 /// The locale the shipped surfaces are drawn under.
@@ -356,10 +392,14 @@ let tableKinds = [
     "tree-markdown"
     "team-manager-feliz"
     "team-manager-tree"
+    "team-manager-reload-feliz"
+    "team-manager-reload-tree"
     "visibility-feliz"
     "visibility-tree"
     "platform-teams-feliz"
     "platform-teams-tree"
+    "platform-teams-reload-feliz"
+    "platform-teams-reload-tree"
 ]
 
 /// Mount the table or page named `kind` (one of `tableKinds`) into
@@ -373,15 +413,10 @@ let mount (kind: string) (rows: int) (container: obj) : obj =
     let adminMsgs = MessageCatalog.english.PlatformAdmin
     let widgetMsgs = MessageCatalog.english.PublicUtilityWidgets
 
-    match kind with
-    | "feliz" -> table benchView
-    | "tree" -> table (drawTree benchTree)
-    | "tree-kept" -> table (drawTree benchKeptTree)
-    | "tree-grid" -> table (drawTree benchGridTree)
-    | "tree-markdown" -> table (drawTree benchMarkdownTree)
-    | "team-manager-feliz" ->
-        mountModule container (fun m -> FelizReferenceViews.TeamManager.body teamMsgs m ignore) (teamManager ())
-    | "team-manager-tree" ->
+    let teamManagerFeliz step =
+        mountModule container (fun m -> FelizReferenceViews.TeamManager.body teamMsgs m ignore) (teamManager step)
+
+    let teamManagerTree step =
         mountModule
             container
             (fun m ->
@@ -391,7 +426,45 @@ let mount (kind: string) (rows: int) (container: obj) : obj =
                     Messages = teamMsgs
                     Locale = benchLocale
                 |})
-            (teamManager ())
+            (teamManager step)
+
+    let platformTeamsFeliz step =
+        mountModule
+            container
+            (fun m ->
+                FelizReferenceViews.PlatformAdmin.body
+                    PublicUtilityConfig.defaults
+                    (PlatformAdminUI.caller ())
+                    adminMsgs
+                    widgetMsgs
+                    m
+                    ignore)
+            (platformTeams step)
+
+    let platformTeamsTree step =
+        mountModule
+            container
+            (fun m ->
+                PlatformAdminTree.Surface {|
+                    Model = m
+                    Dispatch = ignore
+                    Messages = adminMsgs
+                    Widgets = widgetMsgs
+                    Config = PublicUtilityConfig.defaults
+                    Locale = benchLocale
+                |})
+            (platformTeams step)
+
+    match kind with
+    | "feliz" -> table benchView
+    | "tree" -> table (drawTree benchTree)
+    | "tree-kept" -> table (drawTree benchKeptTree)
+    | "tree-grid" -> table (drawTree benchGridTree)
+    | "tree-markdown" -> table (drawTree benchMarkdownTree)
+    | "team-manager-feliz" -> teamManagerFeliz teamRenamed
+    | "team-manager-tree" -> teamManagerTree teamRenamed
+    | "team-manager-reload-feliz" -> teamManagerFeliz teamsReloaded
+    | "team-manager-reload-tree" -> teamManagerTree teamsReloaded
     | "visibility-feliz" ->
         mountModule
             container
@@ -408,29 +481,8 @@ let mount (kind: string) (rows: int) (container: obj) : obj =
                     Locale = benchLocale
                 |})
             (visibilityEditor ())
-    | "platform-teams-feliz" ->
-        mountModule
-            container
-            (fun m ->
-                FelizReferenceViews.PlatformAdmin.body
-                    PublicUtilityConfig.defaults
-                    (PlatformAdminUI.caller ())
-                    adminMsgs
-                    widgetMsgs
-                    m
-                    ignore)
-            (platformTeams ())
-    | "platform-teams-tree" ->
-        mountModule
-            container
-            (fun m ->
-                PlatformAdminTree.Surface {|
-                    Model = m
-                    Dispatch = ignore
-                    Messages = adminMsgs
-                    Widgets = widgetMsgs
-                    Config = PublicUtilityConfig.defaults
-                    Locale = benchLocale
-                |})
-            (platformTeams ())
+    | "platform-teams-feliz" -> platformTeamsFeliz summaryRenamed
+    | "platform-teams-tree" -> platformTeamsTree summaryRenamed
+    | "platform-teams-reload-feliz" -> platformTeamsFeliz summariesReloaded
+    | "platform-teams-reload-tree" -> platformTeamsTree summariesReloaded
     | other -> failwithf "unknown table '%s': expected one of %s" other (String.concat ", " tableKinds)

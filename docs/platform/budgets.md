@@ -372,35 +372,64 @@ leg times the view, not the remote call. `client-bench-browser.mjs` runs each vi
 Feliz arm again (`<view>-feliz-control`) as that view's drift control, on the same page, clock and refusals as the
 tables above.
 
+A view that shows a list is measured on two dispatches, because a kept row is served by the identity of its record
+and the two differ in exactly that. **One renamed** replaces one record and leaves the other 199 the objects they
+were, which is what a dispatch inside the page does. **Loaded again** (`<view>-reload`) replaces every record with a
+new object, one of them with a new name, which is what a server response does.
+
 Measured 2026-11-26 on this tree (`Fuaran.UI` 0.107.0, chromium headless shell 131 through `TOOLUP_BENCH_BROWSER`,
-16 logical cores, other builds running), four runs of `pwsh ./dev-scripts/perf-budget-gate.ps1 -SkipServer -SkipLoad`
-with CPU load 99, 29, 83 and 12 percent at their starts. Desktop, median milliseconds per dispatch, minimum over the
-runs with the range in brackets:
+16 logical cores), three runs of `pwsh ./dev-scripts/perf-budget-gate.ps1 -SkipServer -SkipLoad` with CPU load 79, 9
+and 9 percent at their starts. Desktop, median milliseconds per dispatch, minimum over the runs with the range in
+brackets:
 
 | View, and its dispatch | Feliz page | Shipped tree | Feliz again (control) | Elements, Feliz / tree | DOM records per dispatch |
 |---|---:|---:|---:|---:|---:|
-| The team manager, 200 teams, one renamed | 4.92 (1.06) | 20.80 (5.97) | 4.53 (1.12) | 1,605 / 2,807 | 1 |
-| The module-visibility editor, 40 modules, the rule kind flipped | 0.98 (0.26) | 1.43 (0.49) | 0.98 (0.21) | 258 / 346 | 125 |
-| Platform Management's teams tab, 200 teams, one renamed | 12.55 (4.04) | 47.76 (12.36) | 12.86 (1.57) | 3,837 / 8,045 | 7 |
+| The team manager, 200 teams, one renamed | 3.30 (0.13) | 1.79 (0.11) | 3.13 (0.37) | 1,605 / 2,807 | 1 |
+| The team manager, 200 teams, loaded again | 3.38 (0.16) | 2.04 (0.10) | 3.39 (0.08) | 1,605 / 2,807 | 1 |
+| The module-visibility editor, 40 modules, the rule kind flipped | 0.73 (0.02) | 1.07 (0.04) | 0.65 (0.09) | 258 / 346 | 125 |
+| Platform Management's teams tab, 200 teams, one renamed | 8.30 (0.16) | 3.15 (0.22) | 8.15 (0.17) | 3,837 / 8,045 | 7 |
+| Platform Management's teams tab, 200 teams, loaded again | 8.34 (0.26) | 34.04 (0.28) | 8.51 (0.70) | 3,837 / 8,045 | 7 |
 
-Every view's control stayed within 15 percent of its first reading in every run. The two team lists are rebuilt per
-dispatch on this tree, so their tree arm costs about four times the Feliz page; the arms mount whatever `Surface`
-ships, so the figure after the lists move to a kept table is the next run of the same leg. The 6x CPU profile gives no
-reading for these views on this machine: the DevTools CPU throttle is intermittent here, so a 6x arm's samples include
-unthrottled ones (one run's 6x median for Platform Management's Feliz page was 19.99 ms against 12.55 on the desktop),
-and some view's control moved more than 15 percent in every run, the 12 percent load one included. The raw 6x medians
-stay in each run's measurement file and are not quoted. The record is `uiTreeViewsBrowserDispatch` in
-[`perf-budgets.json`](../../perf-budgets.json); recorded, never gated.
+Every view's control stayed within 15 percent of its first reading in every run. With its rows kept, a tree dispatch
+costs about half the Feliz page's on the two team lists: the Feliz page builds and reconciles all 200 rows, the tree
+the one that changed. A tree whose rows are all rebuilt costs about four times the Feliz page, and that is what a
+reload is unless `update` keeps the records that did not change. The team manager's does (`Memo.keepEqual` in its
+`TeamsLoaded`): before it did, on the same machine and three runs at 15, 10 and 3 percent load, its tree's reload was
+14.64 ms (1.93) against the Feliz page's 3.27. Platform Management's does not yet: each of its reloads first sets the
+list to `Remote.Loading`, which drops the records it held, and its view draws a reload in flight as the loading line,
+so keeping them needs the view to go on showing the list meanwhile. The first mount, one cold sample per run, is 26
+ms against 12 for the team manager and 63 against 28 for Platform Management: kept rows pay their first render in
+full.
+
+The 6x CPU profile, the same three runs, median milliseconds, the minimum over the runs:
+
+| View, and its dispatch | Feliz page | Shipped tree | Feliz again (control) |
+|---|---:|---:|---:|
+| The team manager, one renamed | 32.49 | 17.99 | 31.62 |
+| The team manager, loaded again | 31.24 | 19.77 | 34.29 |
+| The module-visibility editor | 7.33 | 11.03 | 6.98 |
+| Platform Management's teams tab, one renamed | 92.18 | 33.67 | 91.02 |
+| Platform Management's teams tab, loaded again | 81.92 | 275.52 | 89.88 |
+
+Read the 6x table more loosely than the desktop one: two controls moved more than 15 percent from their first reading
+(18 and 19 percent, both on a reload view), and on a loaded machine the DevTools CPU throttle is intermittent, so a 6x
+arm's samples include unthrottled ones. Four earlier runs of this leg, at 99, 29, 83 and 12 percent load with other
+builds running, gave no 6x reading at all (one run's 6x median for Platform Management's Feliz page was 19.99 ms
+against 12.55 on the desktop). Take 6x figures on a quiet machine, and check each control before quoting an arm. The
+record is `uiTreeViewsBrowserDispatch` in [`perf-budgets.json`](../../perf-budgets.json); recorded, never gated.
 
 **How a batch adds its views' arms.** A phase that moves more views to trees copies this shape:
 
 1. Keep each view's Feliz page in `FelizReferenceViews.fs`, as the migration kit's parity assertion already asks.
 2. In `ClientBenchTables.fs`, write the view's seed and dispatch beside `teamManager ()`: a model folded from the
    module's `init` through its `update`, at the size the view's phase names, and a `ModuleStep` whose `Next tick` is
-   the message one dispatch sends, chosen so that every dispatch changes what the page shows.
+   the message one dispatch sends, chosen so that every dispatch changes what the page shows. For a list, write both
+   dispatches: one record replaced with the rest kept by reference (`oneRenamed`), and every record new (the
+   `-reload` arm). A dispatch that replaces every record measures a reload, whatever it is called.
 3. Add `<view>-feliz` and `<view>-tree` to `tableKinds` and to `mount`: the first draws the Feliz page, the second the
    tree module's `Surface` with the props its deferred surface passes.
-4. Add the view to `VIEWS` in `client-bench-browser.mjs`, with the label the summary line prints. The leg then runs the
+4. Add the view, and its `-reload` twin where it shows a list, to `VIEWS` in `client-bench-browser.mjs`, with the
+   label the summary line prints. The leg then runs the
    pair and the control, and refuses a mount under 100 elements or a dispatch that changes no DOM, so seed the view
    past that.
 5. Take three runs of the gate script on a quiet machine, note each run's load at its start, and record the minimum and

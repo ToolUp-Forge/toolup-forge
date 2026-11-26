@@ -50,8 +50,10 @@ const PROFILES = [
 // and their mounts in ClientBenchTables.mount (docs/platform/budgets.md says how).
 const VIEWS = [
     { name: "team-manager", label: "the team manager, one of 200 teams renamed" },
+    { name: "team-manager-reload", label: "the team manager, its 200 teams loaded again" },
     { name: "visibility", label: "the module-visibility editor, the rule kind flipped" },
     { name: "platform-teams", label: "Platform Management's teams tab, one of 200 teams renamed" },
+    { name: "platform-teams-reload", label: "Platform Management's teams tab, its 200 teams loaded again" },
 ];
 const ARMS = [
     "feliz", "tree", "tree-kept", "tree-grid", "tree-markdown", "feliz-control",
