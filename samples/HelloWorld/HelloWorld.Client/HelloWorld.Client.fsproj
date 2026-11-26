@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    HelloWorld client composition root: the SDK shell over the HelloWorld
+    module and the built-in admin modules. Fable compiles it to `output/`,
+    Vite bundles it to `dist/`, and the HelloWorld server serves the bundle
+    (TOOLUP_PUBLIC_PATH) or, in development, Vite serves it and proxies
+    `/api` to the server. `../run.ps1` does all of that in one command.
+
+    From this directory: dotnet tool restore, then dotnet fable -o output
+    (with the no-cache switch) and npm ci, then npx vite build.
+
+    The ProjectReference to ToolUp.Platform.Client drives the full
+    client-tier source tree through Fable; the module's client files are
+    source-injected through its `.Client.props`, the convention a module
+    documents for its consumer.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>false</IsPackable>
+        <DefaultItemExcludes>$(DefaultItemExcludes);output\**;node_modules\**;dist\**</DefaultItemExcludes>
+        <!-- Nullable reference types stay disabled on Fable-touching
+             projects: the Fable ecosystem pre-dates F# 10's nullness. -->
+        <Nullable>disable</Nullable>
+    </PropertyGroup>
+    <Import Project="..\HelloWorld.Module\HelloWorld.Module.Client.props" />
+    <ItemGroup>
+        <Compile Include="Client.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\src\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Fable.Core" />
+    </ItemGroup>
+</Project>
