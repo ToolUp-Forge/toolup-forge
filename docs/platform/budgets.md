@@ -360,6 +360,53 @@ document; what it stops doing is building and reconciling the 199 rows that did 
 frame on both profiles, at about the Feliz table's cost. (The low-phone Feliz arm's first reading is noisier than its
 control; the kept arm's p90 is 20.2 ms against the rebuilt tree's 191.9.)
 
+### A moved module view is measured in the browser leg, before and after
+
+Each real module view that moves from Feliz to a tree is an arm pair of the same browser leg, so its cost is measured
+in a browser rather than inferred from the synthetic table. `ClientBenchTables.mount` mounts a view under two names:
+`<view>-feliz`, the Feliz page it replaced, kept in `FelizReferenceViews.fs`; and `<view>-tree`, the shipped tree,
+mounted by the `Surface` component its `TreeSurface.deferred` loads (the leg mounts it directly, since a timed
+synchronous render cannot wait for the dynamic import). Both arms start from a model reached through the module's own
+`init` and `update`, and each timed dispatch goes through that `update` too, with the effects it returns dropped: the
+leg times the view, not the remote call. `client-bench-browser.mjs` runs each view's Feliz arm, its tree arm and its
+Feliz arm again (`<view>-feliz-control`) as that view's drift control, on the same page, clock and refusals as the
+tables above.
+
+Measured 2026-11-26 on this tree (`Fuaran.UI` 0.107.0, chromium headless shell 131 through `TOOLUP_BENCH_BROWSER`,
+16 logical cores, other builds running), four runs of `pwsh ./dev-scripts/perf-budget-gate.ps1 -SkipServer -SkipLoad`
+with CPU load 99, 29, 83 and 12 percent at their starts. Desktop, median milliseconds per dispatch, minimum over the
+runs with the range in brackets:
+
+| View, and its dispatch | Feliz page | Shipped tree | Feliz again (control) | Elements, Feliz / tree | DOM records per dispatch |
+|---|---:|---:|---:|---:|---:|
+| The team manager, 200 teams, one renamed | 4.92 (1.06) | 20.80 (5.97) | 4.53 (1.12) | 1,605 / 2,807 | 1 |
+| The module-visibility editor, 40 modules, the rule kind flipped | 0.98 (0.26) | 1.43 (0.49) | 0.98 (0.21) | 258 / 346 | 125 |
+| Platform Management's teams tab, 200 teams, one renamed | 12.55 (4.04) | 47.76 (12.36) | 12.86 (1.57) | 3,837 / 8,045 | 7 |
+
+Every view's control stayed within 15 percent of its first reading in every run. The two team lists are rebuilt per
+dispatch on this tree, so their tree arm costs about four times the Feliz page; the arms mount whatever `Surface`
+ships, so the figure after the lists move to a kept table is the next run of the same leg. The 6x CPU profile gives no
+reading for these views on this machine: the DevTools CPU throttle is intermittent here, so a 6x arm's samples include
+unthrottled ones (one run's 6x median for Platform Management's Feliz page was 19.99 ms against 12.55 on the desktop),
+and some view's control moved more than 15 percent in every run, the 12 percent load one included. The raw 6x medians
+stay in each run's measurement file and are not quoted. The record is `uiTreeViewsBrowserDispatch` in
+[`perf-budgets.json`](../../perf-budgets.json); recorded, never gated.
+
+**How a batch adds its views' arms.** A phase that moves more views to trees copies this shape:
+
+1. Keep each view's Feliz page in `FelizReferenceViews.fs`, as the migration kit's parity assertion already asks.
+2. In `ClientBenchTables.fs`, write the view's seed and dispatch beside `teamManager ()`: a model folded from the
+   module's `init` through its `update`, at the size the view's phase names, and a `ModuleStep` whose `Next tick` is
+   the message one dispatch sends, chosen so that every dispatch changes what the page shows.
+3. Add `<view>-feliz` and `<view>-tree` to `tableKinds` and to `mount`: the first draws the Feliz page, the second the
+   tree module's `Surface` with the props its deferred surface passes.
+4. Add the view to `VIEWS` in `client-bench-browser.mjs`, with the label the summary line prints. The leg then runs the
+   pair and the control, and refuses a mount under 100 elements or a dispatch that changes no DOM, so seed the view
+   past that.
+5. Take three runs of the gate script on a quiet machine, note each run's load at its start, and record the minimum and
+   range per arm as a note in `perf-budgets.json` and a row in a table like the one above. Move no ceiling and add no
+   gate.
+
 ### The Fuaran-UI stylesheet
 
 A tree is styled by the renderer's `fuaran-reference.css` and the shell's `fuaran-bridge.css`, which the client CSS
