@@ -409,6 +409,44 @@ let resolverPool (root: string) (config: string) : string list =
         | many -> many |> List.maxBy versionOf)
     |> List.ofSeq
 
+/// The folder a restore extracts packages into: `NUGET_PACKAGES` when set,
+/// otherwise the per-user default `~/.nuget/packages` on every OS.
+let nugetPackageRoot () =
+    match Environment.GetEnvironmentVariable "NUGET_PACKAGES" with
+    | set when not (String.IsNullOrWhiteSpace set) -> set
+    | _ -> Path.Combine(Environment.GetFolderPath Environment.SpecialFolder.UserProfile, ".nuget", "packages")
+
+/// The package runtime assemblies an assembly's own `<name>.deps.json` lists,
+/// found under `packageRoot`. A library's build copies none of its NuGet
+/// dependencies into its `bin`, so a package that no other built project
+/// happens to copy is absent from `resolverPool`; the deps file names the
+/// exact package, version and asset the build compiled against. Missing
+/// files are dropped, which leaves the type unreadable and visible, never
+/// silently resolved against something else.
+let packageDependencyPaths (packageRoot: string) (dllPath: string) : string list =
+    let depsPath = Path.ChangeExtension(dllPath, ".deps.json")
+
+    if not (File.Exists depsPath) then
+        []
+    else
+        use deps = Json.JsonDocument.Parse(File.ReadAllText depsPath)
+        let libraries = deps.RootElement.GetProperty "libraries"
+
+        [
+            for target in deps.RootElement.GetProperty("targets").EnumerateObject() do
+                for library in target.Value.EnumerateObject() do
+                    match libraries.TryGetProperty library.Name, library.Value.TryGetProperty "runtime" with
+                    | (true, info), (true, runtime) when info.GetProperty("type").GetString() = "package" ->
+                        match info.TryGetProperty "path" with
+                        | true, path ->
+                            for asset in runtime.EnumerateObject() do
+                                yield Path.Combine(packageRoot, path.GetString(), asset.Name)
+                        | _ -> ()
+                    | _ -> ()
+        ]
+        |> List.distinct
+        |> List.filter File.Exists
+
 // ─── Surface rendering (metadata-only) ───────────────────────────────
 
 let private isCompilerGenerated (attrs: Collections.Generic.IList<CustomAttributeData>) =
@@ -980,14 +1018,24 @@ let private renderType (t: Type) : RenderedType =
         Unreadable = unreadable
     }
 
-let private exportedTypes (asm: Assembly) =
+/// The assembly's exported types, and the loader errors of any type that
+/// could not be loaded at all. Such a type is absent from the array, so it
+/// would be absent from the render; the errors let a regeneration refuse.
+let private exportedTypes (asm: Assembly) : Type[] * string list =
     try
-        asm.GetExportedTypes()
+        asm.GetExportedTypes(), []
     with
-    | :? ReflectionTypeLoadException as ex -> ex.Types |> Array.filter (fun t -> not (isNull t))
+    | :? ReflectionTypeLoadException as ex ->
+        ex.Types |> Array.filter (fun t -> not (isNull t)),
+        ex.LoaderExceptions
+        |> Array.filter (fun e -> not (isNull e))
+        |> Array.map (fun e -> sprintf "%s: %s" (e.GetType().Name) e.Message)
+        |> Array.distinct
+        |> List.ofArray
     | _ ->
         asm.GetTypes()
-        |> Array.filter (fun t -> t.IsPublic || t.IsNestedPublic || t.IsNestedFamily)
+        |> Array.filter (fun t -> t.IsPublic || t.IsNestedPublic || t.IsNestedFamily),
+        []
 
 let private isRenderableType (t: Type) =
     let fn = if isNull t.FullName then t.Name else t.FullName
@@ -1006,22 +1054,31 @@ type SurfaceRender = {
     /// The types whose members could not be read; their lines in `Text`
     /// are placeholders, not a surface.
     Unreadable: UnreadableType list
+    /// The loader errors of types that could not be loaded at all; those
+    /// types are missing from `Text`, not marked in it.
+    LoadFailures: string list
 }
 
 /// Render the deterministic public-surface text for one packable DLL,
 /// together with its `[<Obsolete>]` markings. `resolverPaths` is the shared
-/// MLC dependency pool. Sorted by type (ordinal), then by member within
-/// each type — re-runs are byte-stable.
+/// MLC dependency pool; the DLL's own package dependencies
+/// (`packageDependencyPaths`) fill in what the pool lacks. Sorted by type
+/// (ordinal), then by member within each type — re-runs are byte-stable.
 let renderSurfaceDetail (dllPath: string) (resolverPaths: string seq) : SurfaceRender =
     let tpa =
         (AppContext.GetData "TRUSTED_PLATFORM_ASSEMBLIES" :?> string).Split(Path.PathSeparator)
         |> Array.filter (String.IsNullOrWhiteSpace >> not)
 
     let allPaths =
-        Seq.append tpa resolverPaths
+        Seq.concat [
+            tpa :> string seq
+            resolverPaths
+            packageDependencyPaths (nugetPackageRoot ()) dllPath
+        ]
         |> Seq.filter File.Exists
         // PathAssemblyResolver rejects two files with the same simple
-        // name — dedup, runtime (TPA) wins over copied bin duplicates.
+        // name — dedup, first wins: the runtime (TPA), then the built bin
+        // pool, then the package cache for names neither carries.
         |> Seq.distinctBy (fun p -> Path.GetFileName(p).ToLowerInvariant())
         |> Seq.toArray
 
@@ -1029,8 +1086,10 @@ let renderSurfaceDetail (dllPath: string) (resolverPaths: string seq) : SurfaceR
     use mlc = new MetadataLoadContext(resolver)
     let asm = mlc.LoadFromAssemblyPath dllPath
 
+    let types, loadFailures = exportedTypes asm
+
     let rendered =
-        exportedTypes asm
+        types
         |> Array.filter isRenderableType
         |> Array.sortWith (fun a b ->
             let an = if isNull a.FullName then a.Name else a.FullName
@@ -1087,6 +1146,7 @@ let renderSurfaceDetail (dllPath: string) (resolverPaths: string seq) : SurfaceR
             |> List.distinctBy _.DocId
             |> List.sortWith (fun a b -> String.CompareOrdinal(a.DocId, b.DocId))
         Unreadable = rendered |> Array.toList |> List.collect _.Unreadable
+        LoadFailures = loadFailures
     }
 
 /// The baseline text alone — the shape every existing caller and fixture
@@ -1099,14 +1159,32 @@ let renderSurface (dllPath: string) (resolverPaths: string seq) : string =
 /// a refusal when any of its types could not be enumerated. A placeholder
 /// written as an approved surface compares equal to the next unreadable
 /// render, so it would pass the gate while recording nothing; an unreadable
-/// render is therefore an error, and the caller writes nothing.
+/// render is therefore an error, and the caller writes nothing. So is a
+/// render that dropped a type the loader could not load: written, it would
+/// approve a surface without that type.
 let approvedText (assemblyName: string) (dllPath: string) (render: SurfaceRender) : Result<string, string> =
-    match render.Unreadable with
-    | [] -> Ok render.Text
-    | unreadable ->
+    match render.Unreadable, render.LoadFailures with
+    | [], [] -> Ok render.Text
+    | [], failures ->
         Error(
             sprintf
-                "%s: the members of %d type(s) could not be read from %s, so its baseline was NOT written:\n%s\n\nThe reader resolves dependencies from every built `src/**/bin/<config>/net10.0/`: build the solution (`dotnet build ToolUp.Forge.sln`) and regenerate. A dependency that no built project copies stays unreadable after a full build; that is a gap in the resolver pool, not a surface to approve."
+                "%s: %d loader error(s) left types out of the surface read from %s, so its baseline was NOT written:
+%s
+
+A type the loader cannot load is missing from the render, not marked in it; approving it would record a surface without that type. Build the solution and regenerate; a loader error that remains is a gap in the resolver, not a surface to approve."
+                assemblyName
+                failures.Length
+                dllPath
+                (failures
+                 |> List.map (sprintf "  - %s")
+                 |> String.concat
+                     "
+")
+        )
+    | unreadable, _ ->
+        Error(
+            sprintf
+                "%s: the members of %d type(s) could not be read from %s, so its baseline was NOT written:\n%s\n\nThe reader resolves dependencies from every built `src/**/bin/<config>/net10.0/` and from the packages the assembly's own `.deps.json` lists in the NuGet package folder: build the solution (`dotnet build ToolUp.Forge.sln`) and regenerate. A dependency neither route finds after a full build and restore is a gap in the resolver, not a surface to approve."
                 assemblyName
                 unreadable.Length
                 dllPath
@@ -1125,6 +1203,26 @@ let private regenRecipe (assemblyName: string) =
         "  $env:TOOLUP_APPROVE = \"api:%s\"\n  dotnet run --project src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj\n  $env:TOOLUP_APPROVE = $null\n\nthen commit api-baselines/%s.approved.txt in the SAME PR."
         assemblyName
         assemblyName
+
+/// What a comparison run says of a committed baseline that records a type
+/// as unreadable, or `None` when it records none. A placeholder compares
+/// equal to the next unreadable render, so that type's members would be
+/// guarded by nothing; it is never an approved surface.
+let describePlaceholderBaseline (assemblyName: string) (baseline: string) : string option =
+    let unreadable = (parse baseline).Unreadable
+
+    if Set.isEmpty unreadable then
+        None
+    else
+        Some(
+            sprintf
+                "%s: api-baselines/%s.approved.txt records %d type(s) whose members were never read:\n%s\n\nA `<members unavailable` line is a placeholder, not a surface, and guards nothing. Build the solution and regenerate this baseline:\n\n%s"
+                assemblyName
+                assemblyName
+                unreadable.Count
+                (unreadable |> Set.toList |> List.map (sprintf "  - %s") |> String.concat "\n")
+                (regenRecipe assemblyName)
+        )
 
 /// The gate's failure text for a drift, or `None` when the surface matches
 /// its baseline. Removal and addition get deliberately DIFFERENT messages;
