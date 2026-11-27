@@ -5,8 +5,8 @@ module SessionSecurityUI
 
 open Fuaran.MVU
 open System
-open Feliz
-open Toolup.UIToolkit
+open Fable.Core
+open Fable.Core.JsInterop
 open ToolUp.Platform
 
 // ─── Session security (client-tier slice) ────────────────────────────
@@ -151,9 +151,11 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
     | Load -> { model with Error = None }, load ()
 
     | SessionsLoaded(Ok sessions) ->
+        // A session the reload did not change stays the record the page
+        // already holds, so its row is not built again.
         {
             model with
-                Sessions = sessions
+                Sessions = Memo.keepEqual (fun (s: SessionRecord) -> s.SessionId) model.Sessions sessions
                 Loaded = true
                 Busy = false
         },
@@ -195,10 +197,6 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
         // Reload rather than patching the local list: the server is the
         // authority on what is now revoked, and a locally-patched entry
         // would look revoked even if a concurrent change said otherwise.
-        //
-        // A pure reducer has no rendered tree and therefore no `msgs`
-        // hook to read — go straight to the English catalog value, per
-        // `TeamManagerUI.update`'s recorded pattern.
         {
             model with
                 Status = Some(Notice.Info model.Messages.RevokeSuccess)
@@ -237,8 +235,7 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
         // Report the server's count rather than "done". Zero is a real
         // and useful answer — it means there was nothing left to sign
         // out, which is different from a revocation having happened.
-        // Same no-`msgs`-in-a-reducer reasoning as `RevokeCompleted`
-        // above; the singular/plural branching lives inside the
+        // The singular/plural branching lives inside the
         // catalog function itself so a translation owns its own
         // pluralisation rule.
         let message = model.Messages.RevokeAllResult count
@@ -266,19 +263,11 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
 /// Human-readable "last seen". Deliberately coarse: `LastSeenAt` is
 /// advanced at minute granularity or worse by design (GP 12 rule 6), so
 /// rendering a precise time would imply an accuracy the substrate does
-/// not promise.
-///
-/// Public non-component render helper — the arity cannot
-/// widen without reading as a removal in the public-API approval
-/// baseline, so the message-catalog-aware body is the additive
-/// `…With` variant and this delegates with the English catalog,
-/// matching `BootDegradation.banner` / `Components.ModuleBoundary.wrapWith`.
+/// not promise. A time after `now` (clock skew) reads as just now.
 let lastSeenLabelWith (msgs: SessionSecurityMessages) (now: DateTimeOffset) (at: DateTimeOffset) : string =
     let elapsed = now - at
 
-    if elapsed < TimeSpan.Zero then
-        msgs.JustNow
-    elif elapsed < TimeSpan.FromMinutes 2.0 then
+    if elapsed < TimeSpan.FromMinutes 2.0 then
         msgs.JustNow
     elif elapsed < TimeSpan.FromHours 1.0 then
         msgs.MinutesAgo(int elapsed.TotalMinutes)
@@ -292,142 +281,34 @@ let lastSeenLabelWith (msgs: SessionSecurityMessages) (now: DateTimeOffset) (at:
         // property of the language.
         at.ToString "d MMM yyyy"
 
-let private sessionRow
-    (msgs: SessionSecurityMessages)
-    (model: Model)
-    (dispatch: Msg -> unit)
-    (now: DateTimeOffset)
-    (record: SessionRecord)
-    =
-    let active = SessionRecord.isActive record
-
-    let pending = model.PendingRevoke = Some record.SessionId
-
-    Html.div [
-        prop.key record.SessionId
-        prop.className "flex items-start justify-between gap-4 px-4 py-3 border-b border-border last:border-b-0"
-        prop.children [
-            Html.div [
-                prop.className "min-w-0"
-                prop.children [
-                    Html.p [
-                        prop.className (
-                            if active then
-                                "text-sm font-medium truncate"
-                            else
-                                ("text-sm font-medium truncate line-through " + Tokens.Text.muted)
-                        )
-                        prop.text record.DeviceDescriptor
-                    ]
-                    Html.p [
-                        prop.className [ "text-xs mt-0.5"; Tokens.Text.muted ]
-                        prop.text (
-                            if active then
-                                msgs.DeviceLastSeen record.AuthProvider (lastSeenLabelWith msgs now record.LastSeenAt)
-                            else
-                                msgs.DeviceSignedOut record.AuthProvider
-                        )
-                    ]
-                ]
-            ]
-            Html.div [
-                prop.className "shrink-0"
-                prop.children [
-                    if not active then
-                        Html.span [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.Revoked ]
-                    elif pending then
-                        Html.div [
-                            prop.className "flex gap-2"
-                            prop.children [
-                                Forms.Button.dangerWith
-                                    (Forms.Button.stateOf model.Busy msgs.Confirm false)
-                                    msgs.Confirm
-                                    (fun () -> dispatch (ConfirmRevoke record.SessionId))
-                                Forms.Button.secondaryWith Forms.Button.Enabled msgs.Cancel (fun () ->
-                                    dispatch CancelRevoke)
-                            ]
-                        ]
-                    else
-                        Forms.Button.secondaryWith
-                            (Forms.Button.stateOf false msgs.SignOut model.Busy)
-                            msgs.SignOut
-                            (fun () -> dispatch (AskRevoke record.SessionId))
-                ]
-            ]
-        ]
-    ]
-
 // ─── View ────────────────────────────────────────────────────────────
 
-/// The module's page, over the catalog section the view hands it.
-let private body (msgs: SessionSecurityMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    let now = DateTimeOffset.UtcNow
+/// What the deferred tree component takes.
+type internal SurfaceProps = {|
+    Model: Model
+    Dispatch: Msg -> unit
+    Messages: SessionSecurityMessages
+    Locale: string
+|}
 
-    let noticeMsgs = { Dismiss = msgs.Dismiss }
+[<Emit("$0.then(m => m.Surface)")>]
+let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
 
-    let body =
-        if not model.Loaded then
-            Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.Loading ]
-        elif List.isEmpty model.Sessions then
-            Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.EmptyState ]
-        else
-            Html.div [
-                prop.className "border border-border rounded-lg overflow-hidden bg-white"
-                prop.children (model.Sessions |> List.map (sessionRow msgs model dispatch now))
-            ]
+/// The tree's file, fetched on demand with the node vocabulary and the
+/// renderer, so the shell's first load pays nothing for them.
+let private loadSurface () : JS.Promise<obj> =
+    surfaceOf (importDynamic "./SessionSecurityTree.fs")
 
-    let signOutEverywhere =
-        if List.isEmpty (model.Sessions |> List.filter SessionRecord.isActive) then
-            Html.none
-        elif model.PendingRevokeAll then
-            Html.div [
-                prop.className "mt-4 px-3 py-3 rounded border border-red-200 bg-red-50"
-                prop.children [
-                    Html.p [
-                        prop.className "text-sm text-red-800 mb-2"
-                        prop.text msgs.SignOutEverywhereWarning
-                    ]
-                    Html.div [
-                        prop.className "flex gap-2"
-                        prop.children [
-                            Forms.Button.dangerWith
-                                (Forms.Button.stateOf model.Busy msgs.SignOutEverywhere false)
-                                msgs.SignOutEverywhere
-                                (fun () -> dispatch ConfirmRevokeAll)
-                            Forms.Button.secondaryWith Forms.Button.Enabled msgs.Cancel (fun () ->
-                                dispatch CancelRevokeAll)
-                        ]
-                    ]
-                ]
-            ]
-        else
-            Html.div [
-                prop.className "mt-4"
-                prop.children [
-                    Forms.Button.secondaryWith
-                        (Forms.Button.stateOf false msgs.SignOutEverywhere model.Busy)
-                        msgs.SignOutEverywhere
-                        (fun () -> dispatch AskRevokeAll)
-                ]
-            ]
-
-    Html.div [
-        prop.className "p-6 max-w-3xl"
-        prop.children [
-            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
-            Html.p [
-                prop.className [ "text-sm mb-4"; Tokens.Text.secondary ]
-                prop.text msgs.Subheading
-            ]
-            StateViews.notice noticeMsgs model.Error (fun () -> dispatch DismissError)
-            StateViews.notice noticeMsgs model.Status (fun () -> dispatch DismissStatus)
-            body
-            signOutEverywhere
-        ]
-    ]
-
+/// The module's page: its tree, mounted on demand.
 let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
-    PageContent.FullWidth(body ctx.Messages.SessionSecurity model ctx.Dispatch)
+    PageContent.FullWidth(
+        TreeSurface.deferred "SessionSecurityTree.Surface" loadSurface {|
+            Model = model
+            Dispatch = ctx.Dispatch
+            Messages = ctx.Messages.SessionSecurity
+            Locale = ctx.Locale
+        |}
+    )
 
 // ─── Module creation ─────────────────────────────────────────────────
 

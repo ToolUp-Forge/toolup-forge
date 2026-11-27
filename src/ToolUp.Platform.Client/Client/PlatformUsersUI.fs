@@ -4,9 +4,8 @@
 module PlatformUsersUI
 
 open Fuaran.MVU
-open System
-open Feliz
-open Toolup.UIToolkit
+open Fable.Core
+open Fable.Core.JsInterop
 open ToolUp.Platform
 
 // ─── Platform user-management admin module ──────────────────────────
@@ -325,6 +324,14 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
         loadPrincipals ()
 
     | PrincipalsLoaded(Ok principals) ->
+        // A principal the reload did not change stays the record the page
+        // already holds, so its row is not built again.
+        let principals =
+            Memo.keepEqual
+                (fun (p: PrincipalSummary) -> p.UserId)
+                (model.Principals |> Option.defaultValue [])
+                principals
+
         {
             model with
                 Principals = Some principals
@@ -501,430 +508,33 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
 
     | ExportOffboardDone(Error e) -> applyOffboardResult None None (Some e) model
 
-// ─── View helpers ────────────────────────────────────────────────────
-
-/// Membership summary — "3 teams · Admin, Member" — or a team-less badge.
-let private membershipLabel (msgs: PlatformUsersMessages) (p: PrincipalSummary) : string =
-    if p.TeamLess then
-        msgs.NoTeams
-    else
-        let roles =
-            p.Memberships
-            |> List.map (fun (_, role) -> TeamRoles.displayName role)
-            |> List.distinct
-            |> String.concat ", "
-
-        msgs.MembershipSummary (List.length p.Memberships) roles
-
-let private lastSeenLabel (p: PrincipalSummary) : string =
-    match p.LastSeenAt with
-    | Some at -> at.ToString "yyyy-MM-dd"
-    | None -> "—"
-
-let private badge (cls: string) (label: string) =
-    Html.span [
-        prop.className $"inline-block text-xs px-2 py-0.5 rounded {cls}"
-        prop.text label
-    ]
-
-let private previewResultBadge (msgs: PlatformUsersMessages) (item: LifecyclePreviewItem) =
-    if not item.HasPreview then
-        badge ("bg-gray-100 " + Tokens.Text.muted) msgs.NoPreviewBadge
-    elif item.WouldAffect = 0 then
-        badge "bg-green-50 text-green-700" "0"
-    else
-        badge "bg-amber-50 text-amber-800" (string item.WouldAffect)
-
-let private summaryResultBadge (msgs: PlatformUsersMessages) (result: LifecycleHookResult) =
-    match result with
-    | LifecycleHookResult.Completed -> badge "bg-green-100 text-green-700" msgs.OutcomeCompleted
-    | LifecycleHookResult.Skipped _ -> badge "bg-yellow-100 text-yellow-800" msgs.OutcomeSkipped
-    | LifecycleHookResult.Failed _ -> badge "bg-red-100 text-red-700" msgs.OutcomeFailed
-
-let private summaryResultDetail (result: LifecycleHookResult) =
-    match result with
-    | LifecycleHookResult.Completed -> ""
-    | LifecycleHookResult.Skipped reason -> reason
-    | LifecycleHookResult.Failed error -> error
-
-// ─── Modal sub-views ─────────────────────────────────────────────────
-
-let private kindTitle (msgs: PlatformUsersMessages) =
-    function
-    | PlainOffboard -> msgs.OffboardTitle
-    | ExportOffboard -> msgs.ExportOffboardTitle
-
-let private primaryActionLabel (msgs: PlatformUsersMessages) (state: OffboardModalState) =
-    match state.Step, state.Kind with
-    | Confirming, _ -> msgs.ConfirmOffboard
-    | _, PlainOffboard -> msgs.OffboardAction
-    | _, ExportOffboard -> msgs.ExportOffboardAction
-
-/// The destructive submit — busy (showing `Working`) while a call is in flight.
-let private primaryButton (msgs: PlatformUsersMessages) (state: OffboardModalState) (dispatch: Msg -> unit) =
-    Forms.Button.dangerWith
-        (Forms.Button.stateOf state.Busy msgs.Working false)
-        (primaryActionLabel msgs state)
-        (fun () -> dispatch SubmitOffboard)
-
-/// A quiet action that is inert while another call is in flight.
-let private secondaryAction (state: OffboardModalState) (label: string) (onClick: unit -> unit) =
-    Forms.Button.secondaryWith
-        (if state.Busy then
-             Forms.Button.Disabled
-         else
-             Forms.Button.Enabled)
-        label
-        onClick
-
-let private fieldLabel (text: string) =
-    Html.label [
-        prop.className [ "block text-xs font-medium mb-1"; Tokens.Text.secondary ]
-        prop.text text
-    ]
-
-let private reasonField (msgs: PlatformUsersMessages) (state: OffboardModalState) (dispatch: Msg -> unit) =
-    Html.div [
-        prop.children [
-            fieldLabel msgs.ReasonLabel
-            Forms.Input.text state.Reason (SetOffboardReason >> dispatch) msgs.ReasonPlaceholder
-        ]
-    ]
-
-let private previewTable (msgs: PlatformUsersMessages) (preview: LifecyclePreview) =
-    Data.table
-        [
-            {
-                Header = msgs.ColumnHook
-                Align = Data.Left
-                Cell =
-                    fun (item: LifecyclePreviewItem) ->
-                        Html.span [ prop.className "font-mono text-xs"; prop.text item.HookName ]
-            }
-            {
-                Header = msgs.ColumnWouldAffect
-                Align = Data.Left
-                Cell = previewResultBadge msgs
-            }
-            {
-                Header = msgs.ColumnDetail
-                Align = Data.Left
-                Cell =
-                    fun item ->
-                        Html.span [
-                            prop.className [ "text-xs break-all"; Tokens.Text.secondary ]
-                            prop.text item.Detail
-                        ]
-            }
-        ]
-        preview.Items
-
-let private summaryTable
-    (msgs: PlatformUsersMessages)
-    (summary: LifecycleSummary)
-    (archive: LifecycleExportArchive option)
-    =
-    Html.div [
-        prop.className "space-y-3"
-        prop.children [
-            Html.div [
-                prop.className "flex gap-2 flex-wrap"
-                prop.children [
-                    badge "bg-green-50 text-green-700" (msgs.CompletedCount(LifecycleSummary.completedCount summary))
-                    badge "bg-yellow-50 text-yellow-800" (msgs.SkippedCount(LifecycleSummary.skippedCount summary))
-                    badge "bg-red-50 text-red-700" (msgs.FailedCount(LifecycleSummary.failedCount summary))
-                    badge ("bg-gray-100 " + Tokens.Text.secondary) (sprintf "%d ms" (int summary.TotalElapsedMs))
-                ]
-            ]
-
-            match archive with
-            | Some a ->
-                Html.div [
-                    prop.className "text-xs bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-800 break-all"
-                    prop.children [
-                        Html.p [
-                            prop.className "font-medium mb-1"
-                            prop.text (msgs.ExportArchiveWritten a.SegmentCount)
-                        ]
-                        Html.p [ prop.text (sprintf "%s/%s" a.Container a.BlobPath) ]
-                        Html.p [
-                            prop.className "font-mono text-blue-600 mt-1"
-                            prop.text (sprintf "sha256: %s" a.ContentHash)
-                        ]
-                    ]
-                ]
-            | None -> Html.none
-
-            if List.isEmpty summary.Outcomes then
-                Html.p [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.NoHooksRan ]
-            else
-                Data.table
-                    [
-                        {
-                            Header = msgs.ColumnHook
-                            Align = Data.Left
-                            Cell =
-                                fun (outcome: LifecycleHookOutcome) ->
-                                    Html.span [ prop.className "font-mono text-xs"; prop.text outcome.HookName ]
-                        }
-                        {
-                            Header = msgs.ColumnResult
-                            Align = Data.Left
-                            Cell = fun outcome -> summaryResultBadge msgs outcome.Result
-                        }
-                        {
-                            Header = msgs.ColumnDetail
-                            Align = Data.Left
-                            Cell =
-                                fun outcome ->
-                                    Html.span [
-                                        prop.className [ "text-xs break-all"; Tokens.Text.secondary ]
-                                        prop.text (summaryResultDetail outcome.Result)
-                                    ]
-                        }
-                    ]
-                    summary.Outcomes
-        ]
-    ]
-
-let private offboardModalView
-    (msgs: PlatformUsersMessages)
-    (state: OffboardModalState)
-    (label: string)
-    (dispatch: Msg -> unit)
-    =
-    let heading =
-        match state.Step with
-        | Completed _ -> msgs.OffboardCompleteTitle
-        | _ -> kindTitle msgs state.Kind
-
-    let subject =
-        Html.p [
-            prop.className "text-sm text-muted"
-            prop.children [
-                Html.span [ prop.text (msgs.SubjectLabel label) ]
-                Html.span [ prop.className "font-mono text-xs break-all"; prop.text state.ScopeId ]
-            ]
-        ]
-
-    let modalError =
-        state.Error
-        |> Option.map StateViews.noticeStatic
-        |> Option.defaultValue Html.none
-
-    let cancel = Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseOffboard)
-
-    match state.Step with
-    | Compose ->
-        Modal.overlay heading [ subject; reasonField msgs state dispatch; modalError ] [
-            cancel
-            secondaryAction state msgs.PreviewImpact (fun () -> dispatch RequestPreview)
-            primaryButton msgs state dispatch
-        ]
-
-    | Previewed preview ->
-        Modal.overlay heading [
-            subject
-            Html.p [
-                prop.className "text-sm text-muted"
-                prop.text (msgs.PreviewSummary preview.TotalWouldAffect)
-            ]
-            previewTable msgs preview
-            reasonField msgs state dispatch
-            modalError
-        ] [ cancel; primaryButton msgs state dispatch ]
-
-    | Confirming ->
-        Modal.overlay heading [
-            subject
-            Html.div [
-                prop.className "text-sm bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800"
-                prop.children [
-                    Html.p [
-                        prop.className "font-medium mb-1"
-                        prop.text msgs.ConfirmationRequiredHeading
-                    ]
-                    Html.p [ prop.text msgs.ConfirmationRequiredBody ]
-                    match state.Kind with
-                    | ExportOffboard -> Html.p [ prop.className "mt-1"; prop.text msgs.ExportConfirmationNote ]
-                    | PlainOffboard -> Html.none
-                ]
-            ]
-            Html.div [
-                prop.className "flex items-end gap-2"
-                prop.children [
-                    Html.div [
-                        prop.className "flex-1"
-                        prop.children [
-                            fieldLabel msgs.ConfirmationTokenLabel
-                            Forms.Input.text
-                                state.Token
-                                (SetOffboardToken >> dispatch)
-                                msgs.ConfirmationTokenPlaceholder
-                        ]
-                    ]
-                    secondaryAction state msgs.RequestToken (fun () -> dispatch RequestToken)
-                ]
-            ]
-            modalError
-        ] [ cancel; primaryButton msgs state dispatch ]
-
-    | Completed(summary, archive) ->
-        Modal.overlay heading [ subject; summaryTable msgs summary archive ] [
-            Forms.Button.primary msgs.Close (fun () -> dispatch CloseOffboard)
-        ]
-
-// ─── List row ────────────────────────────────────────────────────────
-
-let private principalRow
-    (msgs: PlatformUsersMessages)
-    (directory: UserDirectory.Model)
-    (p: PrincipalSummary)
-    (dispatch: Msg -> unit)
-    =
-    let primaryLabel, secondaryLabel = UserDirectory.labels directory p.UserId
-
-    Html.div [
-        prop.className "flex items-center justify-between p-3 border border-border rounded-lg mb-2 gap-3 flex-wrap"
-        prop.children [
-            Html.div [
-                prop.className "flex flex-col min-w-0"
-                prop.children [
-                    Html.div [
-                        prop.className "flex items-center gap-2 flex-wrap"
-                        prop.children [
-                            Html.span [ prop.className "font-medium break-all"; prop.text primaryLabel ]
-                            if p.TeamLess then
-                                badge "bg-orange-100 text-orange-700" msgs.TeamLessBadge
-                            if p.HasUserScopeData then
-                                badge ("bg-gray-100 " + Tokens.Text.secondary) msgs.HasDataBadge
-                        ]
-                    ]
-                    match secondaryLabel with
-                    | Some email -> Html.span [ prop.className "text-xs text-muted break-all"; prop.text email ]
-                    | None -> Html.none
-                    Html.span [
-                        prop.className "text-xs text-muted"
-                        prop.text (msgs.RowSubtitle (membershipLabel msgs p) (lastSeenLabel p))
-                    ]
-                    Html.span [
-                        prop.className [ "text-xs font-mono break-all"; Tokens.Text.muted ]
-                        prop.text p.UserId
-                    ]
-                ]
-            ]
-            Html.div [
-                prop.className "flex gap-2 flex-wrap"
-                prop.children [
-                    Forms.Button.secondary msgs.PreviewAction (fun () ->
-                        dispatch (OpenOffboard(p.UserId, PlainOffboard)))
-                    Forms.Button.secondary msgs.ExportOffboardAction (fun () ->
-                        dispatch (OpenOffboard(p.UserId, ExportOffboard)))
-                    Html.button [
-                        prop.className
-                            "px-3 py-1.5 text-sm rounded-lg border border-red-200 text-red-700 hover:bg-red-50 transition-colors"
-                        prop.text msgs.OffboardAction
-                        prop.onClick (fun _ -> dispatch (OpenOffboard(p.UserId, PlainOffboard)))
-                    ]
-                ]
-            ]
-        ]
-    ]
-
 // ─── View ────────────────────────────────────────────────────────────
 
-/// The module's page, over the catalog section the view hands it.
-let private body (msgs: PlatformUsersMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    let filterBar =
-        Html.div [
-            prop.className "flex items-center justify-between mb-4 flex-wrap gap-2"
-            prop.children [
-                Html.label [
-                    prop.className [ "flex items-center gap-2 text-sm cursor-pointer"; Tokens.Text.secondary ]
-                    prop.children [
-                        Html.input [
-                            prop.type' "checkbox"
-                            prop.isChecked model.TeamLessOnly
-                            prop.onChange (fun (_: bool) -> dispatch ToggleTeamLessOnly)
-                        ]
-                        Html.span [ prop.text msgs.TeamLessOnly ]
-                    ]
-                ]
-                Html.button [
-                    prop.className "text-xs text-brand hover:underline"
-                    prop.text msgs.Refresh
-                    prop.onClick (fun _ -> dispatch LoadPrincipals)
-                ]
-            ]
-        ]
+/// What the deferred tree component takes.
+type internal SurfaceProps = {|
+    Model: Model
+    Dispatch: Msg -> unit
+    Messages: PlatformUsersMessages
+    Locale: string
+|}
 
-    let listPane =
-        match model.Principals with
-        | None ->
-            Html.p [
-                prop.className [ "text-sm"; Tokens.Text.muted ]
-                prop.text msgs.LoadingPrincipals
-            ]
-        | Some principals ->
-            let visible =
-                if model.TeamLessOnly then
-                    principals |> List.filter _.TeamLess
-                else
-                    principals
+[<Emit("$0.then(m => m.Surface)")>]
+let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
 
-            if List.isEmpty principals then
-                // Empty / degraded — no principals, or the offboard
-                // substrate is disabled (the error banner carries the why).
-                Html.div [
-                    prop.className "bg-white rounded-lg border border-border p-6 text-center"
-                    prop.children [
-                        Html.p [
-                            prop.className [ "text-sm"; Tokens.Text.secondary ]
-                            prop.text msgs.NoPrincipalsHeading
-                        ]
-                        Html.p [
-                            prop.className [ "text-xs mt-1"; Tokens.Text.muted ]
-                            prop.text msgs.NoPrincipalsBody
-                        ]
-                    ]
-                ]
-            elif List.isEmpty visible then
-                Html.p [
-                    prop.className [ "text-sm py-4"; Tokens.Text.muted ]
-                    prop.text msgs.NoTeamLessPrincipals
-                ]
-            else
-                Html.div [
-                    prop.children [
-                        for p in visible do
-                            principalRow msgs model.Directory p dispatch
-                    ]
-                ]
-
-    let selfLabelForModal (state: OffboardModalState) =
-        let primary, _ = UserDirectory.labels model.Directory state.UserId
-        primary
-
-    Html.div [
-        prop.className "p-6 max-w-3xl"
-        prop.children [
-            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
-            Html.p [
-                prop.className [ "text-sm mb-4"; Tokens.Text.secondary ]
-                prop.text msgs.Subheading
-            ]
-            StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
-            filterBar
-            listPane
-
-            match model.Offboard with
-            | Some state -> offboardModalView msgs state (selfLabelForModal state) dispatch
-            | None -> Html.none
-        ]
-    ]
+/// The tree's file, fetched on demand with the node vocabulary and the
+/// renderer, so the shell's first load pays nothing for them.
+let private loadSurface () : JS.Promise<obj> =
+    surfaceOf (importDynamic "./PlatformUsersTree.fs")
 
 let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
-    PageContent.FullWidth(body ctx.Messages.PlatformUsers model ctx.Dispatch)
+    PageContent.FullWidth(
+        TreeSurface.deferred "PlatformUsersTree.Surface" loadSurface {|
+            Model = model
+            Dispatch = ctx.Dispatch
+            Messages = ctx.Messages.PlatformUsers
+            Locale = ctx.Locale
+        |}
+    )
 
 // ─── Module creation ─────────────────────────────────────────────────
 

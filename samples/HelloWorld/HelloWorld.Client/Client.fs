@@ -18,7 +18,9 @@ open ToolUp.Platform
 //
 // The slots are set to what the server composes, so nothing the shell opens
 // calls a route the server does not mount: the module-visibility profile
-// editor is on (the server composes `SurfacingModuleVisibility`), and the
+// editor is on (the server composes `SurfacingModuleVisibility`), so are the
+// session-security page (the server composes a session registry) and the
+// platform-users admin (the server enables the tenant lifecycle), and the
 // data manager is off (no module declares a data type, so the server mounts
 // no file API). The Ctrl+K / Cmd+K command palette is client-only, over the
 // caller's visible pages. The sample names itself, and takes the SDK's own
@@ -45,6 +47,11 @@ let private config =
             Slots = {
                 fromBundle.Slots with
                     ModuleVisibilityAdmin = SlotFill.Default
+                    SessionSecurity = SlotFill.Default
+            }
+            Chrome = {
+                fromBundle.Chrome with
+                    PlatformUsers = ChromeFill.On()
             }
             Shell = {
                 fromBundle.Shell with

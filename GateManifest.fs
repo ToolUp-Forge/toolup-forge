@@ -544,19 +544,19 @@ let rows (b: Bodies) : GateLeg<Lane> list = [
         Input.Tree
         Input.Network
     ]
-    // Twelve real-browser scenarios, and the only CI transpile of
-    // `ToolUp.Offline.Client`. Four of them run the HelloWorld sample's
+    // Fifteen real-browser scenarios, and the only CI transpile of
+    // `ToolUp.Offline.Client`. Seven of them run the HelloWorld sample's
     // server and client (samples/HelloWorld, under `samples/**`) and open
     // the shell's tree surfaces in it. The floor is exact: each scenario is
     // expensive, so losing one silently is what it must catch. It counts
-    // the passed cases, which are the twelve and the registration guard's two.
+    // the passed cases, which are the fifteen and the registration guard's two.
     elsewhere "BrowserSmoke" (LegKind.Body b.BrowserSmoke) [ Site.Ci "browser-smoke" ] [
         Input.Tree
         Input.Node
         Input.Browser
         Input.Env "TOOLUP_BROWSER_SMOKE_SKIP_INSTALL"
     ]
-    |> floor' (Floor.Exactly 14)
+    |> floor' (Floor.Exactly 17)
     // The two measured gates: each script measures, then runs the SDK's
     // deciding target over the committed budget file.
     elsewhere "PerfBudget" (LegKind.Script "dev-scripts/perf-budget-gate.ps1") [ Site.Ci "perf-budget" ] [
