@@ -71,14 +71,20 @@
 # on demand when any dynamic import of the first load reaches it, directly or
 # through a deferred surface's chunk. The teeth check feeds it both shapes.
 #
-# ClientBench also times one dispatch of the 200-row table, as Feliz and as a
-# Fuaran-UI tree, in a headless browser with React's commit and a forced layout
-# (src/ToolUp.AI.Client.Tests/client-bench-browser.mjs, over the shell sample's
-# Vite). The figures are recorded in the measurement file as the lever
-# `browserDispatch` and decided on nothing: viewPerDispatchUs sees construction
-# only, and this is the figure a tree surface is judged on. A machine with no
-# Edge or Chrome records the absence; TOOLUP_BENCH_BROWSER names another
-# Chromium-family executable.
+# ClientBench also times one dispatch in a headless browser with React's commit
+# and a forced layout (src/ToolUp.AI.Client.Tests/client-bench-browser.mjs, over
+# the shell sample's Vite), on a desktop profile and a 6x CPU throttle: the
+# 200-row table, as Feliz and as a Fuaran-UI tree (also with its rows kept, as a
+# DataGrid and as boxes with Markdown); and each real module view that
+# moved to a tree (the team manager, the module-visibility editor, Platform
+# Management's teams tab), as the Feliz page it replaced and as the shipped tree,
+# with the Feliz page timed again as its drift control. A view that shows a list
+# is timed twice, one record renamed and the whole list loaded again
+# (docs/platform/budgets.md). The figures are recorded in the measurement file
+# as the lever `browserDispatch` and decided on nothing: viewPerDispatchUs sees
+# construction only, and this is the figure a tree surface is judged on. A
+# machine with no Edge or Chrome records the absence; TOOLUP_BENCH_BROWSER names
+# another Chromium-family executable.
 #
 # ── The load half (Phase 886) ────────────────────────────────────────────
 #
