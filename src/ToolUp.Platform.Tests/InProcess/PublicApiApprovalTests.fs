@@ -85,6 +85,10 @@ let private assemblyCase (a: PackableAssembly) = test a.Name {
         else
             let baseline = File.ReadAllText baselinePath
 
+            match describePlaceholderBaseline a.Name baseline with
+            | None -> ()
+            | Some report -> failtest report
+
             match describeDrift a.Name (compareSurface baseline rendered) with
             | None -> ()
             | Some report -> failtest report
@@ -411,6 +415,23 @@ let private messageFixtures =
                 Expect.stringContains report "Demo.T" "the unreadable type must be named"
                 Expect.stringContains report "Vendor.Sdk" "the cause must be named"
                 Expect.stringContains report "NOT written" "the report must say nothing was written"
+        }
+
+        test "a comparison refuses a committed baseline that holds a placeholder" {
+            let baseline =
+                "# header\nDemo.T (class)\nDemo.T  # <members unavailable: FileNotFoundException>\n"
+
+            let report =
+                Expect.wantSome
+                    (describePlaceholderBaseline "Demo" baseline)
+                    "a placeholder baseline must fail the comparison, even against an identical render"
+
+            Expect.stringContains report "Demo.T" "the unread type must be named"
+            Expect.stringContains report "api-baselines/Demo.approved.txt" "the baseline must be named"
+
+            Expect.isNone
+                (describePlaceholderBaseline "Demo" "Demo.T (class)\nDemo.T.Alpha() : System.Int32\n")
+                "a baseline with every member read is not refused"
         }
 
         test "a fully read render is approved as rendered" {
@@ -1182,11 +1203,77 @@ let private docCoverageFixtures =
         }
     ]
 
+// A library's build copies none of its NuGet dependencies into its `bin`.
+// These hosts' vendor packages are copied by no other built project, so the
+// bin pool alone left their host types unread; the deps file closes that.
+let private packageDependencyFixtures =
+    let hostRenders (assemblyName: string) (hostType: string) = test assemblyName {
+        match packable.Value |> List.tryFind (fun a -> a.Name = assemblyName) with
+        | None -> failtestf "%s is not discovered as packable" assemblyName
+        | Some a ->
+            match resolveDll config a with
+            | None -> skiptestf "%s: not built — deferring to the build precondition" assemblyName
+            | Some dll ->
+                let render = renderSurfaceDetail dll pool.Value
+
+                Expect.isEmpty render.Unreadable "every type's members must be read"
+
+                let members =
+                    significantLines render.Text
+                    |> Array.filter (fun l -> l.StartsWith(hostType + "."))
+
+                Expect.isNonEmpty members (sprintf "%s must render its members" hostType)
+    }
+
+    testList "package dependencies" [
+        hostRenders "ToolUp.Hosts.AwsLambda" "ToolUp.Hosts.AwsLambda.AwsLambdaHost"
+        hostRenders "ToolUp.Hosts.AzureFunctions" "ToolUp.Hosts.AzureFunctions.AzureFunctionHost"
+
+        test "a deps file's package runtime assets resolve under the package root" {
+            use dir = TempDir.create "depsresolve"
+            let packages = Path.Combine(dir.Path, "packages")
+
+            let asset =
+                Path.Combine(packages, "vendor.sdk", "1.2.3", "lib", "net8.0", "Vendor.Sdk.dll")
+
+            Directory.CreateDirectory(Path.GetDirectoryName asset) |> ignore
+            File.WriteAllText(asset, "")
+            let dll = Path.Combine(dir.Path, "bin", "Demo.dll")
+            Directory.CreateDirectory(Path.GetDirectoryName dll) |> ignore
+
+            File.WriteAllText(
+                Path.ChangeExtension(dll, ".deps.json"),
+                """{
+  "targets": { ".NETCoreApp,Version=v10.0": {
+    "Demo/1.0.0": { "runtime": { "Demo.dll": {} } },
+    "Vendor.Sdk/1.2.3": { "runtime": { "lib/net8.0/Vendor.Sdk.dll": {} } },
+    "Vendor.Absent/9.0.0": { "runtime": { "lib/net8.0/Vendor.Absent.dll": {} } }
+  } },
+  "libraries": {
+    "Demo/1.0.0": { "type": "project" },
+    "Vendor.Sdk/1.2.3": { "type": "package", "path": "vendor.sdk/1.2.3" },
+    "Vendor.Absent/9.0.0": { "type": "package", "path": "vendor.absent/9.0.0" }
+  }
+}"""
+            )
+
+            Expect.equal
+                (packageDependencyPaths packages dll |> List.map Path.GetFullPath)
+                [ Path.GetFullPath asset ]
+                "the package asset resolves; the project entry and an absent package do not"
+
+            Expect.isEmpty
+                (packageDependencyPaths packages (Path.Combine(dir.Path, "bin", "NoDeps.dll")))
+                "an assembly without a deps file adds nothing"
+        }
+    ]
+
 [<Tests>]
 let tests =
     testList "Phase 175 — Public-API approval baseline" [
         comparerFixtures
         messageFixtures
+        packageDependencyFixtures
         obsoleteSeamFixtures
         deprecationPolicyFixtures
         preconditionFixtures

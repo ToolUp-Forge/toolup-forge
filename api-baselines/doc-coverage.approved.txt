@@ -107,8 +107,8 @@ ToolUp.Graph.Core 39/133
 ToolUp.Graph.InMemory 6/14
 ToolUp.Graph.Neo4j 34/49
 ToolUp.Graph.Projection 28/48
-ToolUp.Hosts.AwsLambda 0/1
-ToolUp.Hosts.AzureFunctions 0/1
+ToolUp.Hosts.AwsLambda 9/10
+ToolUp.Hosts.AzureFunctions 3/4
 ToolUp.Hosts.DeliveredEgress 26/38
 ToolUp.Hosts.EdgeCache 35/76
 ToolUp.Hosts.GoogleCloudFunctions 2/4

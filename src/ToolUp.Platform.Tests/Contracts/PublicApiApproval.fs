@@ -409,6 +409,44 @@ let resolverPool (root: string) (config: string) : string list =
         | many -> many |> List.maxBy versionOf)
     |> List.ofSeq
 
+/// The folder a restore extracts packages into: `NUGET_PACKAGES` when set,
+/// otherwise the per-user default `~/.nuget/packages` on every OS.
+let nugetPackageRoot () =
+    match Environment.GetEnvironmentVariable "NUGET_PACKAGES" with
+    | set when not (String.IsNullOrWhiteSpace set) -> set
+    | _ -> Path.Combine(Environment.GetFolderPath Environment.SpecialFolder.UserProfile, ".nuget", "packages")
+
+/// The package runtime assemblies an assembly's own `<name>.deps.json` lists,
+/// found under `packageRoot`. A library's build copies none of its NuGet
+/// dependencies into its `bin`, so a package that no other built project
+/// happens to copy is absent from `resolverPool`; the deps file names the
+/// exact package, version and asset the build compiled against. Missing
+/// files are dropped, which leaves the type unreadable and visible, never
+/// silently resolved against something else.
+let packageDependencyPaths (packageRoot: string) (dllPath: string) : string list =
+    let depsPath = Path.ChangeExtension(dllPath, ".deps.json")
+
+    if not (File.Exists depsPath) then
+        []
+    else
+        use deps = Json.JsonDocument.Parse(File.ReadAllText depsPath)
+        let libraries = deps.RootElement.GetProperty "libraries"
+
+        [
+            for target in deps.RootElement.GetProperty("targets").EnumerateObject() do
+                for library in target.Value.EnumerateObject() do
+                    match libraries.TryGetProperty library.Name, library.Value.TryGetProperty "runtime" with
+                    | (true, info), (true, runtime) when info.GetProperty("type").GetString() = "package" ->
+                        match info.TryGetProperty "path" with
+                        | true, path ->
+                            for asset in runtime.EnumerateObject() do
+                                yield Path.Combine(packageRoot, path.GetString(), asset.Name)
+                        | _ -> ()
+                    | _ -> ()
+        ]
+        |> List.distinct
+        |> List.filter File.Exists
+
 // ─── Surface rendering (metadata-only) ───────────────────────────────
 
 let private isCompilerGenerated (attrs: Collections.Generic.IList<CustomAttributeData>) =
@@ -1010,18 +1048,24 @@ type SurfaceRender = {
 
 /// Render the deterministic public-surface text for one packable DLL,
 /// together with its `[<Obsolete>]` markings. `resolverPaths` is the shared
-/// MLC dependency pool. Sorted by type (ordinal), then by member within
-/// each type — re-runs are byte-stable.
+/// MLC dependency pool; the DLL's own package dependencies
+/// (`packageDependencyPaths`) fill in what the pool lacks. Sorted by type
+/// (ordinal), then by member within each type — re-runs are byte-stable.
 let renderSurfaceDetail (dllPath: string) (resolverPaths: string seq) : SurfaceRender =
     let tpa =
         (AppContext.GetData "TRUSTED_PLATFORM_ASSEMBLIES" :?> string).Split(Path.PathSeparator)
         |> Array.filter (String.IsNullOrWhiteSpace >> not)
 
     let allPaths =
-        Seq.append tpa resolverPaths
+        Seq.concat [
+            tpa :> string seq
+            resolverPaths
+            packageDependencyPaths (nugetPackageRoot ()) dllPath
+        ]
         |> Seq.filter File.Exists
         // PathAssemblyResolver rejects two files with the same simple
-        // name — dedup, runtime (TPA) wins over copied bin duplicates.
+        // name — dedup, first wins: the runtime (TPA), then the built bin
+        // pool, then the package cache for names neither carries.
         |> Seq.distinctBy (fun p -> Path.GetFileName(p).ToLowerInvariant())
         |> Seq.toArray
 
@@ -1106,7 +1150,7 @@ let approvedText (assemblyName: string) (dllPath: string) (render: SurfaceRender
     | unreadable ->
         Error(
             sprintf
-                "%s: the members of %d type(s) could not be read from %s, so its baseline was NOT written:\n%s\n\nThe reader resolves dependencies from every built `src/**/bin/<config>/net10.0/`: build the solution (`dotnet build ToolUp.Forge.sln`) and regenerate. A dependency that no built project copies stays unreadable after a full build; that is a gap in the resolver pool, not a surface to approve."
+                "%s: the members of %d type(s) could not be read from %s, so its baseline was NOT written:\n%s\n\nThe reader resolves dependencies from every built `src/**/bin/<config>/net10.0/` and from the packages the assembly's own `.deps.json` lists in the NuGet package folder: build the solution (`dotnet build ToolUp.Forge.sln`) and regenerate. A dependency neither route finds after a full build and restore is a gap in the resolver, not a surface to approve."
                 assemblyName
                 unreadable.Length
                 dllPath
@@ -1125,6 +1169,26 @@ let private regenRecipe (assemblyName: string) =
         "  $env:TOOLUP_APPROVE = \"api:%s\"\n  dotnet run --project src/ToolUp.Platform.Tests.PublicApi/ToolUp.Platform.Tests.PublicApi.fsproj\n  $env:TOOLUP_APPROVE = $null\n\nthen commit api-baselines/%s.approved.txt in the SAME PR."
         assemblyName
         assemblyName
+
+/// What a comparison run says of a committed baseline that records a type
+/// as unreadable, or `None` when it records none. A placeholder compares
+/// equal to the next unreadable render, so that type's members would be
+/// guarded by nothing; it is never an approved surface.
+let describePlaceholderBaseline (assemblyName: string) (baseline: string) : string option =
+    let unreadable = (parse baseline).Unreadable
+
+    if Set.isEmpty unreadable then
+        None
+    else
+        Some(
+            sprintf
+                "%s: api-baselines/%s.approved.txt records %d type(s) whose members were never read:\n%s\n\nA `<members unavailable` line is a placeholder, not a surface, and guards nothing. Build the solution and regenerate this baseline:\n\n%s"
+                assemblyName
+                assemblyName
+                unreadable.Count
+                (unreadable |> Set.toList |> List.map (sprintf "  - %s") |> String.concat "\n")
+                (regenRecipe assemblyName)
+        )
 
 /// The gate's failure text for a drift, or `None` when the surface matches
 /// its baseline. Removal and addition get deliberately DIFFERENT messages;

@@ -4,4 +4,12 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.Hosts.AwsLambda.AwsLambdaHost (class)
-ToolUp.Hosts.AwsLambda.AwsLambdaHost  # <members unavailable: FileNotFoundException>
+ToolUp.Hosts.AwsLambda.AwsLambdaHost.bridgeAlb(ToolUp.Platform.Compose.IServerHost, Amazon.Lambda.ApplicationLoadBalancerEvents.ApplicationLoadBalancerRequest) : System.Threading.Tasks.Task`1[Amazon.Lambda.ApplicationLoadBalancerEvents.ApplicationLoadBalancerResponse]
+ToolUp.Hosts.AwsLambda.AwsLambdaHost.bridgeV1(ToolUp.Platform.Compose.IServerHost, Amazon.Lambda.APIGatewayEvents.APIGatewayProxyRequest) : System.Threading.Tasks.Task`1[Amazon.Lambda.APIGatewayEvents.APIGatewayProxyResponse]
+ToolUp.Hosts.AwsLambda.AwsLambdaHost.bridgeV2(ToolUp.Platform.Compose.IServerHost, Amazon.Lambda.APIGatewayEvents.APIGatewayHttpApiV2ProxyRequest) : System.Threading.Tasks.Task`1[Amazon.Lambda.APIGatewayEvents.APIGatewayHttpApiV2ProxyResponse]
+ToolUp.Hosts.AwsLambda.AwsLambdaHost.toHttpContextAlb(Amazon.Lambda.ApplicationLoadBalancerEvents.ApplicationLoadBalancerRequest, ToolUp.Platform.Compose.IServerHost) : Microsoft.AspNetCore.Http.HttpContext
+ToolUp.Hosts.AwsLambda.AwsLambdaHost.toHttpContextV1(Amazon.Lambda.APIGatewayEvents.APIGatewayProxyRequest, ToolUp.Platform.Compose.IServerHost) : Microsoft.AspNetCore.Http.HttpContext
+ToolUp.Hosts.AwsLambda.AwsLambdaHost.toHttpContextV2(Amazon.Lambda.APIGatewayEvents.APIGatewayHttpApiV2ProxyRequest, ToolUp.Platform.Compose.IServerHost) : Microsoft.AspNetCore.Http.HttpContext
+ToolUp.Hosts.AwsLambda.AwsLambdaHost.toResponseAlb(Microsoft.AspNetCore.Http.HttpContext) : Amazon.Lambda.ApplicationLoadBalancerEvents.ApplicationLoadBalancerResponse
+ToolUp.Hosts.AwsLambda.AwsLambdaHost.toResponseV1(Microsoft.AspNetCore.Http.HttpContext) : Amazon.Lambda.APIGatewayEvents.APIGatewayProxyResponse
+ToolUp.Hosts.AwsLambda.AwsLambdaHost.toResponseV2(Microsoft.AspNetCore.Http.HttpContext) : Amazon.Lambda.APIGatewayEvents.APIGatewayHttpApiV2ProxyResponse
