@@ -40,7 +40,7 @@
          the nupkg; Fable's package loader extracts and compiles source
          directly. Mirrors the Feliz / Fable.Elmish convention. -->
     <ItemGroup>
-        <Content Include="**\*.fsproj;**\*.fs;**\*.svg;**\*.png;**\TreeLoweringRuntime.js;**\TeamManagerTree.js;**\ModuleVisibilityAdminTree.js;**\PlatformAdminTree.js;**\CommandPaletteTree.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg;**\*.png;**\TreeLoweringRuntime.js;**\TeamManagerTree.js;**\ModuleVisibilityAdminTree.js;**\PlatformAdminTree.js;**\CommandPaletteTree.js;**\SessionSecurityTree.js;**\PermissionsAdminTree.js;**\PlatformUsersTree.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
@@ -417,6 +417,7 @@
         <Compile Include="Client\ModuleVisibilityAdminUI.fs" />
         <Compile Include="Client\ModuleVisibilityAdminTree.fs" />
         <Compile Include="Client\SessionSecurityUI.fs" />
+        <Compile Include="Client\SessionSecurityTree.fs" />
         <Compile Include="Client\HealthMonitorUI.fs" />
         <Compile Include="Client\DatadogReadbackUI.fs" />
         <!-- Phase 9x - the self-hosted observability admin module. After
@@ -427,6 +428,7 @@
         <Compile Include="Client\PlatformAdminUI.fs" />
         <Compile Include="Client\PlatformAdminTree.fs" />
         <Compile Include="Client\PermissionsAdminUI.fs" />
+        <Compile Include="Client\PermissionsAdminTree.fs" />
         <Compile Include="Client\UsageDashboard.fs" />
         <!-- Phase 529 - audit-trail viewer admin module over
              IAuditViewApi. Auto-injected in non-Anonymous modes unless
@@ -485,6 +487,7 @@
              .PlatformUsers) + Platform-Admin gated. Before SDK.Client.fs
              (prepareModules calls create). -->
         <Compile Include="Client\PlatformUsersUI.fs" />
+        <Compile Include="Client\PlatformUsersTree.fs" />
         <!-- Phase 879 - the shell's slot table: every replaceable built-in
              (and the chrome built-ins that interleave with them) with its
              position, gate and administration tile. After every built-in

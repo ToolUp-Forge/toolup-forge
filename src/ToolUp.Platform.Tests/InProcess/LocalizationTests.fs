@@ -314,8 +314,6 @@ let private formatSpecifier =
 /// one is fixed, so the list can only shrink deliberately.
 let private recordedComposedResidue =
     set [
-        // An algorithm name beside the digest it labels.
-        "PlatformUsersUI.fs", "sha256: %s"
         // The unreduced-view preview's placeholder (a composition in progress).
         "UnreducedViewPreview.fs", "awaiting: %s"
         // The provenance popover's entity link; the component has no catalog.

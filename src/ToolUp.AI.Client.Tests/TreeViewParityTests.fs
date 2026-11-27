@@ -604,6 +604,455 @@ let private adminTests =
                     (sprintf "state \"%s\": the buttons, in tab order" name))
     ]
 
+// ─── The subject: session security ───────────────────────────────────
+
+let private sessionMsgs = MessageCatalog.english.SessionSecurity
+
+/// The minute the tree reads "last seen" against; the Feliz page read the clock.
+let private sessionNow =
+    System.DateTimeOffset(2026, 11, 1, 12, 0, 0, System.TimeSpan.Zero)
+
+let private sessionFeliz
+    (model: SessionSecurityUI.Model)
+    (dispatch: SessionSecurityUI.Msg -> unit)
+    : Feliz.ReactElement =
+    FelizReferenceViews.SessionSecurity.body sessionMsgs model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let sessionTree (model: SessionSecurityUI.Model) (dispatch: SessionSecurityUI.Msg -> unit) : Feliz.ReactElement =
+    lowerTree dispatch (SessionSecurityTree.tree sessionMsgs sessionNow model)
+
+let private session (id: string) (device: string) (revoked: bool) : SessionRecord = {
+    SessionId = id
+    UserId = "op"
+    ScopeId = "user-op"
+    DeviceDescriptor = device
+    AuthProvider = "HeaderAuthProvider"
+    CreatedAt = sessionNow.AddDays -3.0
+    LastSeenAt = sessionNow.AddMinutes -5.0
+    Status = (if revoked then RevokedSession else ActiveSession)
+    RevokedAt = (if revoked then Some(sessionNow.AddDays -1.0) else None)
+    RevokedBy = (if revoked then Some "op" else None)
+}
+
+let sessionInit () =
+    fromUnitInit (fun () -> SessionSecurityUI.init ClientModuleContext.empty) SessionSecurityUI.update
+
+/// One live session and one revoked, as the server lists them.
+let sessionsLoaded () =
+    (sessionInit ())
+        .Dispatch(
+            SessionSecurityUI.SessionsLoaded(
+                Ok [ session "s1" "Chrome on Windows" false; session "s2" "Safari on iOS" true ]
+            )
+        )
+
+/// The states session security is held to, each reached through `update`.
+let sessionStates () = [
+    "loading", sessionInit ()
+    "no sessions", (sessionInit ()).Dispatch(SessionSecurityUI.SessionsLoaded(Ok []))
+    "one live session, one revoked", sessionsLoaded ()
+    "a sign-out awaiting confirmation", (sessionsLoaded ()).Dispatch(SessionSecurityUI.AskRevoke "s1")
+    "sign out everywhere awaiting confirmation", (sessionsLoaded ()).Dispatch SessionSecurityUI.AskRevokeAll
+    "a refresh failed",
+    (sessionsLoaded ()).Dispatch(SessionSecurityUI.SessionsLoaded(Error "the session service is unreachable"))
+]
+
+let private sessionTests =
+    testList "session security as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            for name, harness in sessionStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, sessionTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "assertion 2: a kept row's button and the confirmations reach update" (fun () ->
+            (sessionsLoaded ())
+                .Interact(ViewMount.mountAndInteract, sessionTree, Drive.click sessionMsgs.SignOut)
+                .AssertModelWith(
+                    "the live session's Sign out asks to confirm it",
+                    fun m -> m.PendingRevoke = Some "s1"
+                )
+            |> ignore
+
+            (sessionsLoaded ())
+                .Dispatch(SessionSecurityUI.AskRevoke "s1")
+                .Interact(ViewMount.mountAndInteract, sessionTree, Drive.click sessionMsgs.Confirm)
+                .AssertModelWith(
+                    "the confirmation revokes, and the page is busy",
+                    fun m -> m.Busy && m.PendingRevoke.IsNone
+                )
+            |> ignore
+
+            (sessionsLoaded ())
+                .Interact(ViewMount.mountAndInteract, sessionTree, Drive.click sessionMsgs.SignOutEverywhere)
+                .AssertModelWith("sign out everywhere asks to confirm it", fun m -> m.PendingRevokeAll)
+            |> ignore
+
+            (sessionsLoaded ())
+                .Dispatch(SessionSecurityUI.SessionsLoaded(Error "boom"))
+                .Interact(ViewMount.mountAndInteract, sessionTree, Drive.click sessionMsgs.Dismiss)
+                .AssertModelWith("the banner's dismiss clears the error", fun m -> m.Error.IsNone)
+            |> ignore)
+
+        // No difference to judge: the Feliz page was a heading, two notices,
+        // a list of rows and its buttons, and so is the tree.
+        testCase "assertion 3: at parity with the Feliz page in every state" (fun () ->
+            let failures = [
+                for name, harness in sessionStates () do
+                    let differences =
+                        harness.CheckViewParity(ViewMount.mount, sessionFeliz, sessionTree)
+
+                    if not differences.IsEmpty then
+                        yield sprintf "state \"%s\": %s" name (TreeViewParity.report differences)
+            ]
+
+            Expect.isEmpty
+                failures
+                (String.concat
+                    "
+"
+                    failures))
+    ]
+
+// ─── The subject: the permissions admin ──────────────────────────────
+
+let private permissionsMsgs = MessageCatalog.english.PermissionsAdmin
+
+/// The operator a test signs in as; the session store is not reachable from a
+/// test document, so both pages take the caller.
+let private permissionsCaller: PermissionsAdminUI.Caller = {
+    UserId = "op"
+    DisplayName = Some "Operator"
+    Email = Some "op@example.com"
+}
+
+let private permissionsFeliz
+    (model: PermissionsAdminUI.Model)
+    (dispatch: PermissionsAdminUI.Msg -> unit)
+    : Feliz.ReactElement =
+    FelizReferenceViews.PermissionsAdmin.body permissionsMsgs permissionsCaller model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let permissionsTree (model: PermissionsAdminUI.Model) (dispatch: PermissionsAdminUI.Msg -> unit) : Feliz.ReactElement =
+    lowerTree dispatch (PermissionsAdminTree.tree permissionsMsgs (fun () -> permissionsCaller) model dispatch)
+
+let private membership (userId: string) (role: TeamRole) : TeamMembership = {
+    TeamId = "t1"
+    UserId = userId
+    Role = role
+    JoinedAt = System.DateTime(2026, 1, 1)
+}
+
+let private teamView (managed: string list) : PermissionsAdminUI.TeamView = {
+    TeamId = "t1"
+    Members = [ membership "u1" Owner; membership "u2" Member ]
+    Managed = managed
+    Permissions = {
+        TeamPermissions.empty with
+            Defaults = Map.ofList [ "alpha", [ ModulePermission.Read ] ]
+            Members = Map.ofList [ "u2", Map.ofList [ "beta", [ ModulePermission.Write ] ] ]
+            Exposure = Map.ofList [ "beta", ModuleExposure.Hidden ]
+    }
+}
+
+let permissionsInit () =
+    fromUnitInit (fun () -> PermissionsAdminUI.init ClientModuleContext.empty) PermissionsAdminUI.update
+
+/// Two managed modules and two members, one with an override.
+let permissionsLoaded () =
+    (permissionsInit ()).Dispatch(PermissionsAdminUI.SnapshotLoaded(Ok(teamView [ "alpha"; "beta" ])))
+
+/// The states the permissions admin is held to, each reached through `update`.
+let permissionsStates () = [
+    "loading", permissionsInit ()
+    "the team defaults", permissionsLoaded ()
+    "a default toggled",
+    (permissionsLoaded ()).Dispatch(PermissionsAdminUI.ToggleDefault("beta", ModulePermission.Admin))
+    "a save in flight",
+    (permissionsLoaded ())
+        .Dispatch(PermissionsAdminUI.ToggleDefault("beta", ModulePermission.Admin))
+        .Dispatch(PermissionsAdminUI.SaveDefaults)
+    "the members tab", (permissionsLoaded ()).Dispatch(PermissionsAdminUI.SwitchTab PermissionsAdminUI.MembersTab)
+    "a member with an override",
+    (permissionsLoaded ())
+        .Dispatch(PermissionsAdminUI.SwitchTab PermissionsAdminUI.MembersTab)
+        .Dispatch(PermissionsAdminUI.SelectMember "u2")
+    "the modules tab", (permissionsLoaded ()).Dispatch(PermissionsAdminUI.SwitchTab PermissionsAdminUI.ModulesTab)
+    "no managed modules", (permissionsInit ()).Dispatch(PermissionsAdminUI.SnapshotLoaded(Ok(teamView [])))
+    "a save failed",
+    (permissionsLoaded ()).Dispatch(PermissionsAdminUI.SaveDefaultsResult(Error "only an owner or admin may"))
+    "the snapshot failed", (permissionsInit ()).Dispatch(PermissionsAdminUI.SnapshotLoaded(Error "unreachable"))
+]
+
+let private permissionsTests =
+    testList "the permissions admin as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            for name, harness in permissionsStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, permissionsTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "assertion 2: a checkbox, a column toggle, a tab and a member reach update" (fun () ->
+            (permissionsLoaded ())
+                .Interact(ViewMount.mountAndInteract, permissionsTree, Drive.edit permissionsMsgs.PermWrite "true")
+                .AssertModelWith(
+                    "the first Write box grants alpha Write in the overlay",
+                    fun m ->
+                        m.EditingDefaults
+                        |> Option.exists (fun e ->
+                            Map.find "alpha" e = [ ModulePermission.Read; ModulePermission.Write ])
+                )
+            |> ignore
+
+            (permissionsLoaded ())
+                .Interact(ViewMount.mountAndInteract, permissionsTree, Drive.click permissionsMsgs.SelectAll)
+                .AssertModelWith(
+                    "the Read column's Select all grants Read on every module",
+                    fun m ->
+                        m.EditingDefaults
+                        |> Option.exists (fun e ->
+                            [ "alpha"; "beta" ]
+                            |> List.forall (fun x -> Map.find x e |> List.contains ModulePermission.Read))
+                )
+            |> ignore
+
+            (permissionsLoaded ())
+                .Interact(ViewMount.mountAndInteract, permissionsTree, Drive.click permissionsMsgs.TabMembers)
+                .AssertModelWith("the Members tab is shown", fun m -> m.ActiveTab = PermissionsAdminUI.MembersTab)
+            |> ignore
+
+            (permissionsLoaded ())
+                .Dispatch(PermissionsAdminUI.SwitchTab PermissionsAdminUI.MembersTab)
+                .Interact(ViewMount.mountAndInteract, permissionsTree, Drive.click "u2")
+                .AssertModelWith("the member's button selects them", fun m -> m.SelectedMember = Some "u2")
+            |> ignore
+
+            (permissionsLoaded ())
+                .Dispatch(PermissionsAdminUI.SwitchTab PermissionsAdminUI.ModulesTab)
+                .Interact(ViewMount.mountAndInteract, permissionsTree, Drive.click permissionsMsgs.ExposureUnavailable)
+                .AssertSteps(fun steps -> not (List.isEmpty steps))
+            |> ignore)
+
+        // Two differences, both judged, and nothing else. (1) Tabs: the Feliz bar
+        // put every tab in the tab order; the tree's tabs are one stop, the active
+        // tab, with its panel after it, as a tab list's keyboard pattern asks.
+        // (2) The member list: the Feliz page put the member's override badge and
+        // role inside the member's button, so its name was all three; the tree
+        // names the button by the member and shows the badge and role beside it.
+        // Every other control, the matrices' checkboxes above all, matches, and
+        // so do the buttons' order and names.
+        testCase "assertion 3: parity with the Feliz page, but for the two judged differences" (fun () ->
+            let isMember (name: string option) =
+                name
+                |> Option.exists (fun n -> n = "u1" || n = "u2" || n.StartsWith "u1 " || n.StartsWith "u2 ")
+
+            let judged (difference: TreeViewParity.Difference) =
+                match difference with
+                | TreeViewParity.TabOrderDiffers _ -> true
+                | TreeViewParity.MissingFromTree s
+                | TreeViewParity.ExtraInTree s -> s.Role = "tabpanel" || (s.Role = "button" && isMember s.Name)
+
+            let buttons (outline: TreeViewParity.Outline) =
+                outline.TabOrder
+                |> List.filter (fun stop -> stop.Role = "button" && not (isMember stop.Name))
+                |> List.map _.Name
+
+            for name, harness in permissionsStates () do
+                let unjudged =
+                    harness.CheckViewParity(ViewMount.mount, permissionsFeliz, permissionsTree)
+                    |> List.filter (judged >> not)
+
+                Expect.isEmpty unjudged (sprintf "state \"%s\": %s" name (TreeViewParity.report unjudged))
+
+                let outline view =
+                    harness.RenderViewHtml(ViewMount.mount, view) |> TreeViewParity.ofHtml
+
+                Expect.equal
+                    (buttons (outline permissionsTree))
+                    (buttons (outline permissionsFeliz))
+                    (sprintf "state \"%s\": the buttons, in tab order" name))
+    ]
+
+// ─── The subject: platform users ─────────────────────────────────────
+
+let private usersMsgs = MessageCatalog.english.PlatformUsers
+
+let private usersFeliz (model: PlatformUsersUI.Model) (dispatch: PlatformUsersUI.Msg -> unit) : Feliz.ReactElement =
+    FelizReferenceViews.PlatformUsers.body usersMsgs model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let usersTree (model: PlatformUsersUI.Model) (dispatch: PlatformUsersUI.Msg -> unit) : Feliz.ReactElement =
+    lowerTree dispatch (PlatformUsersTree.tree usersMsgs model dispatch)
+
+let private principal (userId: string) (teams: int) : PrincipalSummary = {
+    UserId = userId
+    Memberships = List.init teams (fun i -> sprintf "team-%d" i, Member)
+    LastSeenAt = Some(System.DateTime(2026, 11, 1))
+    HasUserScopeData = teams = 0
+}
+
+let usersInit () =
+    fromUnitInit (fun () -> PlatformUsersUI.init ClientModuleContext.empty) PlatformUsersUI.update
+
+/// One principal in a team and one in none.
+let usersLoaded () =
+    (usersInit ()).Dispatch(PlatformUsersUI.PrincipalsLoaded(Ok [ principal "u1" 2; principal "u2" 0 ]))
+
+let private previewOf: LifecyclePreview = {
+    ScopeId = "user-u2"
+    Items = [
+        LifecyclePreviewItem.affecting "blobs" 3 "3 blobs"
+        LifecyclePreviewItem.noPreview "audit"
+    ]
+    TotalWouldAffect = 3
+}
+
+let private summaryOf: LifecycleSummary = {
+    ScopeId = "user-u2"
+    Phase = Deprovisioning
+    Outcomes = [
+        {
+            HookName = "blobs"
+            Result = LifecycleHookResult.Completed
+            ElapsedMs = 12L
+        }
+        {
+            HookName = "audit"
+            Result = LifecycleHookResult.Skipped "kept for the record"
+            ElapsedMs = 1L
+        }
+    ]
+    TotalElapsedMs = 13L
+}
+
+let private offboarding () =
+    (usersLoaded ()).Dispatch(PlatformUsersUI.OpenOffboard("u2", PlatformUsersUI.PlainOffboard))
+
+/// The states platform users is held to, each reached through `update`.
+let usersStates () = [
+    "loading", usersInit ()
+    "two principals", usersLoaded ()
+    "team-less only", (usersLoaded ()).Dispatch PlatformUsersUI.ToggleTeamLessOnly
+    "no principals", (usersInit ()).Dispatch(PlatformUsersUI.PrincipalsLoaded(Ok []))
+    "the list failed", (usersInit ()).Dispatch(PlatformUsersUI.PrincipalsLoaded(Error "not a platform admin"))
+    "the offboard dialog", offboarding ()
+    "the impact previewed", (offboarding ()).Dispatch(PlatformUsersUI.PreviewLoaded(Ok previewOf))
+    "a confirmation asked for",
+    (offboarding ())
+        .Dispatch(PlatformUsersUI.SetOffboardReason "left the company")
+        .Dispatch(PlatformUsersUI.OffboardDone(Error "offboard confirmation required"))
+    "the offboard completed", (offboarding ()).Dispatch(PlatformUsersUI.OffboardDone(Ok summaryOf))
+]
+
+let private usersTests =
+    testList "platform users as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            for name, harness in usersStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, usersTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "assertion 2: the filter, a kept row's button and the dialog reach update" (fun () ->
+            (usersLoaded ())
+                .Interact(ViewMount.mountAndInteract, usersTree, Drive.edit usersMsgs.TeamLessOnly "true")
+                .AssertModelWith("the filter shows team-less principals only", fun m -> m.TeamLessOnly)
+            |> ignore
+
+            (usersLoaded ())
+                .Interact(ViewMount.mountAndInteract, usersTree, Drive.click usersMsgs.ExportOffboardAction)
+                .AssertModelWith(
+                    "the first row's export opens its dialog",
+                    fun m ->
+                        m.Offboard
+                        |> Option.exists (fun o -> o.UserId = "u1" && o.Kind = PlatformUsersUI.ExportOffboard)
+                )
+            |> ignore
+
+            (offboarding ())
+                .Interact(
+                    ViewMount.mountAndInteract,
+                    usersTree,
+                    fun host ->
+                        Drive.typeInto usersMsgs.ReasonLabel "left the company" host
+                        Drive.leave usersMsgs.ReasonLabel host
+                )
+                .AssertModelWith(
+                    "the reason reaches the model on leaving it",
+                    fun m -> m.Offboard |> Option.exists (fun o -> o.Reason = "left the company")
+                )
+            |> ignore
+
+            (offboarding ())
+                .Interact(ViewMount.mountAndInteract, usersTree, Drive.click usersMsgs.Cancel)
+                .AssertModelWith("Cancel closes the dialog", fun m -> m.Offboard.IsNone)
+            |> ignore)
+
+        // Three differences, all judged, and nothing else. (1) The dialog: the
+        // renderer's modal is a dialog with a close control and its heading at
+        // level 2, where the Feliz overlay was a dialog named by its title and
+        // headed at level 3. (2) Names: the Feliz page's reason and token labels
+        // were not associated with their inputs, which were named by their
+        // placeholders; the islands' labels wrap them. (3) The tab order, which
+        // differs only by the dialog's close control. Every other control, and
+        // the buttons' order and names, match.
+        testCase "assertion 3: parity with the Feliz page, but for the three judged differences" (fun () ->
+            let m = usersMsgs
+
+            let titles = set [ m.OffboardTitle; m.ExportOffboardTitle; m.OffboardCompleteTitle ]
+
+            let renamed =
+                set [
+                    "textbox", m.ReasonPlaceholder
+                    "textbox", m.ReasonLabel
+                    "textbox", m.ConfirmationTokenPlaceholder
+                    "textbox", m.ConfirmationTokenLabel
+                ]
+
+            let judged (difference: TreeViewParity.Difference) =
+                match difference with
+                | TreeViewParity.TabOrderDiffers _ -> true
+                | TreeViewParity.MissingFromTree s
+                | TreeViewParity.ExtraInTree s ->
+                    s.Role = "dialog"
+                    || (s.Role.StartsWith "heading" && s.Name |> Option.exists titles.Contains)
+                    || renamed.Contains(s.Role, defaultArg s.Name "")
+                    || (s.Role = "button"
+                        && s.Name = Some "Close"
+                        && (match difference with
+                            | TreeViewParity.ExtraInTree _ -> true
+                            | _ -> false))
+
+            let buttons (outline: TreeViewParity.Outline) =
+                outline.TabOrder
+                |> List.filter (fun stop -> stop.Role = "button" && stop.Name <> Some "Close")
+                |> List.map _.Name
+
+            for name, harness in usersStates () do
+                let unjudged =
+                    harness.CheckViewParity(ViewMount.mount, usersFeliz, usersTree)
+                    |> List.filter (judged >> not)
+
+                Expect.isEmpty unjudged (sprintf "state \"%s\": %s" name (TreeViewParity.report unjudged))
+
+                let outline view =
+                    harness.RenderViewHtml(ViewMount.mount, view) |> TreeViewParity.ofHtml
+
+                Expect.equal
+                    (buttons (outline usersTree))
+                    (buttons (outline usersFeliz))
+                    (sprintf "state \"%s\": the buttons, in tab order" name))
+    ]
+
 // ─── What a dispatch constructs ──────────────────────────────────────
 
 /// Of the nodes of `after`, how many are new objects, built for this dispatch,
@@ -761,6 +1210,101 @@ let private constructedTests =
             Expect.isTrue (built <= oneRow) (sprintf "built %d of %d (a one-row page builds %d)" built total oneRow)
 
             Expect.equal (rowsOf "team-" (tree harness.Model)) 200 "the page holds the 200 rows")
+
+        testCase "session security: the list loaded again with one session renamed builds that row" (fun () ->
+            let many () =
+                List.init 100 (fun i -> session (sprintf "s%03d" i) (sprintf "Device %03d" i) false)
+
+            let tree m =
+                SessionSecurityTree.tree sessionMsgs sessionNow m
+
+            let harness =
+                (sessionInit ()).Dispatch(SessionSecurityUI.SessionsLoaded(Ok(many ())))
+
+            let built, total =
+                across
+                    tree
+                    harness
+                    (SessionSecurityUI.SessionsLoaded(
+                        Ok(renamed 7 (many ()) (fun s -> { s with DeviceDescriptor = "Renamed" }))
+                    ))
+
+            let oneRow, _ =
+                across tree (sessionInit ()) (SessionSecurityUI.SessionsLoaded(Ok [ session "x" "X" false ]))
+
+            Expect.isTrue (built <= oneRow) (sprintf "built %d of %d (a one-row page builds %d)" built total oneRow)
+            Expect.isTrue (total > 500) (sprintf "the page holds the 100 rows (%d nodes)" total))
+
+        testCase "platform users: the list loaded again with one principal changed builds that row" (fun () ->
+            let many () =
+                List.init 100 (fun i -> principal (sprintf "u%03d" i) (i % 3))
+
+            let tree m =
+                PlatformUsersTree.tree usersMsgs m ignore
+
+            let harness = (usersInit ()).Dispatch(PlatformUsersUI.PrincipalsLoaded(Ok(many ())))
+
+            let built, total =
+                across
+                    tree
+                    harness
+                    (PlatformUsersUI.PrincipalsLoaded(
+                        Ok(
+                            renamed 7 (many ()) (fun p -> {
+                                p with
+                                    HasUserScopeData = not p.HasUserScopeData
+                            })
+                        )
+                    ))
+
+            // A one-row page holding the changed record, so its badges match.
+            let oneRow, _ =
+                across
+                    tree
+                    (usersInit ())
+                    (PlatformUsersUI.PrincipalsLoaded(
+                        Ok [
+                            {
+                                principal "u007" 1 with
+                                    HasUserScopeData = true
+                            }
+                        ]
+                    ))
+
+            Expect.isTrue (built <= oneRow) (sprintf "built %d of %d (a one-row page builds %d)" built total oneRow)
+            Expect.isTrue (total > 1000) (sprintf "the page holds the 100 rows (%d nodes)" total))
+
+        testCase "the permissions admin: a member's override toggle keeps the member list" (fun () ->
+            let tree m =
+                PermissionsAdminTree.tree permissionsMsgs (fun () -> permissionsCaller) m ignore
+
+            let harness =
+                (permissionsLoaded ())
+                    .Dispatch(PermissionsAdminUI.SwitchTab PermissionsAdminUI.MembersTab)
+                    .Dispatch(PermissionsAdminUI.SelectMember "u2")
+
+            let before = tree harness.Model
+
+            let after =
+                tree
+                    (harness.Dispatch(PermissionsAdminUI.ToggleMemberPermission("u2", "alpha", ModulePermission.Admin)))
+                        .Model
+
+            let built, total = constructed before after
+
+            let rec find (id: string) (node: Node<PermissionsAdminUI.Msg>) : Node<PermissionsAdminUI.Msg> option =
+                if node.Id = id then
+                    Some node
+                else
+                    Fuaran.UI.Generated.children node |> List.tryPick (find id)
+
+            let kept =
+                match find "member-u1" before, find "member-u1" after with
+                | Some a, Some b -> obj.ReferenceEquals(a, b)
+                | _ -> false
+
+            Expect.isTrue kept "the member rows are served again"
+            Expect.isTrue (built < total) (sprintf "built %d of %d" built total))
     ]
 
 // ─── The kit's own go-red proofs ─────────────────────────────────────
@@ -979,6 +1523,9 @@ let tests =
         subjectTests
         visibilityTests
         adminTests
+        sessionTests
+        permissionsTests
+        usersTests
         constructedTests
         goRedTests
         nameTests

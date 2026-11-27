@@ -350,7 +350,7 @@ let private paletteProps: Components.CommandPalette.CommandPaletteProps = {
 }
 
 let private treeSurfaceTests =
-    testList "the three surfaces as trees" [
+    testList "the surfaces as trees" [
 
         testCase "every team manager state passes the Strict floor as a tree" (fun () ->
             for name, harness in teamStates () do
@@ -373,6 +373,38 @@ let private treeSurfaceTests =
             for name, harness in TreeViewParityTests.adminStates () do
                 try
                     harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.adminTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "every session-security state passes the Strict floor as a tree" (fun () ->
+            for name, harness in TreeViewParityTests.sessionStates () do
+                try
+                    harness.AssertAccessibleView(
+                        ViewMount.mount,
+                        TreeViewParityTests.sessionTree,
+                        Accessibility.Strict
+                    )
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "every permissions-admin state passes the Strict floor as a tree" (fun () ->
+            for name, harness in TreeViewParityTests.permissionsStates () do
+                try
+                    harness.AssertAccessibleView(
+                        ViewMount.mount,
+                        TreeViewParityTests.permissionsTree,
+                        Accessibility.Strict
+                    )
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "every platform-users state passes the Strict floor as a tree" (fun () ->
+            for name, harness in TreeViewParityTests.usersStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.usersTree, Accessibility.Strict)
                     |> ignore
                 with e ->
                     failwithf "state \"%s\": %s" name e.Message)
@@ -449,6 +481,34 @@ let private treeSurfaceTests =
             Expect.isFalse
                 (adminPage.Contains MessageCatalog.english.PlatformAdmin.AssignHeading)
                 "and draws nothing of the tree synchronously")
+
+        testCase "the second batch's views mount their trees on demand, not at boot" (fun () ->
+            let pageOf (view: BuiltInView<'Model, 'Msg>) (model: 'Model) =
+                match view with
+                | BuiltInView.Page view ->
+                    match view model (RenderContext.create MessageCatalog.english ignore) with
+                    | PageContent.FullWidth element -> ViewMount.mount element
+                    | other -> failwithf "a full-width page, not %A" other
+                | BuiltInView.Pages _ -> failwith "one page"
+
+            let pages = [
+                "session security",
+                pageOf SessionSecurityUI.builtIn.View (TreeViewParityTests.sessionsLoaded ()).Model,
+                MessageCatalog.english.SessionSecurity.Heading
+                "the permissions admin",
+                pageOf PermissionsAdminUI.builtIn.View (TreeViewParityTests.permissionsLoaded ()).Model,
+                MessageCatalog.english.PermissionsAdmin.TeamDefaultsHeading
+                "platform users",
+                pageOf PlatformUsersUI.builtIn.View (TreeViewParityTests.usersLoaded ()).Model,
+                MessageCatalog.english.PlatformUsers.Heading
+            ]
+
+            for name, page, heading in pages do
+                Expect.isTrue
+                    (page.Contains "role=\"status\"" && page.Contains "aria-busy=\"true\"")
+                    (name + " shows the loading state until its tree arrives")
+
+                Expect.isFalse (page.Contains heading) (name + " draws nothing of the tree synchronously"))
     ]
 
 // ─── Cases ───────────────────────────────────────────────────────────

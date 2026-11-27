@@ -1444,3 +1444,1078 @@ module PlatformAdmin =
                 | None -> Html.none
             ]
         ]
+
+/// The session-security page as Feliz (`SessionSecurityUI`'s view before its tree).
+module SessionSecurity =
+    open SessionSecurityUI
+
+    let private sessionRow
+        (msgs: SessionSecurityMessages)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        (now: DateTimeOffset)
+        (record: SessionRecord)
+        =
+        let active = SessionRecord.isActive record
+
+        let pending = model.PendingRevoke = Some record.SessionId
+
+        Html.div [
+            prop.key record.SessionId
+            prop.className "flex items-start justify-between gap-4 px-4 py-3 border-b border-border last:border-b-0"
+            prop.children [
+                Html.div [
+                    prop.className "min-w-0"
+                    prop.children [
+                        Html.p [
+                            prop.className (
+                                if active then
+                                    "text-sm font-medium truncate"
+                                else
+                                    ("text-sm font-medium truncate line-through " + Tokens.Text.muted)
+                            )
+                            prop.text record.DeviceDescriptor
+                        ]
+                        Html.p [
+                            prop.className [ "text-xs mt-0.5"; Tokens.Text.muted ]
+                            prop.text (
+                                if active then
+                                    msgs.DeviceLastSeen
+                                        record.AuthProvider
+                                        (lastSeenLabelWith msgs now record.LastSeenAt)
+                                else
+                                    msgs.DeviceSignedOut record.AuthProvider
+                            )
+                        ]
+                    ]
+                ]
+                Html.div [
+                    prop.className "shrink-0"
+                    prop.children [
+                        if not active then
+                            Html.span [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.Revoked ]
+                        elif pending then
+                            Html.div [
+                                prop.className "flex gap-2"
+                                prop.children [
+                                    Forms.Button.dangerWith
+                                        (Forms.Button.stateOf model.Busy msgs.Confirm false)
+                                        msgs.Confirm
+                                        (fun () -> dispatch (ConfirmRevoke record.SessionId))
+                                    Forms.Button.secondaryWith Forms.Button.Enabled msgs.Cancel (fun () ->
+                                        dispatch CancelRevoke)
+                                ]
+                            ]
+                        else
+                            Forms.Button.secondaryWith
+                                (Forms.Button.stateOf false msgs.SignOut model.Busy)
+                                msgs.SignOut
+                                (fun () -> dispatch (AskRevoke record.SessionId))
+                    ]
+                ]
+            ]
+        ]
+
+    /// The module's page, over the catalog section the view hands it.
+    let body (msgs: SessionSecurityMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+        let now = DateTimeOffset.UtcNow
+
+        let noticeMsgs = { Dismiss = msgs.Dismiss }
+
+        let body =
+            if not model.Loaded then
+                Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.Loading ]
+            elif List.isEmpty model.Sessions then
+                Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.EmptyState ]
+            else
+                Html.div [
+                    prop.className "border border-border rounded-lg overflow-hidden bg-white"
+                    prop.children (model.Sessions |> List.map (sessionRow msgs model dispatch now))
+                ]
+
+        let signOutEverywhere =
+            if List.isEmpty (model.Sessions |> List.filter SessionRecord.isActive) then
+                Html.none
+            elif model.PendingRevokeAll then
+                Html.div [
+                    prop.className "mt-4 px-3 py-3 rounded border border-red-200 bg-red-50"
+                    prop.children [
+                        Html.p [
+                            prop.className "text-sm text-red-800 mb-2"
+                            prop.text msgs.SignOutEverywhereWarning
+                        ]
+                        Html.div [
+                            prop.className "flex gap-2"
+                            prop.children [
+                                Forms.Button.dangerWith
+                                    (Forms.Button.stateOf model.Busy msgs.SignOutEverywhere false)
+                                    msgs.SignOutEverywhere
+                                    (fun () -> dispatch ConfirmRevokeAll)
+                                Forms.Button.secondaryWith Forms.Button.Enabled msgs.Cancel (fun () ->
+                                    dispatch CancelRevokeAll)
+                            ]
+                        ]
+                    ]
+                ]
+            else
+                Html.div [
+                    prop.className "mt-4"
+                    prop.children [
+                        Forms.Button.secondaryWith
+                            (Forms.Button.stateOf false msgs.SignOutEverywhere model.Busy)
+                            msgs.SignOutEverywhere
+                            (fun () -> dispatch AskRevokeAll)
+                    ]
+                ]
+
+        Html.div [
+            prop.className "p-6 max-w-3xl"
+            prop.children [
+                Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
+                Html.p [
+                    prop.className [ "text-sm mb-4"; Tokens.Text.secondary ]
+                    prop.text msgs.Subheading
+                ]
+                StateViews.notice noticeMsgs model.Error (fun () -> dispatch DismissError)
+                StateViews.notice noticeMsgs model.Status (fun () -> dispatch DismissStatus)
+                body
+                signOutEverywhere
+            ]
+        ]
+
+/// The permissions admin as Feliz (`PermissionsAdminUI`'s view before its tree).
+module PermissionsAdmin =
+    open PermissionsAdminUI
+
+    let private tabBar (msgs: PermissionsAdminMessages) (model: Model) (dispatch: Msg -> unit) =
+        Html.div [
+            prop.className "bg-white px-4"
+            prop.children [
+                Tabs.bar
+                    [
+                        TeamDefaultsTab, msgs.TabTeamDefaults
+                        MembersTab, msgs.TabMembers
+                        ModulesTab, msgs.TabModules
+                    ]
+                    model.ActiveTab
+                    (SwitchTab >> dispatch)
+            ]
+        ]
+
+    let private permCheckbox (label: string) (granted: bool) (disabled: bool) (onToggle: unit -> unit) =
+        Html.label [
+            prop.className "inline-flex items-center gap-1 text-xs select-none"
+            prop.children [
+                Html.input [
+                    prop.type'.checkbox
+                    prop.isChecked granted
+                    prop.disabled disabled
+                    prop.onChange (fun (_: bool) -> onToggle ())
+                    prop.className "rounded border-gray-300 text-brand focus:ring-brand"
+                ]
+                Html.span [ prop.text label ]
+            ]
+        ]
+
+    /// The column "Select all" / "Clear all" toggles of a permission matrix.
+    /// `allOn` is computed by the caller (it needs the overlay/snapshot state
+    /// to decide); `onToggle` receives `(level, add)` and either grants or
+    /// clears the level across every row.
+    type private PermColumnAction = {
+        allOn: ModulePermission -> bool
+        onToggle: ModulePermission * bool -> unit
+    }
+
+    /// A row of a permission matrix: the column-toggle row heading the body,
+    /// then one row per module with its granted levels.
+    type private PermRow =
+        | ColumnToggles
+        | ModuleRow of moduleName: string * perms: ModulePermission list
+
+    /// The module × level permission matrix: a checkbox per cell, disabled
+    /// while a save is in flight, with a column-toggle row first.
+    let private permTable
+        (msgs: PermissionsAdminMessages)
+        (header: string)
+        (rows: (string * ModulePermission list) list)
+        (disabled: bool)
+        (onToggle: string -> ModulePermission -> unit)
+        (columnAction: PermColumnAction)
+        =
+        if List.isEmpty rows then
+            Html.p [
+                prop.className [ "text-sm italic"; Tokens.Text.muted ]
+                prop.text msgs.NoManagedModules
+            ]
+        else
+            let levelColumn (level: ModulePermission) : Data.Column<PermRow> = {
+                Header = permLabel msgs level
+                Align = Data.Left
+                Cell =
+                    function
+                    | ColumnToggles ->
+                        let on = columnAction.allOn level
+
+                        Html.button [
+                            prop.className "text-[10px] text-brand hover:underline"
+                            prop.text (if on then msgs.ClearAll else msgs.SelectAll)
+                            prop.onClick (fun _ -> columnAction.onToggle (level, not on))
+                        ]
+                    | ModuleRow(moduleName, perms) ->
+                        permCheckbox (permLabel msgs level) (List.contains level perms) disabled (fun () ->
+                            onToggle moduleName level)
+            }
+
+            let moduleColumn: Data.Column<PermRow> = {
+                Header = header
+                Align = Data.Left
+                Cell =
+                    function
+                    | ColumnToggles -> Html.none
+                    | ModuleRow(moduleName, _) -> Html.span [ prop.className "font-medium"; prop.text moduleName ]
+            }
+
+            Data.table (moduleColumn :: List.map levelColumn allPermLevels) (ColumnToggles :: List.map ModuleRow rows)
+
+    // ─── Team defaults tab ───────────────────────────────────────────────
+
+    /// The Reset + Save pair of an edit overlay: both inert until there is
+    /// something to commit, Save showing its busy label while a save is in
+    /// flight.
+    let private editActions
+        (msgs: PermissionsAdminMessages)
+        (model: Model)
+        (dirty: bool)
+        (saveLabel: string)
+        (onReset: unit -> unit)
+        (onSave: unit -> unit)
+        =
+        Html.div [
+            prop.className "flex items-center gap-2 shrink-0"
+            prop.children [
+                Forms.Button.secondaryWith
+                    (if dirty && not model.SaveInFlight then
+                         Forms.Button.Enabled
+                     else
+                         Forms.Button.Disabled)
+                    msgs.Reset
+                    onReset
+                Forms.Button.primaryWith
+                    (Forms.Button.stateOf model.SaveInFlight msgs.Saving (not dirty))
+                    saveLabel
+                    onSave
+            ]
+        ]
+
+    let private teamDefaultsView
+        (msgs: PermissionsAdminMessages)
+        (model: Model)
+        (snap: TeamView)
+        (dispatch: Msg -> unit)
+        =
+        let edits = model.EditingDefaults |> Option.defaultValue snap.Permissions.Defaults
+        let dirty = edits <> snap.Permissions.Defaults
+
+        let permsOf (m: string) =
+            Map.tryFind m edits |> Option.defaultValue []
+
+        // The column toggles read the local `edits` overlay so they reflect
+        // the operator's in-progress changes rather than the persisted snapshot.
+        let columnAction = {
+            allOn = fun level -> snap.Managed |> List.forall (fun m -> permsOf m |> List.contains level)
+            onToggle =
+                fun (level, add) ->
+                    for m in snap.Managed do
+                        if add <> List.contains level (permsOf m) then
+                            dispatch (ToggleDefault(m, level))
+        }
+
+        Html.div [
+            prop.className "flex-1 p-6 overflow-y-auto"
+            prop.children [
+                Html.div [
+                    prop.className "flex items-center justify-between mb-4"
+                    prop.children [
+                        Html.div [
+                            prop.children [
+                                Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.TeamDefaultsHeading ]
+                                Html.p [
+                                    prop.className [ "text-xs"; Tokens.Text.muted ]
+                                    prop.text msgs.TeamDefaultsSubheading
+                                ]
+                            ]
+                        ]
+                        editActions
+                            msgs
+                            model
+                            dirty
+                            msgs.SaveDefaultsLabel
+                            (fun () -> dispatch ResetDefaults)
+                            (fun () -> dispatch SaveDefaults)
+                    ]
+                ]
+                permTable
+                    msgs
+                    msgs.ColumnModule
+                    (snap.Managed |> List.map (fun m -> m, permsOf m))
+                    model.SaveInFlight
+                    (fun m level -> dispatch (ToggleDefault(m, level)))
+                    columnAction
+            ]
+        ]
+
+    // ─── Members tab ─────────────────────────────────────────────────────
+
+    /// A member's display label: for the signed-in user, the display name
+    /// over the raw UserId; for other members the UserId. The page read the
+    /// caller from the session store; the reference takes it, as the tree does.
+    let private memberLabel (self: Caller) (userId: string) =
+        if self.UserId = userId then
+            self.DisplayName |> Option.defaultValue userId
+        else
+            userId
+
+    let private memberListItem
+        (msgs: PermissionsAdminMessages)
+        (self: Caller)
+        (model: Model)
+        (snap: TeamView)
+        (m: TeamMembership)
+        (dispatch: Msg -> unit)
+        =
+        let selected = model.SelectedMember = Some m.UserId
+        let hasOver = hasOverride snap.Permissions m.UserId
+
+        let emailSubtitle = if self.UserId = m.UserId then self.Email else None
+
+        Html.button [
+            prop.className [
+                "w-full text-left px-3 py-2 border-l-2 transition-colors"
+                if selected then
+                    "border-brand bg-blue-50"
+                else
+                    "border-transparent hover:bg-gray-50"
+            ]
+            prop.onClick (fun _ -> dispatch (SelectMember m.UserId))
+            prop.children [
+                Html.div [
+                    prop.className "flex items-center justify-between"
+                    prop.children [
+                        Html.span [ prop.className "font-medium text-sm"; prop.text (memberLabel self m.UserId) ]
+                        if hasOver then
+                            Html.span [
+                                prop.className
+                                    "inline-block text-[10px] px-1.5 py-0.5 rounded border bg-purple-100 border-purple-200 text-purple-700"
+                                prop.text msgs.OverrideBadge
+                            ]
+                    ]
+                ]
+                match emailSubtitle with
+                | Some email -> Html.div [ prop.className [ "text-xs truncate"; Tokens.Text.muted ]; prop.text email ]
+                | None -> ()
+                Html.div [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text (string m.Role) ]
+            ]
+        ]
+
+    let private memberOverrideEditor
+        (msgs: PermissionsAdminMessages)
+        (self: Caller)
+        (model: Model)
+        (snap: TeamView)
+        (userId: string)
+        (dispatch: Msg -> unit)
+        =
+        let effectivePerms = effectiveMemberPerms snap model.EditingMembers userId
+
+        let overrideKeys =
+            match Map.tryFind userId snap.Permissions.Members with
+            | Some modMap -> Map.toList modMap |> List.map fst |> List.sort
+            | None -> []
+
+        let dirty = model.EditingMembers |> Map.exists (fun (uid, _) _ -> uid = userId)
+
+        let columnAction = {
+            allOn = fun level -> snap.Managed |> List.forall (fun m -> effectivePerms m |> List.contains level)
+            onToggle = fun (level, add) -> dispatch (ToggleMemberColumn(userId, level, add))
+        }
+
+        Html.div [
+            prop.className "flex-1 p-6 overflow-y-auto"
+            prop.children [
+                Html.div [
+                    prop.className "mb-4 flex items-start justify-between gap-4"
+                    prop.children [
+                        Html.div [
+                            prop.children [
+                                Html.h2 [
+                                    prop.className "text-lg font-semibold"
+                                    prop.text (msgs.OverridesHeading(memberLabel self userId))
+                                ]
+                                Html.p [
+                                    prop.className [ "text-xs"; Tokens.Text.muted ]
+                                    prop.text msgs.OverridesHelp
+                                ]
+                                if not (List.isEmpty overrideKeys) then
+                                    Html.p [
+                                        prop.className [ "text-xs mt-1"; Tokens.Text.muted ]
+                                        prop.text (msgs.ActiveOverridesOn(String.concat ", " overrideKeys))
+                                    ]
+                            ]
+                        ]
+                        // Edits stay local until "Update" is pressed; no
+                        // round-trip per checkbox click.
+                        editActions msgs model dirty msgs.Update (fun () -> dispatch (ResetMembers userId)) (fun () ->
+                            dispatch (SaveMembers userId))
+                    ]
+                ]
+                permTable
+                    msgs
+                    msgs.ColumnModule
+                    (snap.Managed |> List.map (fun m -> m, effectivePerms m))
+                    model.SaveInFlight
+                    (fun m level -> dispatch (ToggleMemberPermission(userId, m, level)))
+                    columnAction
+            ]
+        ]
+
+    let private membersView
+        (msgs: PermissionsAdminMessages)
+        (self: Caller)
+        (model: Model)
+        (snap: TeamView)
+        (dispatch: Msg -> unit)
+        =
+        if List.isEmpty snap.Members then
+            Html.div [
+                prop.className "flex-1 p-6 overflow-y-auto"
+                prop.children [
+                    Html.p [
+                        prop.className ("text-sm italic " + Tokens.Text.muted)
+                        prop.text msgs.NoMembersYet
+                    ]
+                ]
+            ]
+        else
+            Html.div [
+                prop.className "flex-1 flex overflow-hidden"
+                prop.children [
+                    Html.aside [
+                        prop.className "w-72 border-r border-border bg-white overflow-y-auto"
+                        prop.children [
+                            Html.div [
+                                prop.className ("px-3 py-2 text-xs font-medium uppercase " + Tokens.Text.muted)
+                                prop.text msgs.MembersListLabel
+                            ]
+                            for m in snap.Members do
+                                memberListItem msgs self model snap m dispatch
+                        ]
+                    ]
+                    Html.div [
+                        prop.className "flex-1 overflow-y-auto"
+                        prop.children [
+                            match model.SelectedMember with
+                            | None ->
+                                Html.div [
+                                    prop.className ("p-6 text-sm italic " + Tokens.Text.muted)
+                                    prop.text msgs.SelectMemberPrompt
+                                ]
+                            | Some uid -> memberOverrideEditor msgs self model snap uid dispatch
+                        ]
+                    ]
+                ]
+            ]
+
+    // ─── Modules tab ─────────────────────────────────────────────────────
+
+    let private renderPerms (msgs: PermissionsAdminMessages) (ps: ModulePermission list) =
+        if List.isEmpty ps then
+            Html.span [
+                prop.className [ "text-xs"; Tokens.Text.muted ]
+                prop.text msgs.NoDefaultPermission
+            ]
+        else
+            Html.span [
+                prop.className "text-xs"
+                // The middot separator is UI furniture joining already-
+                // localized labels, not translatable content itself.
+                prop.text (ps |> List.map (permLabel msgs) |> String.concat " · ")
+            ]
+
+    /// The exposure selector — a 3-way segmented control, visibility/
+    /// availability only, orthogonal to the permission level.
+    ///   Available   — in the sidebar + Home, data mappable.
+    ///   Hidden      — off the sidebar + Home, data still mappable.
+    ///   Unavailable — off the sidebar + Home, AND data mapping blocked.
+    let private exposureSelector
+        (msgs: PermissionsAdminMessages)
+        (snap: TeamView)
+        (dispatch: Msg -> unit)
+        (moduleName: string)
+        =
+        let current = exposureOf snap.Permissions moduleName
+
+        let exposureOption (state: ModuleExposure) (label: string) (activeCls: string) =
+            let isActive = current = state
+
+            Html.button [
+                prop.className [
+                    "px-2 py-1 text-xs font-medium border"
+                    if isActive then
+                        activeCls
+                    else
+                        "border-border bg-white hover:bg-gray-50 " + Tokens.Text.muted
+                ]
+                prop.text label
+                prop.disabled isActive
+                prop.onClick (fun _ ->
+                    if not isActive then
+                        dispatch (SetExposure(moduleName, current, state)))
+            ]
+
+        Html.div [
+            prop.className "inline-flex rounded overflow-hidden"
+            prop.children [
+                exposureOption
+                    ModuleExposure.Available
+                    msgs.ExposureAvailable
+                    "border-green-200 bg-green-50 text-green-700"
+                exposureOption
+                    ModuleExposure.Hidden
+                    msgs.ExposureHidden
+                    ("border-gray-300 bg-gray-100 " + Tokens.Text.secondary)
+                exposureOption
+                    ModuleExposure.Unavailable
+                    msgs.ExposureUnavailable
+                    "border-red-200 bg-red-50 text-red-700"
+            ]
+        ]
+
+    let private modulesView (msgs: PermissionsAdminMessages) (snap: TeamView) (dispatch: Msg -> unit) =
+        let column header align cell : Data.Column<string> = {
+            Header = header
+            Align = align
+            Cell = cell
+        }
+
+        Html.div [
+            prop.className "flex-1 p-6 overflow-y-auto"
+            prop.children [
+                Html.div [
+                    prop.className "mb-4"
+                    prop.children [
+                        Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.ModulesHeading ]
+                        Html.p [
+                            prop.className [ "text-xs"; Tokens.Text.muted ]
+                            prop.text msgs.ModulesSubheading
+                        ]
+                    ]
+                ]
+                if List.isEmpty snap.Managed then
+                    Html.p [
+                        prop.className [ "text-sm italic"; Tokens.Text.muted ]
+                        prop.text msgs.NoManagedModules
+                    ]
+                else
+                    Data.table
+                        [
+                            column msgs.ColumnModule Data.Left (fun moduleName ->
+                                Html.span [ prop.className "font-medium"; prop.text moduleName ])
+                            column msgs.ColumnExposure Data.Left (exposureSelector msgs snap dispatch)
+                            column msgs.ColumnTeamDefault Data.Left (fun moduleName ->
+                                Map.tryFind moduleName snap.Permissions.Defaults
+                                |> Option.defaultValue []
+                                |> renderPerms msgs)
+                            column msgs.ColumnOverrides Data.Right (fun moduleName ->
+                                Html.span [
+                                    prop.className [ "text-xs font-mono"; Tokens.Text.secondary ]
+                                    prop.text (string (memberOverrideCount snap.Permissions moduleName))
+                                ])
+                        ]
+                        snap.Managed
+            ]
+        ]
+
+    // ─── View ────────────────────────────────────────────────────────────
+
+    let private errorPane (msgs: PermissionsAdminMessages) (msg: string) (dispatch: Msg -> unit) =
+        Html.div [
+            prop.className "flex-1 p-6 overflow-y-auto"
+            prop.children [
+                StateViews.noticeStatic (Notice.Problem msg)
+                Html.button [
+                    prop.className (
+                        "mt-3 px-3 py-1.5 text-sm font-medium bg-white border border-border rounded hover:bg-gray-50 "
+                        + Tokens.Text.secondary
+                    )
+                    prop.text msgs.Retry
+                    prop.onClick (fun _ -> dispatch RefreshSnapshot)
+                ]
+            ]
+        ]
+
+    /// The module's page, over the catalog section the view hands it.
+    let internal body
+        (msgs: PermissionsAdminMessages)
+        (self: Caller)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        : ReactElement =
+        let content =
+            match model.Snapshot with
+            | Remote.NotAsked
+            | Remote.Loading
+            | Remote.Reloading _ ->
+                Html.div [
+                    prop.className "flex-1 p-6 overflow-y-auto"
+                    prop.children [
+                        Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
+                    ]
+                ]
+            | Remote.Failed msg -> errorPane msgs msg dispatch
+            | Remote.Loaded snap ->
+                match model.ActiveTab with
+                | TeamDefaultsTab -> teamDefaultsView msgs model snap dispatch
+                | MembersTab -> membersView msgs self model snap dispatch
+                | ModulesTab -> modulesView msgs snap dispatch
+
+        Html.div [
+            prop.className "flex flex-col h-full"
+            prop.children [
+                tabBar msgs model dispatch
+                if model.Banner.IsSome then
+                    Html.div [
+                        prop.className "mx-6 mt-4"
+                        prop.children [
+                            StateViews.notice { Dismiss = msgs.Dismiss } model.Banner (fun () -> dispatch DismissBanner)
+                        ]
+                    ]
+                content
+            ]
+        ]
+
+/// The platform-users admin as Feliz (`PlatformUsersUI`'s view before its tree).
+module PlatformUsers =
+    open PlatformUsersUI
+
+    /// Membership summary — "3 teams · Admin, Member" — or a team-less badge.
+    let private membershipLabel (msgs: PlatformUsersMessages) (p: PrincipalSummary) : string =
+        if p.TeamLess then
+            msgs.NoTeams
+        else
+            let roles =
+                p.Memberships
+                |> List.map (fun (_, role) -> TeamRoles.displayName role)
+                |> List.distinct
+                |> String.concat ", "
+
+            msgs.MembershipSummary (List.length p.Memberships) roles
+
+    let private lastSeenLabel (p: PrincipalSummary) : string =
+        match p.LastSeenAt with
+        | Some at -> at.ToString "yyyy-MM-dd"
+        | None -> "—"
+
+    let private badge (cls: string) (label: string) =
+        Html.span [
+            prop.className $"inline-block text-xs px-2 py-0.5 rounded {cls}"
+            prop.text label
+        ]
+
+    let private previewResultBadge (msgs: PlatformUsersMessages) (item: LifecyclePreviewItem) =
+        if not item.HasPreview then
+            badge ("bg-gray-100 " + Tokens.Text.muted) msgs.NoPreviewBadge
+        elif item.WouldAffect = 0 then
+            badge "bg-green-50 text-green-700" "0"
+        else
+            badge "bg-amber-50 text-amber-800" (string item.WouldAffect)
+
+    let private summaryResultBadge (msgs: PlatformUsersMessages) (result: LifecycleHookResult) =
+        match result with
+        | LifecycleHookResult.Completed -> badge "bg-green-100 text-green-700" msgs.OutcomeCompleted
+        | LifecycleHookResult.Skipped _ -> badge "bg-yellow-100 text-yellow-800" msgs.OutcomeSkipped
+        | LifecycleHookResult.Failed _ -> badge "bg-red-100 text-red-700" msgs.OutcomeFailed
+
+    let private summaryResultDetail (result: LifecycleHookResult) =
+        match result with
+        | LifecycleHookResult.Completed -> ""
+        | LifecycleHookResult.Skipped reason -> reason
+        | LifecycleHookResult.Failed error -> error
+
+    // ─── Modal sub-views ─────────────────────────────────────────────────
+
+    let private kindTitle (msgs: PlatformUsersMessages) =
+        function
+        | PlainOffboard -> msgs.OffboardTitle
+        | ExportOffboard -> msgs.ExportOffboardTitle
+
+    let private primaryActionLabel (msgs: PlatformUsersMessages) (state: OffboardModalState) =
+        match state.Step, state.Kind with
+        | Confirming, _ -> msgs.ConfirmOffboard
+        | _, PlainOffboard -> msgs.OffboardAction
+        | _, ExportOffboard -> msgs.ExportOffboardAction
+
+    /// The destructive submit — busy (showing `Working`) while a call is in flight.
+    let private primaryButton (msgs: PlatformUsersMessages) (state: OffboardModalState) (dispatch: Msg -> unit) =
+        Forms.Button.dangerWith
+            (Forms.Button.stateOf state.Busy msgs.Working false)
+            (primaryActionLabel msgs state)
+            (fun () -> dispatch SubmitOffboard)
+
+    /// A quiet action that is inert while another call is in flight.
+    let private secondaryAction (state: OffboardModalState) (label: string) (onClick: unit -> unit) =
+        Forms.Button.secondaryWith
+            (if state.Busy then
+                 Forms.Button.Disabled
+             else
+                 Forms.Button.Enabled)
+            label
+            onClick
+
+    let private fieldLabel (text: string) =
+        Html.label [
+            prop.className [ "block text-xs font-medium mb-1"; Tokens.Text.secondary ]
+            prop.text text
+        ]
+
+    let private reasonField (msgs: PlatformUsersMessages) (state: OffboardModalState) (dispatch: Msg -> unit) =
+        Html.div [
+            prop.children [
+                fieldLabel msgs.ReasonLabel
+                Forms.Input.text state.Reason (SetOffboardReason >> dispatch) msgs.ReasonPlaceholder
+            ]
+        ]
+
+    let private previewTable (msgs: PlatformUsersMessages) (preview: LifecyclePreview) =
+        Data.table
+            [
+                {
+                    Header = msgs.ColumnHook
+                    Align = Data.Left
+                    Cell =
+                        fun (item: LifecyclePreviewItem) ->
+                            Html.span [ prop.className "font-mono text-xs"; prop.text item.HookName ]
+                }
+                {
+                    Header = msgs.ColumnWouldAffect
+                    Align = Data.Left
+                    Cell = previewResultBadge msgs
+                }
+                {
+                    Header = msgs.ColumnDetail
+                    Align = Data.Left
+                    Cell =
+                        fun item ->
+                            Html.span [
+                                prop.className [ "text-xs break-all"; Tokens.Text.secondary ]
+                                prop.text item.Detail
+                            ]
+                }
+            ]
+            preview.Items
+
+    let private summaryTable
+        (msgs: PlatformUsersMessages)
+        (summary: LifecycleSummary)
+        (archive: LifecycleExportArchive option)
+        =
+        Html.div [
+            prop.className "space-y-3"
+            prop.children [
+                Html.div [
+                    prop.className "flex gap-2 flex-wrap"
+                    prop.children [
+                        badge
+                            "bg-green-50 text-green-700"
+                            (msgs.CompletedCount(LifecycleSummary.completedCount summary))
+                        badge "bg-yellow-50 text-yellow-800" (msgs.SkippedCount(LifecycleSummary.skippedCount summary))
+                        badge "bg-red-50 text-red-700" (msgs.FailedCount(LifecycleSummary.failedCount summary))
+                        badge ("bg-gray-100 " + Tokens.Text.secondary) (sprintf "%d ms" (int summary.TotalElapsedMs))
+                    ]
+                ]
+
+                match archive with
+                | Some a ->
+                    Html.div [
+                        prop.className
+                            "text-xs bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-800 break-all"
+                        prop.children [
+                            Html.p [
+                                prop.className "font-medium mb-1"
+                                prop.text (msgs.ExportArchiveWritten a.SegmentCount)
+                            ]
+                            Html.p [ prop.text (sprintf "%s/%s" a.Container a.BlobPath) ]
+                            Html.p [
+                                prop.className "font-mono text-blue-600 mt-1"
+                                prop.text (sprintf "sha256: %s" a.ContentHash)
+                            ]
+                        ]
+                    ]
+                | None -> Html.none
+
+                if List.isEmpty summary.Outcomes then
+                    Html.p [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.NoHooksRan ]
+                else
+                    Data.table
+                        [
+                            {
+                                Header = msgs.ColumnHook
+                                Align = Data.Left
+                                Cell =
+                                    fun (outcome: LifecycleHookOutcome) ->
+                                        Html.span [ prop.className "font-mono text-xs"; prop.text outcome.HookName ]
+                            }
+                            {
+                                Header = msgs.ColumnResult
+                                Align = Data.Left
+                                Cell = fun outcome -> summaryResultBadge msgs outcome.Result
+                            }
+                            {
+                                Header = msgs.ColumnDetail
+                                Align = Data.Left
+                                Cell =
+                                    fun outcome ->
+                                        Html.span [
+                                            prop.className [ "text-xs break-all"; Tokens.Text.secondary ]
+                                            prop.text (summaryResultDetail outcome.Result)
+                                        ]
+                            }
+                        ]
+                        summary.Outcomes
+            ]
+        ]
+
+    let private offboardModalView
+        (msgs: PlatformUsersMessages)
+        (state: OffboardModalState)
+        (label: string)
+        (dispatch: Msg -> unit)
+        =
+        let heading =
+            match state.Step with
+            | Completed _ -> msgs.OffboardCompleteTitle
+            | _ -> kindTitle msgs state.Kind
+
+        let subject =
+            Html.p [
+                prop.className "text-sm text-muted"
+                prop.children [
+                    Html.span [ prop.text (msgs.SubjectLabel label) ]
+                    Html.span [ prop.className "font-mono text-xs break-all"; prop.text state.ScopeId ]
+                ]
+            ]
+
+        let modalError =
+            state.Error
+            |> Option.map StateViews.noticeStatic
+            |> Option.defaultValue Html.none
+
+        let cancel = Forms.Button.secondary msgs.Cancel (fun () -> dispatch CloseOffboard)
+
+        match state.Step with
+        | Compose ->
+            Modal.overlay heading [ subject; reasonField msgs state dispatch; modalError ] [
+                cancel
+                secondaryAction state msgs.PreviewImpact (fun () -> dispatch RequestPreview)
+                primaryButton msgs state dispatch
+            ]
+
+        | Previewed preview ->
+            Modal.overlay heading [
+                subject
+                Html.p [
+                    prop.className "text-sm text-muted"
+                    prop.text (msgs.PreviewSummary preview.TotalWouldAffect)
+                ]
+                previewTable msgs preview
+                reasonField msgs state dispatch
+                modalError
+            ] [ cancel; primaryButton msgs state dispatch ]
+
+        | Confirming ->
+            Modal.overlay heading [
+                subject
+                Html.div [
+                    prop.className "text-sm bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800"
+                    prop.children [
+                        Html.p [
+                            prop.className "font-medium mb-1"
+                            prop.text msgs.ConfirmationRequiredHeading
+                        ]
+                        Html.p [ prop.text msgs.ConfirmationRequiredBody ]
+                        match state.Kind with
+                        | ExportOffboard -> Html.p [ prop.className "mt-1"; prop.text msgs.ExportConfirmationNote ]
+                        | PlainOffboard -> Html.none
+                    ]
+                ]
+                Html.div [
+                    prop.className "flex items-end gap-2"
+                    prop.children [
+                        Html.div [
+                            prop.className "flex-1"
+                            prop.children [
+                                fieldLabel msgs.ConfirmationTokenLabel
+                                Forms.Input.text
+                                    state.Token
+                                    (SetOffboardToken >> dispatch)
+                                    msgs.ConfirmationTokenPlaceholder
+                            ]
+                        ]
+                        secondaryAction state msgs.RequestToken (fun () -> dispatch RequestToken)
+                    ]
+                ]
+                modalError
+            ] [ cancel; primaryButton msgs state dispatch ]
+
+        | Completed(summary, archive) ->
+            Modal.overlay heading [ subject; summaryTable msgs summary archive ] [
+                Forms.Button.primary msgs.Close (fun () -> dispatch CloseOffboard)
+            ]
+
+    // ─── List row ────────────────────────────────────────────────────────
+
+    let private principalRow
+        (msgs: PlatformUsersMessages)
+        (directory: UserDirectory.Model)
+        (p: PrincipalSummary)
+        (dispatch: Msg -> unit)
+        =
+        let primaryLabel, secondaryLabel = UserDirectory.labels directory p.UserId
+
+        Html.div [
+            prop.className "flex items-center justify-between p-3 border border-border rounded-lg mb-2 gap-3 flex-wrap"
+            prop.children [
+                Html.div [
+                    prop.className "flex flex-col min-w-0"
+                    prop.children [
+                        Html.div [
+                            prop.className "flex items-center gap-2 flex-wrap"
+                            prop.children [
+                                Html.span [ prop.className "font-medium break-all"; prop.text primaryLabel ]
+                                if p.TeamLess then
+                                    badge "bg-orange-100 text-orange-700" msgs.TeamLessBadge
+                                if p.HasUserScopeData then
+                                    badge ("bg-gray-100 " + Tokens.Text.secondary) msgs.HasDataBadge
+                            ]
+                        ]
+                        match secondaryLabel with
+                        | Some email -> Html.span [ prop.className "text-xs text-muted break-all"; prop.text email ]
+                        | None -> Html.none
+                        Html.span [
+                            prop.className "text-xs text-muted"
+                            prop.text (msgs.RowSubtitle (membershipLabel msgs p) (lastSeenLabel p))
+                        ]
+                        Html.span [
+                            prop.className [ "text-xs font-mono break-all"; Tokens.Text.muted ]
+                            prop.text p.UserId
+                        ]
+                    ]
+                ]
+                Html.div [
+                    prop.className "flex gap-2 flex-wrap"
+                    prop.children [
+                        Forms.Button.secondary msgs.PreviewAction (fun () ->
+                            dispatch (OpenOffboard(p.UserId, PlainOffboard)))
+                        Forms.Button.secondary msgs.ExportOffboardAction (fun () ->
+                            dispatch (OpenOffboard(p.UserId, ExportOffboard)))
+                        Html.button [
+                            prop.className
+                                "px-3 py-1.5 text-sm rounded-lg border border-red-200 text-red-700 hover:bg-red-50 transition-colors"
+                            prop.text msgs.OffboardAction
+                            prop.onClick (fun _ -> dispatch (OpenOffboard(p.UserId, PlainOffboard)))
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+    // ─── View ────────────────────────────────────────────────────────────
+
+    /// The module's page, over the catalog section the view hands it.
+    let body (msgs: PlatformUsersMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+        let filterBar =
+            Html.div [
+                prop.className "flex items-center justify-between mb-4 flex-wrap gap-2"
+                prop.children [
+                    Html.label [
+                        prop.className [ "flex items-center gap-2 text-sm cursor-pointer"; Tokens.Text.secondary ]
+                        prop.children [
+                            Html.input [
+                                prop.type' "checkbox"
+                                prop.isChecked model.TeamLessOnly
+                                prop.onChange (fun (_: bool) -> dispatch ToggleTeamLessOnly)
+                            ]
+                            Html.span [ prop.text msgs.TeamLessOnly ]
+                        ]
+                    ]
+                    Html.button [
+                        prop.className "text-xs text-brand hover:underline"
+                        prop.text msgs.Refresh
+                        prop.onClick (fun _ -> dispatch LoadPrincipals)
+                    ]
+                ]
+            ]
+
+        let listPane =
+            match model.Principals with
+            | None ->
+                Html.p [
+                    prop.className [ "text-sm"; Tokens.Text.muted ]
+                    prop.text msgs.LoadingPrincipals
+                ]
+            | Some principals ->
+                let visible =
+                    if model.TeamLessOnly then
+                        principals |> List.filter _.TeamLess
+                    else
+                        principals
+
+                if List.isEmpty principals then
+                    // Empty / degraded — no principals, or the offboard
+                    // substrate is disabled (the error banner carries the why).
+                    Html.div [
+                        prop.className "bg-white rounded-lg border border-border p-6 text-center"
+                        prop.children [
+                            Html.p [
+                                prop.className [ "text-sm"; Tokens.Text.secondary ]
+                                prop.text msgs.NoPrincipalsHeading
+                            ]
+                            Html.p [
+                                prop.className [ "text-xs mt-1"; Tokens.Text.muted ]
+                                prop.text msgs.NoPrincipalsBody
+                            ]
+                        ]
+                    ]
+                elif List.isEmpty visible then
+                    Html.p [
+                        prop.className [ "text-sm py-4"; Tokens.Text.muted ]
+                        prop.text msgs.NoTeamLessPrincipals
+                    ]
+                else
+                    Html.div [
+                        prop.children [
+                            for p in visible do
+                                principalRow msgs model.Directory p dispatch
+                        ]
+                    ]
+
+        let selfLabelForModal (state: OffboardModalState) =
+            let primary, _ = UserDirectory.labels model.Directory state.UserId
+            primary
+
+        Html.div [
+            prop.className "p-6 max-w-3xl"
+            prop.children [
+                Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
+                Html.p [
+                    prop.className [ "text-sm mb-4"; Tokens.Text.secondary ]
+                    prop.text msgs.Subheading
+                ]
+                StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
+                filterBar
+                listPane
+
+                match model.Offboard with
+                | Some state -> offboardModalView msgs state (selfLabelForModal state) dispatch
+                | None -> Html.none
+            ]
+        ]
