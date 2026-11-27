@@ -5,9 +5,8 @@ module ExternalContactManagerUI
 
 open Fuaran.MVU
 open System
-open Feliz
-open Feliz.AgGrid
-open Toolup.UIToolkit
+open Fable.Core
+open Fable.Core.JsInterop
 open ToolUp.Platform
 
 // ─── External contact admin ──────────────────────────────────────────
@@ -240,7 +239,7 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
     | ContactsLoaded(Ok contacts) ->
         {
             model with
-                Contacts = contacts
+                Contacts = Memo.keepEqual (fun (c: ExternalContact) -> c.Id) model.Contacts contacts
                 Loaded = true
                 Busy = false
                 Error = None
@@ -440,332 +439,38 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
 
     | DismissError -> { model with Error = None }, []
 
-// ─── View helpers ────────────────────────────────────────────────────
+// ─── View ────────────────────────────────────────────────────────────
 
 /// The channels an operator can record a consent on. The wire strings
 /// are `NotificationKind.SinkKind.toWireString` values, which the
 /// server parses back with `tryParse` — one vocabulary, not two.
-let private channelOptions = [ "Email"; "Sms"; "Push.WebPush"; "Push.Fcm"; "Push.Apns" ]
+let internal channelOptions = [ "Email"; "Sms"; "Push.WebPush"; "Push.Fcm"; "Push.Apns" ]
 
-let private pill (label: string) (cls: string) =
-    Html.span [
-        prop.className $"inline-block text-xs px-2 py-0.5 rounded {cls}"
-        prop.text label
-    ]
+/// What the deferred tree component takes.
+type internal SurfaceProps = {|
+    Model: Model
+    Dispatch: Msg -> unit
+    Messages: ExternalContactMessages
+    Locale: string
+|}
 
-/// The consent summary shown in the grid row: the channels this contact
-/// is actually reachable on, or a plain statement that it is reachable
-/// on none. The empty case is spelled out rather than left blank —
-/// "no consent recorded" is the single most important fact about a
-/// contact and a blank cell reads as a rendering bug.
-let private consentSummary (msgs: ExternalContactMessages) (contact: ExternalContact) =
-    let channels =
-        contact.OptIns
-        |> Map.toList
-        |> List.map (fst >> NotificationKind.SinkKind.toWireString)
+[<Emit("$0.then(m => m.Surface)")>]
+let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
 
-    if List.isEmpty channels then
-        pill msgs.NoConsent ("bg-gray-100 " + Tokens.Text.secondary)
-    else
-        Html.div [
-            prop.className "flex gap-1 flex-wrap"
-            prop.children [ for channel in channels -> pill channel "bg-green-100 text-green-700" ]
-        ]
-
-let private contactFormPanel (msgs: ExternalContactMessages) (busy: bool) (form: ContactForm) (dispatch: Msg -> unit) =
-    let heading =
-        match form.EditingId with
-        | None -> msgs.NewContactHeading
-        | Some _ -> msgs.EditContactHeading
-
-    Layout.Panel.panel heading [
-        Html.div [
-            prop.className "flex flex-col gap-3"
-            prop.children [
-                Html.p [ prop.className "text-xs text-muted"; prop.text msgs.ContactFormHelp ]
-
-                Forms.Field.field
-                    msgs.FieldDisplayName
-                    (Forms.Input.text
-                        form.DisplayName
-                        (fun v -> dispatch (SetFormField(fun f -> { f with DisplayName = v })))
-                        msgs.PlaceholderDisplayName)
-
-                Forms.Field.field
-                    msgs.FieldEmail
-                    (Forms.Input.text
-                        form.Email
-                        (fun v -> dispatch (SetFormField(fun f -> { f with Email = v })))
-                        msgs.PlaceholderEmail)
-
-                Forms.Field.field
-                    msgs.FieldPhone
-                    (Forms.Input.text
-                        form.Phone
-                        (fun v -> dispatch (SetFormField(fun f -> { f with Phone = v })))
-                        msgs.PlaceholderPhone)
-
-                Forms.Field.field
-                    msgs.FieldWhatsApp
-                    (Forms.Input.text
-                        form.WhatsApp
-                        (fun v -> dispatch (SetFormField(fun f -> { f with WhatsApp = v })))
-                        msgs.PlaceholderPhone)
-
-                Forms.Field.field
-                    msgs.FieldTags
-                    (Forms.Input.text
-                        form.Tags
-                        (fun v -> dispatch (SetFormField(fun f -> { f with Tags = v })))
-                        msgs.PlaceholderTags)
-
-                Forms.Field.field
-                    msgs.FieldNotes
-                    (Forms.Input.text
-                        form.Notes
-                        (fun v -> dispatch (SetFormField(fun f -> { f with Notes = v })))
-                        msgs.PlaceholderNotes)
-
-                Forms.Field.actions [
-                    Forms.Button.primaryWith
-                        (Forms.Button.stateOf busy msgs.SaveContact false)
-                        msgs.SaveContact
-                        (fun () -> dispatch SubmitForm)
-                    Forms.Button.secondary msgs.Cancel (fun () -> dispatch CancelForm)
-                ]
-            ]
-        ]
-    ]
-
-/// The consent panel: what this contact has agreed to, one row per
-/// channel with a withdrawal beside it, and the form that records a new
-/// one. The source box is the point of the panel — see the preamble.
-let private consentPanel
-    (msgs: ExternalContactMessages)
-    (model: Model)
-    (contact: ExternalContact)
-    (dispatch: Msg -> unit)
-    =
-    let recorded = contact.OptIns |> Map.toList
-
-    Layout.Panel.panel msgs.ConsentHeading [
-        Html.div [
-            prop.className "flex flex-col gap-4"
-            prop.children [
-                Html.p [ prop.className "text-xs text-muted"; prop.text msgs.ConsentHelp ]
-
-                if List.isEmpty recorded then
-                    Html.p [ prop.className "text-sm text-muted py-2"; prop.text msgs.NoConsentBody ]
-                else
-                    Html.div [
-                        prop.className "flex flex-col gap-2"
-                        prop.children [
-                            for channel, record in recorded ->
-                                let wire = NotificationKind.SinkKind.toWireString channel
-
-                                Html.div [
-                                    prop.className
-                                        "flex items-center justify-between gap-3 p-2 rounded border border-gray-200"
-                                    prop.children [
-                                        Html.div [
-                                            prop.className "flex flex-col"
-                                            prop.children [
-                                                Html.span [ prop.className "text-sm font-medium"; prop.text wire ]
-                                                Html.span [
-                                                    prop.className "text-xs text-muted"
-                                                    prop.text (msgs.ConsentEvidence record.Source)
-                                                ]
-                                            ]
-                                        ]
-                                        Forms.Button.secondary msgs.WithdrawConsent (fun () ->
-                                            dispatch (WithdrawOptIn(contact.Id, wire)))
-                                    ]
-                                ]
-                        ]
-                    ]
-
-                Html.div [
-                    prop.className "flex flex-col gap-3 pt-2 border-t border-gray-200"
-                    prop.children [
-                        Html.p [ prop.className "text-xs text-muted"; prop.text msgs.RecordConsentHelp ]
-
-                        Forms.Field.field
-                            msgs.FieldChannel
-                            (Html.select [
-                                prop.className "border rounded px-2 py-1 text-sm"
-                                prop.value model.OptIn.Channel
-                                prop.onChange (fun (v: string) -> dispatch (SetOptInChannel v))
-                                prop.children [
-                                    for option in channelOptions -> Html.option [ prop.value option; prop.text option ]
-                                ]
-                            ])
-
-                        Forms.Field.field
-                            msgs.FieldConsentSource
-                            (Forms.Input.text
-                                model.OptIn.Source
-                                (fun v -> dispatch (SetOptInSource v))
-                                msgs.PlaceholderConsentSource)
-
-                        Forms.Field.actions [
-                            // Disabled rather than hidden while the source
-                            // is blank: the operator should see that the
-                            // control exists and what it is waiting for.
-                            Forms.Button.primaryWith
-                                (Forms.Button.stateOf
-                                    model.Busy
-                                    msgs.RecordConsent
-                                    (String.IsNullOrWhiteSpace model.OptIn.Source))
-                                msgs.RecordConsent
-                                (fun () -> dispatch (RecordOptIn contact.Id))
-                        ]
-                    ]
-                ]
-            ]
-        ]
-    ]
-
-let private contactListView (msgs: ExternalContactMessages) (model: Model) (dispatch: Msg -> unit) =
-    Html.div [
-        prop.className "space-y-4"
-        prop.children [
-            Layout.Panel.panel msgs.ContactsPanel [
-                if model.Contacts.IsEmpty then
-                    Html.p [ prop.className "text-sm text-muted py-4"; prop.text msgs.NoContactsYet ]
-                else
-                    AgGrid.grid [
-                        AgGrid.baseTheme BaseTheme.themeBalham
-                        AgGrid.domLayout AutoHeight
-                        AgGrid.columnDefs [
-                            ColumnDef.create [
-                                ColumnDef.headerName msgs.ColumnName
-                                ColumnDef.valueGetter (fun (c: ExternalContact) -> c.DisplayName)
-                            ]
-                            ColumnDef.create [
-                                ColumnDef.headerName msgs.ColumnEmail
-                                ColumnDef.valueGetter (fun (c: ExternalContact) ->
-                                    c.OptionalEmailAddress |> Option.defaultValue "")
-                            ]
-                            ColumnDef.create [
-                                ColumnDef.headerName msgs.ColumnPhone
-                                ColumnDef.valueGetter (fun (c: ExternalContact) ->
-                                    c.OptionalPhoneNumber |> Option.defaultValue "")
-                            ]
-                            ColumnDef.create [
-                                ColumnDef.headerName msgs.ColumnTags
-                                ColumnDef.valueGetter (fun (c: ExternalContact) -> c.Tags |> String.concat ", ")
-                            ]
-                            ColumnDef.create [
-                                ColumnDef.headerName msgs.ColumnConsent
-                                ColumnDef.cellRenderer (fun (p: ICellRendererParams<ExternalContact, obj>) ->
-                                    match p.data with
-                                    | Some contact -> consentSummary msgs contact
-                                    | None -> Html.none)
-                            ]
-                            ColumnDef.create [
-                                ColumnDef.headerName ""
-                                ColumnDef.cellRenderer (fun (p: ICellRendererParams<ExternalContact, obj>) ->
-                                    match p.data with
-                                    | Some contact ->
-                                        Forms.Button.secondary msgs.Manage (fun () ->
-                                            dispatch (OpenContact contact.Id))
-                                    | None -> Html.none)
-                            ]
-                        ]
-                        AgGrid.rowData (List.toArray model.Contacts)
-                    ]
-            ]
-
-            match model.Form with
-            | Some form when form.EditingId.IsNone -> contactFormPanel msgs model.Busy form dispatch
-            | _ ->
-                Html.div [
-                    prop.children [ Forms.Button.primary msgs.AddContact (fun () -> dispatch StartAdd) ]
-                ]
-        ]
-    ]
-
-let private contactDetailView
-    (msgs: ExternalContactMessages)
-    (model: Model)
-    (contactId: string)
-    (dispatch: Msg -> unit)
-    =
-    match model.Contacts |> List.tryFind (fun c -> c.Id = contactId) with
-    | None ->
-        Html.div [
-            prop.className "space-y-3"
-            prop.children [
-                Html.p [ prop.className "text-sm text-muted"; prop.text msgs.ContactGone ]
-                Forms.Button.secondary msgs.BackToList (fun () -> dispatch BackToList)
-            ]
-        ]
-    | Some contact ->
-        Html.div [
-            prop.className "space-y-4"
-            prop.children [
-                Html.div [
-                    prop.className "flex items-center justify-between gap-3"
-                    prop.children [
-                        Html.h3 [ prop.className "text-base font-semibold"; prop.text contact.DisplayName ]
-                        Forms.Button.secondary msgs.BackToList (fun () -> dispatch BackToList)
-                    ]
-                ]
-
-                match model.Form with
-                | Some form when form.EditingId = Some contact.Id -> contactFormPanel msgs model.Busy form dispatch
-                | _ ->
-                    Layout.Panel.panel msgs.DetailsPanel [
-                        Html.div [
-                            prop.className "flex flex-col gap-2 text-sm"
-                            prop.children [
-                                Html.div [
-                                    prop.text (
-                                        msgs.DetailEmail(contact.OptionalEmailAddress |> Option.defaultValue "—")
-                                    )
-                                ]
-                                Html.div [
-                                    prop.text (msgs.DetailPhone(contact.OptionalPhoneNumber |> Option.defaultValue "—"))
-                                ]
-                                Html.div [ prop.text (msgs.DetailTags(contact.Tags |> String.concat ", ")) ]
-                                Forms.Field.actions [
-                                    Forms.Button.secondary msgs.EditContact (fun () -> dispatch (StartEdit contact.Id))
-                                    Forms.Button.secondary msgs.DeleteContact (fun () ->
-                                        dispatch (DeleteContact contact.Id))
-                                ]
-                            ]
-                        ]
-                    ]
-
-                consentPanel msgs model contact dispatch
-            ]
-        ]
-
-/// The module's page, over the catalog section the view hands it.
-let private body (msgs: ExternalContactMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    let body =
-        if not model.Loaded then
-            Html.p [ prop.className "text-sm text-muted py-4"; prop.text msgs.Loading ]
-        else
-            match model.CurrentView with
-            | ContactList -> contactListView msgs model dispatch
-            | ContactDetail contactId -> contactDetailView msgs model contactId dispatch
-
-    Html.div [
-        prop.className "p-6 max-w-5xl"
-        prop.children [
-            Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
-            Html.p [
-                prop.className ("text-sm mb-4 " + Tokens.Text.secondary)
-                prop.text msgs.Subheading
-            ]
-            StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
-            body
-        ]
-    ]
+/// The tree's file, fetched on demand with the node vocabulary and the
+/// renderer, so the shell's first load pays nothing for them.
+let private loadSurface () : JS.Promise<obj> =
+    surfaceOf (importDynamic "./ExternalContactManagerTree.fs")
 
 let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
-    PageContent.FullWidth(body ctx.Messages.ExternalContact model ctx.Dispatch)
+    PageContent.FullWidth(
+        TreeSurface.deferred "ExternalContactManagerTree.Surface" loadSurface {|
+            Model = model
+            Dispatch = ctx.Dispatch
+            Messages = ctx.Messages.ExternalContact
+            Locale = ctx.Locale
+        |}
+    )
 
 // ─── Module creation ─────────────────────────────────────────────────
 

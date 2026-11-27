@@ -5,12 +5,10 @@ module AuditLogUI
 
 open Fuaran.MVU
 open System
-open Feliz
 open Browser
 open Browser.Types
 open Fable.Core
 open Fable.Core.JsInterop
-open Toolup.UIToolkit
 open ToolUp.Platform
 
 // ─── Audit-trail viewer admin module (client) ────────────────────────
@@ -96,7 +94,7 @@ let private auditApi: IAuditViewApi =
 
 // ─── Filters → query ─────────────────────────────────────────────────
 
-let private emptyFilters = {
+let internal emptyFilters = {
     From = ""
     To = ""
     EventType = ""
@@ -343,223 +341,44 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
 
 // ─── View ────────────────────────────────────────────────────────────
 
-let private formatTimestamp (ts: DateTime) : string =
+let internal formatTimestamp (ts: DateTime) : string =
     ts.ToUniversalTime().ToString "yyyy-MM-dd HH:mm:ss"
 
 /// Pretty-print the recorded payload for the detail expansion. A
 /// payload that will not parse is shown as stored rather than hidden —
 /// a tombstoned row (the GDPR erasure marker) is exactly that case, and
 /// the fact that a row was redacted is itself audit-relevant.
-let private prettyPayload (payload: string) : string =
+let internal prettyPayload (payload: string) : string =
     try
         emitJsExpr payload "JSON.stringify(JSON.parse($0), null, 2)"
     with _ ->
         payload
 
-let private filterBar (msgs: AuditLogMessages) (model: Model) (dispatch: Msg -> unit) =
-    // Each visible <label> sits BESIDE its control rather than wrapping
-    // it and this tier has no `for`/`id` pairing convention, so every
-    // control carries its own accessible name read from the SAME
-    // binding as the label — see `UsageDashboard.renderControls` for the
-    // full rationale.
-    let field (label: string) (control: ReactElement) =
-        Html.div [
-            prop.className "flex flex-col"
-            prop.children [
-                Html.label [ prop.className ("text-xs mb-1 " + Tokens.Text.secondary); prop.text label ]
-                control
-            ]
-        ]
+/// What the deferred tree component takes.
+type internal SurfaceProps = {|
+    Model: Model
+    Dispatch: Msg -> unit
+    Messages: AuditLogMessages
+    Locale: string
+|}
 
-    Html.div [
-        prop.className "flex flex-wrap items-end gap-4 mb-4"
-        prop.children [
-            field
-                msgs.FromLabel
-                (Html.input [
-                    prop.type' "date"
-                    prop.ariaLabel msgs.FromLabel
-                    prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
-                    prop.value model.Draft.From
-                    prop.onChange (SetFrom >> dispatch)
-                ])
-            field
-                msgs.ToLabel
-                (Html.input [
-                    prop.type' "date"
-                    prop.ariaLabel msgs.ToLabel
-                    prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
-                    prop.value model.Draft.To
-                    prop.onChange (SetTo >> dispatch)
-                ])
-            field
-                msgs.EventTypeLabel
-                (Html.select [
-                    prop.ariaLabel msgs.EventTypeLabel
-                    prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
-                    prop.value model.Draft.EventType
-                    prop.onChange (SetEventType >> dispatch)
-                    prop.children (
-                        Html.option [ prop.value ""; prop.text msgs.AllEventTypes ]
-                        :: (model.EventTypes
-                            |> List.map (fun t -> Html.option [ prop.value t; prop.text t ]))
-                    )
-                ])
-            // The text input commits on Enter / blur, so it takes its
-            // accessible name from a wrapping <label>.
-            Html.label [
-                prop.className "flex flex-col"
-                prop.children [
-                    Html.span [
-                        prop.className [ "text-xs mb-1"; Tokens.Text.secondary ]
-                        prop.text msgs.ActorLabel
-                    ]
-                    Forms.Input.text model.Draft.Actor (SetActor >> dispatch) msgs.ActorPlaceholder
-                ]
-            ]
-            Forms.Button.primaryWith Forms.Button.Enabled msgs.ApplyFilters (fun () -> dispatch ApplyFilters)
-            Forms.Button.secondaryWith Forms.Button.Enabled msgs.ClearFilters (fun () -> dispatch ClearFilters)
-            Forms.Button.secondaryWith Forms.Button.Enabled msgs.Refresh (fun () -> dispatch Refresh)
-            Forms.Button.primaryWith
-                (Forms.Button.stateOf model.Exporting msgs.Exporting (List.isEmpty model.Events))
-                msgs.ExportCsv
-                (fun () -> dispatch ExportCsv)
-        ]
-    ]
+[<Emit("$0.then(m => m.Surface)")>]
+let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
 
-/// The recorded payload, shown under the row's summary while its detail is open.
-let private detail (msgs: AuditLogMessages) (view: AuditEventView) =
-    Html.div [
-        prop.className [ "mt-2 p-3 rounded"; Tokens.Bg.subtle ]
-        prop.children [
-            Html.div [
-                prop.className [ "text-xs font-semibold uppercase tracking-wider mb-1"; Tokens.Text.secondary ]
-                prop.text msgs.PayloadHeading
-            ]
-            Html.pre [
-                prop.className [ "text-xs font-mono whitespace-pre-wrap break-all"; Tokens.Text.secondary ]
-                prop.text (prettyPayload view.Payload)
-            ]
-        ]
-    ]
-
-let private columns (msgs: AuditLogMessages) (model: Model) (dispatch: Msg -> unit) : Data.Column<AuditEventView> list =
-    let mono (text: string) =
-        Html.span [ prop.className "font-mono whitespace-nowrap"; prop.text text ]
-
-    [
-        {
-            Header = msgs.ColumnTime
-            Align = Data.Left
-            Cell = fun v -> mono (formatTimestamp v.OccurredAt)
-        }
-        {
-            Header = msgs.ColumnEventType
-            Align = Data.Left
-            Cell = fun v -> mono v.EventType
-        }
-        {
-            Header = msgs.ColumnActor
-            Align = Data.Left
-            Cell = fun v -> mono (v.Actor |> Option.defaultValue msgs.UnattributedActor)
-        }
-        {
-            Header = msgs.ColumnSummary
-            Align = Data.Left
-            Cell =
-                fun v ->
-                    Html.div [
-                        prop.className "break-all"
-                        prop.children [
-                            Html.text v.Summary
-                            if Set.contains v.Id model.Expanded then
-                                detail msgs v
-                        ]
-                    ]
-        }
-        {
-            Header = ""
-            Align = Data.Right
-            Cell =
-                fun v ->
-                    let isExpanded = Set.contains v.Id model.Expanded
-
-                    Html.button [
-                        prop.ariaExpanded isExpanded
-                        prop.ariaLabel (if isExpanded then msgs.HideDetail else msgs.ShowDetail)
-                        prop.className "px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded"
-                        prop.onClick (fun _ -> dispatch (ToggleDetail v.Id))
-                        prop.text (if isExpanded then "−" else "+")
-                    ]
-        }
-    ]
-
-/// The two empty states are DIFFERENT states, not one message with two
-/// wordings: nothing recorded means the trail is off (or nothing
-/// audited has happened yet) and the remedy is server-side; nothing
-/// matching means the filters are too narrow and the remedy is right
-/// here. A single "no results" would send the operator to the wrong one
-/// half the time.
-let private emptyState (msgs: AuditLogMessages) (model: Model) =
-    let filtered = model.Applied <> emptyFilters || not (List.isEmpty model.EventTypes)
-
-    Html.div [
-        prop.className ("p-8 text-center text-sm " + Tokens.Text.muted)
-        prop.text (if filtered then msgs.NoMatches else msgs.NoEvents)
-    ]
-
-let private eventTable (msgs: AuditLogMessages) (model: Model) (dispatch: Msg -> unit) =
-    if List.isEmpty model.Events then
-        emptyState msgs model
-    else
-        Html.div [
-            prop.children [
-                Data.table (columns msgs model dispatch) model.Events
-                Html.div [
-                    prop.className "flex items-center justify-between mt-3"
-                    prop.children [
-                        Html.span [
-                            prop.className ("text-xs " + Tokens.Text.muted)
-                            prop.text (msgs.ShowingCount (List.length model.Events) model.MatchedCount)
-                        ]
-                        match model.NextCursor with
-                        | None -> Html.none
-                        | Some _ ->
-                            Forms.Button.secondaryWith
-                                (Forms.Button.stateOf model.LoadingMore msgs.Loading false)
-                                msgs.LoadMore
-                                (fun () -> dispatch LoadMore)
-                    ]
-                ]
-            ]
-        ]
-
-/// The module's page, over the catalog section the view hands it.
-let private body (msgs: AuditLogMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    Html.div [
-        prop.className "p-4"
-        prop.children [
-            Html.h2 [
-                prop.className ("text-lg font-semibold mb-2 " + Tokens.Text.primary)
-                prop.text msgs.Heading
-            ]
-            Html.p [
-                prop.className ("text-sm mb-4 " + Tokens.Text.secondary)
-                prop.text msgs.Subheading
-            ]
-            filterBar msgs model dispatch
-
-            match model.Status with
-            | Remote.Failed err -> StateViews.noticeStatic (Notice.Problem err)
-            | Remote.NotAsked
-            | Remote.Loading -> Html.div [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
-            | Remote.Reloading()
-            | Remote.Loaded() -> eventTable msgs model dispatch
-        ]
-    ]
+/// The tree's file, fetched on demand with the node vocabulary and the
+/// renderer, so the shell's first load pays nothing for them.
+let private loadSurface () : JS.Promise<obj> =
+    surfaceOf (importDynamic "./AuditLogTree.fs")
 
 let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
-    PageContent.FullWidth(body ctx.Messages.AuditLog model ctx.Dispatch)
+    PageContent.FullWidth(
+        TreeSurface.deferred "AuditLogTree.Surface" loadSurface {|
+            Model = model
+            Dispatch = ctx.Dispatch
+            Messages = ctx.Messages.AuditLog
+            Locale = ctx.Locale
+        |}
+    )
 
 // ─── Module creation ─────────────────────────────────────────────────
 
