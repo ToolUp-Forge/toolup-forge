@@ -36,17 +36,13 @@ let private filters (msgs: AuditLogMessages) (model: Model) : Node<Msg> =
         Name = name
     }
 
-    let options: SelectOption list = [
-        {
-            SelectOption.Value = ""
-            SelectOption.Label = Nodes.literal msgs.AllEventTypes
-        }
-        for t in model.EventTypes ->
-            {
-                SelectOption.Value = t
-                Label = Nodes.literal t
-            }
-    ]
+    let option (value: string) (label: string) : SelectOption = {
+        SelectOption.Value = value
+        SelectOption.Label = Nodes.literal label
+    }
+
+    let options =
+        option "" msgs.AllEventTypes :: List.map (fun t -> option t t) model.EventTypes
 
     Fuaran.filters "audit-filters" [
         date "audit-from" msgs.FromLabel model.Draft.From SetFrom

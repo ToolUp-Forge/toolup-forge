@@ -40,7 +40,7 @@
          the nupkg; Fable's package loader extracts and compiles source
          directly. Mirrors the Feliz / Fable.Elmish convention. -->
     <ItemGroup>
-        <Content Include="**\*.fsproj;**\*.fs;**\*.svg;**\*.png;**\TreeLoweringRuntime.js;**\TeamManagerTree.js;**\ModuleVisibilityAdminTree.js;**\PlatformAdminTree.js;**\CommandPaletteTree.js;**\SessionSecurityTree.js;**\PermissionsAdminTree.js;**\PlatformUsersTree.js;**\AuditLogTree.js;**\ExternalContactManagerTree.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg;**\*.png;**\TreeLoweringRuntime.js;**\TeamManagerTree.js;**\ModuleVisibilityAdminTree.js;**\PlatformAdminTree.js;**\CommandPaletteTree.js;**\SessionSecurityTree.js;**\PermissionsAdminTree.js;**\PlatformUsersTree.js;**\DataSubjectRequestAdminTree.js;**\AuditLogTree.js;**\ExternalContactManagerTree.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
@@ -479,6 +479,7 @@
              ShellSlots.fs (its slot builds the module and the tile). -->
         <Compile Include="Client\JobsAdminUI.fs" />
         <Compile Include="Client\DataSubjectRequestAdminUI.fs" />
+        <Compile Include="Client\DataSubjectRequestAdminTree.fs" />
         <!-- Phase 54e — tenant-lifecycle diagnostics admin. Surfaces the
              durable last LifecycleSummary (IPlatformTenantApi.GetLifecycleSummary)
              per scope; Platform-Admin gated like the other _sdk.* admin
