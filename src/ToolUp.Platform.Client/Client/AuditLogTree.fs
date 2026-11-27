@@ -8,8 +8,8 @@
 ///
 /// The event rows are kept per event, every row id from the event's id and
 /// every row message carrying it; an open row is drawn by a second kept table,
-/// so opening one row builds that row alone. The time window and the event
-/// type are filter chips; the actor is an island (`TreeIslands`), holding what
+/// so opening one row builds that row alone. The time window is two filter
+/// chips and the event type a select; the actor is an island (`TreeIslands`), holding what
 /// is typed until the field is left.
 module internal AuditLogTree
 
@@ -22,8 +22,8 @@ open KeepScoped
 
 // ─── The filter bar ──────────────────────────────────────────────────
 
-/// The time window and the event type, as filter chips: each change sends its
-/// message, and no filter store is written.
+/// The time window, as two date chips: each change sends its message, and no
+/// filter store is written.
 let private filters (msgs: AuditLogMessages) (model: Model) : Node<Msg> =
     let date (name: string) (label: string) (value: string) (msg: string -> Msg) : FilterSpec<Msg> = {
         Kind =
@@ -36,32 +36,20 @@ let private filters (msgs: AuditLogMessages) (model: Model) : Node<Msg> =
         Name = name
     }
 
-    let option (value: string) (label: string) : SelectOption = {
-        SelectOption.Value = value
-        SelectOption.Label = Nodes.literal label
-    }
-
-    let options =
-        option "" msgs.AllEventTypes :: List.map (fun t -> option t t) model.EventTypes
-
     Fuaran.filters "audit-filters" [
         date "audit-from" msgs.FromLabel model.Draft.From SetFrom
         date "audit-to" msgs.ToLabel model.Draft.To SetTo
-        {
-            Kind =
-                FormFieldKind.choiceControl (
-                    Binding.Static(Some options),
-                    Binding.Static(Some model.Draft.EventType),
-                    onChange = (fun chosen -> Action.dispatch (SetEventType(defaultArg chosen "")))
-                )
-            Label = Nodes.literal msgs.EventTypeLabel
-            Name = "audit-event-type"
-        }
     ]
 
 let private filterBar (msgs: AuditLogMessages) (model: Model) (dispatch: Msg -> unit) : Node<Msg> =
     Nodes.Layout.row "audit-filter-bar" [
         filters msgs model
+        Nodes.Forms.dropdown
+            "audit-event-type"
+            msgs.EventTypeLabel
+            (("", msgs.AllEventTypes) :: List.map (fun t -> t, t) model.EventTypes)
+            model.Draft.EventType
+            SetEventType
         TreeIslands.textField
             "audit-actor"
             msgs.ActorLabel
@@ -121,7 +109,12 @@ let private eventRow (expanded: bool) (msgs: AuditLogMessages) (event: AuditEven
             if expanded then
                 Nodes.Layout.column (Nodes.Ids.child id "detail") [
                     Nodes.text (Nodes.Ids.child id "payload-heading") msgs.PayloadHeading
-                    Fuaran.codeBlock (Nodes.Ids.child id "payload") "json" (prettyPayload event.Payload)
+                    Fuaran.codeBlockSpec (Nodes.Ids.child id "payload") {
+                        Defaults.codeBlock with
+                            Language = "json"
+                            Code = prettyPayload event.Payload
+                            Copyable = false
+                    }
                 ]
         ]
     ]

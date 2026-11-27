@@ -21,6 +21,12 @@ open ToolUp.Platform.DataSubjectRequestApi
 open DataSubjectRequestAdminUI
 open KeepScoped
 
+/// An instant as the universal sortable form, from its components: a custom
+/// format string is not rendered for a `DateTimeOffset` under Fable.
+let private universal (at: System.DateTimeOffset) =
+    let t = at.UtcDateTime
+    sprintf "%04d-%02d-%02d %02d:%02d:%02dZ" t.Year t.Month t.Day t.Hour t.Minute t.Second
+
 let private badge (id: string) (variant: BadgeVariant) (label: string) : Node<'Msg> =
     Fuaran.badge id {
         Label = Nodes.literal label
@@ -232,7 +238,7 @@ let private runSummaryPanel =
             Nodes.Panel.card "dsr-run" msgs.RunSummaryPanelTitle [
                 Nodes.text
                     "dsr-run-line"
-                    (msgs.RunSummaryLine (summary.StartedAt.ToString "u") (summary.CompletedAt.ToString "u") overall)
+                    (msgs.RunSummaryLine (universal summary.StartedAt) (universal summary.CompletedAt) overall)
                 Nodes.Layout.column "dsr-run-handlers" [
                     for KeyValue(name, outcome) in summary.PerHandler ->
                         let id = Nodes.Ids.keyed "dsr-run-handler" name
