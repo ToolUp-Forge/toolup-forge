@@ -100,7 +100,7 @@ let private exportTab (msgs: DataSubjectRequestAdminMessages) (model: Model) (di
         subjectFields msgs model dispatch
         TreeIslands.checkbox "dsr-export-async" msgs.AsyncModeLabel model.AsyncMode false (fun () ->
             dispatch (SetAsyncMode(not model.AsyncMode)))
-        Nodes.Layout.row "dsr-export-actions" [
+        Nodes.Layout.column "dsr-export-actions" [
             submit
                 "dsr-export-submit"
                 ButtonVariant.Primary
@@ -118,36 +118,27 @@ let private exportTab (msgs: DataSubjectRequestAdminMessages) (model: Model) (di
 // ─── Erase ───────────────────────────────────────────────────────────
 
 /// The policy override: the deployment default or one of the three policies,
-/// each a button with what it means beside it.
-let private policyChoice (msgs: DataSubjectRequestAdminMessages) (model: Model) =
-    let choice (id: string) (label: string) (description: string) (value: ErasurePolicy option) =
-        Nodes.Layout.column id [
-            Nodes.Actions.button
-                (Nodes.Ids.child id "pick")
-                (if model.OverridePolicy = value then
-                     ButtonVariant.Primary
-                 else
-                     ButtonVariant.Secondary)
-                label
-                false
-                (SetOverridePolicy value)
-            Nodes.text (Nodes.Ids.child id "means") description
-        ]
+/// a radio each with what it means under it, the chosen one checked.
+let private policyChoice (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
+    let choice (label: string) (description: string) (value: ErasurePolicy option) : TreeIslands.Radio = {
+        Label = label
+        Description = description
+        Chosen = (model.OverridePolicy = value)
+        OnChoose = fun () -> dispatch (SetOverridePolicy value)
+    }
 
     Nodes.Layout.column "dsr-policy" [
         Nodes.text "dsr-policy-prompt" msgs.OverridePolicyPrompt
-        choice "dsr-policy-default" msgs.UseDeploymentDefault msgs.UseDeploymentDefaultDescription None
-        for policy in
-            [
-                ErasurePolicy.HardDelete
-                ErasurePolicy.Tombstone
-                ErasurePolicy.RetainPerCompliance
-            ] do
-            choice
-                (Nodes.Ids.keyed "dsr-policy" (string policy))
-                (policyLabel msgs policy)
-                (policyDescription msgs policy)
-                (Some policy)
+        TreeIslands.radios "dsr-policy-choices" "dsr-policy" [
+            choice msgs.UseDeploymentDefault msgs.UseDeploymentDefaultDescription None
+            for policy in
+                [
+                    ErasurePolicy.HardDelete
+                    ErasurePolicy.Tombstone
+                    ErasurePolicy.RetainPerCompliance
+                ] do
+                choice (policyLabel msgs policy) (policyDescription msgs policy) (Some policy)
+        ]
     ]
 
 type private PreviewContext = {
@@ -201,7 +192,8 @@ let private previewPanel =
                                     (Nodes.Ids.child id "affected")
                                     (msgs.HandlerRecordsAffected summary.RecordsAffected))
                     ]
-                Nodes.Layout.row "dsr-preview-confirm" [
+                Nodes.Layout.column "dsr-preview-confirm" [
+                    Nodes.text "dsr-preview-footnote" msgs.ConfirmIrreversibleFootnote
                     Nodes.Actions.button
                         "dsr-preview-confirm-erase"
                         ButtonVariant.Destructive
@@ -211,7 +203,6 @@ let private previewPanel =
                              msgs.ConfirmErase)
                         (context.Busy <> Idle)
                         SubmitConfirm
-                    Nodes.text "dsr-preview-footnote" msgs.ConfirmIrreversibleFootnote
                 ]
             ]
     )
@@ -263,8 +254,8 @@ let private eraseTab (msgs: DataSubjectRequestAdminMessages) (model: Model) (dis
         Nodes.Panel.card "dsr-erase" msgs.ErasePanelTitle [
             Nodes.text "dsr-erase-body" msgs.ErasePanelBody
             subjectFields msgs model dispatch
-            policyChoice msgs model
-            Nodes.Layout.row "dsr-erase-actions" [
+            policyChoice msgs model dispatch
+            Nodes.Layout.column "dsr-erase-actions" [
                 submit
                     "dsr-erase-preview"
                     ButtonVariant.Primary

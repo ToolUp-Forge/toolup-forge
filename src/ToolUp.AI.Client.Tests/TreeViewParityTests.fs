@@ -1352,12 +1352,32 @@ let private dsrTests =
             |> ignore
 
             (dsrErase ())
-                .Interact(ViewMount.mountAndInteract, dsrTree, Drive.click dsrMsgs.PolicyHardDeleteLabel)
+                .Interact(
+                    ViewMount.mountAndInteract,
+                    dsrTree,
+                    Drive.edit (dsrMsgs.PolicyHardDeleteLabel + dsrMsgs.PolicyHardDeleteDescription) "true"
+                )
                 .AssertModelWith(
-                    "a policy's button overrides the deployment default",
+                    "a policy's radio overrides the deployment default",
                     fun m -> m.OverridePolicy = Some ErasurePolicy.HardDelete
                 )
             |> ignore
+
+            // The chosen policy is announced: its radio, and only its radio, is checked.
+            let checkedRadio (harness: ModuleHarness<DataSubjectRequestAdminUI.Model, DataSubjectRequestAdminUI.Msg>) =
+                harness.RenderViewHtml(ViewMount.mount, dsrTree).Split("type=\"radio\"")
+                |> Array.skip 1
+                |> Array.map (fun after -> after.Substring(0, after.IndexOf '>').Contains "checked")
+                |> List.ofArray
+
+            Expect.equal (checkedRadio (dsrErase ())) [ true; false; false; false ] "the deployment default is checked"
+
+            Expect.equal
+                (checkedRadio (
+                    (dsrErase ()).Dispatch(DataSubjectRequestAdminUI.SetOverridePolicy(Some ErasurePolicy.HardDelete))
+                ))
+                [ false; true; false; false ]
+                "a chosen policy is checked"
 
             (dsrErase ())
                 .Interact(ViewMount.mountAndInteract, dsrTree, Drive.click dsrMsgs.PreviewErase)
@@ -1372,34 +1392,18 @@ let private dsrTests =
                 .AssertModelWith("Cancel drops the pending preview", fun m -> m.PendingPreview.IsNone)
             |> ignore)
 
-        // Three differences, all judged, and nothing else. (1) The policy
-        // override is a button per policy with what it means beside it, as the
-        // module-visibility editor's rule kind is, where the Feliz page drew a
-        // radio named by the policy and its description. (2) The tabs are one
-        // tab stop with the active tab's panel after it. (3) The tab order,
-        // which differs only by these. The other buttons and their order match.
-        // "An erasure confirmed" is not compared: the Feliz page threw drawing
-        // its run summary (a custom DateTimeOffset format under Fable), which
-        // the tree draws from the instant's components.
+        // One difference, judged, and nothing else: the tabs are one tab stop
+        // with the active tab's panel after it, so the tab order differs by
+        // that alone. The buttons and their order match, and the policy radios
+        // are named as the Feliz page's were. "An erasure confirmed" is not
+        // compared: the Feliz page threw drawing its run summary (a custom
+        // DateTimeOffset format under Fable), which the tree draws from the
+        // instant's components.
         testCase "assertion 3: parity with the Feliz page, but for the judged differences" (fun () ->
-            let m = dsrMsgs
-
-            let policies =
-                set [
-                    m.UseDeploymentDefault
-                    m.PolicyHardDeleteLabel
-                    m.PolicyTombstoneLabel
-                    m.PolicyRetainPerComplianceLabel
-                ]
-
             let judged (difference: TreeViewParity.Difference) =
                 match difference with
                 | TreeViewParity.TabOrderDiffers _ -> true
-                | TreeViewParity.MissingFromTree s ->
-                    s.Role = "radio"
-                    && s.Name
-                       |> Option.exists (fun n -> policies |> Set.exists (fun p -> n.StartsWith(p + " ")))
-                | TreeViewParity.ExtraInTree s -> s.Role = "button" && s.Name |> Option.exists policies.Contains
+                | _ -> false
 
             let compared =
                 dsrStates () |> List.filter (fun (name, _) -> name <> "an erasure confirmed")
@@ -1420,11 +1424,9 @@ let private dsrTests =
                 let outline view =
                     harness.RenderViewHtml(ViewMount.mount, view) |> TreeViewParity.ofHtml
 
-                let skip (n: string option) = n |> Option.exists policies.Contains
-
                 Expect.equal
-                    (buttonsOf skip (outline dsrTree))
-                    (buttonsOf skip (outline dsrFeliz))
+                    (buttonsOf (fun _ -> false) (outline dsrTree))
+                    (buttonsOf (fun _ -> false) (outline dsrFeliz))
                     (sprintf "state \"%s\": the buttons, in tab order" name))
     ]
 

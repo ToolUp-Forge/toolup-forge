@@ -58,8 +58,10 @@ let private contactRows =
 
             Nodes.Table.row id (columns msgs) [
                 Nodes.Table.cell (Nodes.Ids.child id "name") [
-                    Nodes.text (Nodes.Ids.child id "display-name") contact.DisplayName
-                    Nodes.Actions.secondary (Nodes.Ids.child id "manage") msgs.Manage (OpenContact contact.Id)
+                    Nodes.Layout.row (Nodes.Ids.child id "name-line") [
+                        Nodes.text (Nodes.Ids.child id "display-name") contact.DisplayName
+                        Nodes.Actions.secondary (Nodes.Ids.child id "manage") msgs.Manage (OpenContact contact.Id)
+                    ]
                 ]
                 Nodes.Table.cell (Nodes.Ids.child id "email") [
                     Nodes.text (Nodes.Ids.child id "email-text") (orBlank contact.OptionalEmailAddress)
@@ -183,12 +185,12 @@ let private consentPanel
         consentList.Node { Msgs = msgs; Contact = contact }
         Nodes.Layout.column "consent-record" [
             Nodes.text "consent-record-help" msgs.RecordConsentHelp
-            Nodes.Forms.dropdown
+            TreeIslands.select
                 "consent-record-channel"
                 msgs.FieldChannel
                 [ for option in channelOptions -> option, option ]
                 model.OptIn.Channel
-                SetOptInChannel
+                (SetOptInChannel >> dispatch)
             TreeIslands.textField
                 "consent-record-source"
                 msgs.FieldConsentSource
