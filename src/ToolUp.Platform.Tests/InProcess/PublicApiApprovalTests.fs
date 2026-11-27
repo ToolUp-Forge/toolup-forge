@@ -406,6 +406,7 @@ let private messageFixtures =
                         Cause = "FileNotFoundException: Could not find assembly 'Vendor.Sdk'."
                     }
                 ]
+                LoadFailures = []
             }
 
             match approvedText "Demo" "src/Demo/bin/Debug/net10.0/Demo.dll" render with
@@ -414,6 +415,23 @@ let private messageFixtures =
                 Expect.stringContains report "Demo:" "the assembly must be named"
                 Expect.stringContains report "Demo.T" "the unreadable type must be named"
                 Expect.stringContains report "Vendor.Sdk" "the cause must be named"
+                Expect.stringContains report "NOT written" "the report must say nothing was written"
+        }
+
+        test "a render that dropped a type the loader could not load is refused" {
+            let render = {
+                Text = "Demo.T (class)\nDemo.T.Alpha() : System.Int32\n"
+                Obsolete = []
+                DocSubjects = []
+                Unreadable = []
+                LoadFailures = [ "FileNotFoundException: Could not find assembly 'Vendor.Base'." ]
+            }
+
+            match approvedText "Demo" "src/Demo/bin/Debug/net10.0/Demo.dll" render with
+            | Ok text -> failtestf "a render missing a type must not be approved, yet it would write:\n%s" text
+            | Error report ->
+                Expect.stringContains report "Demo:" "the assembly must be named"
+                Expect.stringContains report "Vendor.Base" "the loader error must be named"
                 Expect.stringContains report "NOT written" "the report must say nothing was written"
         }
 
@@ -440,6 +458,7 @@ let private messageFixtures =
                 Obsolete = []
                 DocSubjects = []
                 Unreadable = []
+                LoadFailures = []
             }
 
             Expect.equal

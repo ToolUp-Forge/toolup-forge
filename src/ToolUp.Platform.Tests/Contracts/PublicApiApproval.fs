@@ -1018,14 +1018,24 @@ let private renderType (t: Type) : RenderedType =
         Unreadable = unreadable
     }
 
-let private exportedTypes (asm: Assembly) =
+/// The assembly's exported types, and the loader errors of any type that
+/// could not be loaded at all. Such a type is absent from the array, so it
+/// would be absent from the render; the errors let a regeneration refuse.
+let private exportedTypes (asm: Assembly) : Type[] * string list =
     try
-        asm.GetExportedTypes()
+        asm.GetExportedTypes(), []
     with
-    | :? ReflectionTypeLoadException as ex -> ex.Types |> Array.filter (fun t -> not (isNull t))
+    | :? ReflectionTypeLoadException as ex ->
+        ex.Types |> Array.filter (fun t -> not (isNull t)),
+        ex.LoaderExceptions
+        |> Array.filter (fun e -> not (isNull e))
+        |> Array.map (fun e -> sprintf "%s: %s" (e.GetType().Name) e.Message)
+        |> Array.distinct
+        |> List.ofArray
     | _ ->
         asm.GetTypes()
-        |> Array.filter (fun t -> t.IsPublic || t.IsNestedPublic || t.IsNestedFamily)
+        |> Array.filter (fun t -> t.IsPublic || t.IsNestedPublic || t.IsNestedFamily),
+        []
 
 let private isRenderableType (t: Type) =
     let fn = if isNull t.FullName then t.Name else t.FullName
@@ -1044,6 +1054,9 @@ type SurfaceRender = {
     /// The types whose members could not be read; their lines in `Text`
     /// are placeholders, not a surface.
     Unreadable: UnreadableType list
+    /// The loader errors of types that could not be loaded at all; those
+    /// types are missing from `Text`, not marked in it.
+    LoadFailures: string list
 }
 
 /// Render the deterministic public-surface text for one packable DLL,
@@ -1073,8 +1086,10 @@ let renderSurfaceDetail (dllPath: string) (resolverPaths: string seq) : SurfaceR
     use mlc = new MetadataLoadContext(resolver)
     let asm = mlc.LoadFromAssemblyPath dllPath
 
+    let types, loadFailures = exportedTypes asm
+
     let rendered =
-        exportedTypes asm
+        types
         |> Array.filter isRenderableType
         |> Array.sortWith (fun a b ->
             let an = if isNull a.FullName then a.Name else a.FullName
@@ -1131,6 +1146,7 @@ let renderSurfaceDetail (dllPath: string) (resolverPaths: string seq) : SurfaceR
             |> List.distinctBy _.DocId
             |> List.sortWith (fun a b -> String.CompareOrdinal(a.DocId, b.DocId))
         Unreadable = rendered |> Array.toList |> List.collect _.Unreadable
+        LoadFailures = loadFailures
     }
 
 /// The baseline text alone — the shape every existing caller and fixture
@@ -1143,11 +1159,29 @@ let renderSurface (dllPath: string) (resolverPaths: string seq) : string =
 /// a refusal when any of its types could not be enumerated. A placeholder
 /// written as an approved surface compares equal to the next unreadable
 /// render, so it would pass the gate while recording nothing; an unreadable
-/// render is therefore an error, and the caller writes nothing.
+/// render is therefore an error, and the caller writes nothing. So is a
+/// render that dropped a type the loader could not load: written, it would
+/// approve a surface without that type.
 let approvedText (assemblyName: string) (dllPath: string) (render: SurfaceRender) : Result<string, string> =
-    match render.Unreadable with
-    | [] -> Ok render.Text
-    | unreadable ->
+    match render.Unreadable, render.LoadFailures with
+    | [], [] -> Ok render.Text
+    | [], failures ->
+        Error(
+            sprintf
+                "%s: %d loader error(s) left types out of the surface read from %s, so its baseline was NOT written:
+%s
+
+A type the loader cannot load is missing from the render, not marked in it; approving it would record a surface without that type. Build the solution and regenerate; a loader error that remains is a gap in the resolver, not a surface to approve."
+                assemblyName
+                failures.Length
+                dllPath
+                (failures
+                 |> List.map (sprintf "  - %s")
+                 |> String.concat
+                     "
+")
+        )
+    | unreadable, _ ->
         Error(
             sprintf
                 "%s: the members of %d type(s) could not be read from %s, so its baseline was NOT written:\n%s\n\nThe reader resolves dependencies from every built `src/**/bin/<config>/net10.0/` and from the packages the assembly's own `.deps.json` lists in the NuGet package folder: build the solution (`dotnet build ToolUp.Forge.sln`) and regenerate. A dependency neither route finds after a full build and restore is a gap in the resolver, not a surface to approve."

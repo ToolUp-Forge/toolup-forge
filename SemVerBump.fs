@@ -288,6 +288,13 @@ let classifyPackage (package: string) (released: string option) (current: string
     let currentText = defaultArg current ""
     let drift = compareSurface releasedText currentText
 
+    // A type that stopped being readable cannot be shown to have kept its
+    // members; it is reported, and classed, as lost.
+    let drift = {
+        drift with
+            Removed = drift.Removed @ newlyUnreadable releasedText currentText |> List.distinct
+    }
+
     let cls =
         if not (List.isEmpty drift.Removed) then Breaking
         elif not (List.isEmpty drift.Added) then Additive

@@ -186,11 +186,46 @@ module SurfaceDrift =
     let isClean (d: SurfaceDrift) =
         List.isEmpty d.Removed && List.isEmpty d.Added
 
+/// The lines of `current` that are a placeholder for a type whose members
+/// `baseline` did read (or did not carry): a surface that stopped being
+/// readable. The comparison sees them as ordinary tokens; a release cannot
+/// show such a type kept its members, so the bump check reads them as lost.
+let newlyUnreadable (baseline: string) (current: string) : string list =
+    let b = parse baseline
+
+    (parse current).Lines
+    |> Array.filter (fun l ->
+        let m = unreadableLine.Match l
+        m.Success && not (b.Unreadable.Contains m.Groups[1].Value))
+    |> Array.sortWith (fun a b -> String.CompareOrdinal(a, b))
+    |> List.ofArray
+
+/// The two-directional comparison. A type `baseline` holds only as a
+/// placeholder (`Unreadable`) has no prior record of its members: while
+/// `current` still carries the type, its placeholder is not a removal and the
+/// members `current` lists for it are not additions. They were public all
+/// along; only the record is new. The type itself gone is still a removal.
 let compareSurface (baseline: string) (current: string) : SurfaceDrift =
     let b = parse baseline
     let c = parse current
 
+    let firstRecorded =
+        c.Types
+        |> List.filter (fun t -> b.Unreadable.Contains t.Full)
+        |> List.map _.Full
+        |> Set.ofList
+
+    let firstRecordedLines =
+        c.Types
+        |> List.filter (fun t -> firstRecorded.Contains t.Full)
+        |> List.collect (fun t -> t.Members |> List.map (fun m -> t.Full + "." + m.Rendered))
+        |> Set.ofList
+
+    let isFirstRecordPlaceholder (l: string) =
+        let m = unreadableLine.Match l
+        m.Success && firstRecorded.Contains m.Groups[1].Value
+
     {
-        Removed = missingFrom c b
-        Added = missingFrom b c
+        Removed = missingFrom c b |> List.filter (isFirstRecordPlaceholder >> not)
+        Added = missingFrom b c |> List.filter (firstRecordedLines.Contains >> not)
     }

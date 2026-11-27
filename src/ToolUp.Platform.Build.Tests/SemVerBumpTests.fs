@@ -60,6 +60,14 @@ let private baseline (members: string list) =
 let private alpha = "Demo.T.Alpha() : System.Int32"
 let private beta = "Demo.T.Beta() : System.String"
 let private gamma = "Demo.T.Gamma() : System.Boolean"
+let private tHeader = "Demo.T (class)"
+let private hostHeader = "Demo.Host (class)"
+
+let private hostPlaceholder =
+    "Demo.Host  # <members unavailable: FileNotFoundException>"
+
+let private hostBridge = "Demo.Host.bridge(System.String) : System.Int32"
+let private hostToContext = "Demo.Host.toContext(System.String) : System.Object"
 
 let private v (major, minor, patch) = {
     Major = major
@@ -130,6 +138,43 @@ let tests =
 
             let c = change [ alpha; ctor ] [ alpha ]
             Expect.equal c.Class Unchanged "a band-dependent ctor difference is not a surface change")
+
+        // ── A placeholder is no record, not a surface ─────────────────
+        // A type whose members the reader could not resolve is recorded as
+        // one `<members unavailable` line. When a later baseline reads it,
+        // the members were public all along: only the record is new.
+
+        testCase "a placeholder replaced by the type's members is no surface change" (fun _ ->
+            let c =
+                change [ hostHeader; hostPlaceholder ] [ hostHeader; hostBridge; hostToContext ]
+
+            Expect.equal c.Class Unchanged "a first record of always-public members moves nothing"
+            Expect.isEmpty c.Removed "the placeholder is not a removal"
+            Expect.isEmpty c.Added "the newly read members are not additions")
+
+        testCase "a placeholder whose type is gone is breaking" (fun _ ->
+            let c = change [ tHeader; alpha; hostHeader; hostPlaceholder ] [ tHeader; alpha ]
+            Expect.equal c.Class Breaking "a type that disappears is lost whatever was recorded of it"
+            Expect.contains c.Removed hostHeader "the lost type is named")
+
+        testCase "a placeholder read beside a real removal is still breaking" (fun _ ->
+            let c =
+                change [ tHeader; alpha; beta; hostHeader; hostPlaceholder ] [ tHeader; alpha; hostHeader; hostBridge ]
+
+            Expect.equal c.Class Breaking "the excused type hides no other removal"
+            Expect.equal c.Removed [ beta ] "only the real removal is reported"
+            Expect.isEmpty c.Added "the newly read member is not an addition")
+
+        testCase "a placeholder appearing on the new side is breaking" (fun _ ->
+            let fresh =
+                change [ tHeader; alpha ] [ tHeader; alpha; hostHeader; hostPlaceholder ]
+
+            Expect.equal fresh.Class Breaking "an unreadable surface cannot be shown to break nobody"
+            Expect.contains fresh.Removed hostPlaceholder "the unread type is reported"
+
+            let lost = change [ hostHeader; hostBridge ] [ hostHeader; hostPlaceholder ]
+            Expect.equal lost.Class Breaking "a surface that stopped being readable is breaking"
+            Expect.contains lost.Removed hostBridge "the members no longer read are reported")
 
         // ── Whole-package shapes ──────────────────────────────────────
 
