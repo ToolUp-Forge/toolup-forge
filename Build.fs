@@ -3305,7 +3305,8 @@ let main args =
     // and this keeps the cost proportional to the churn rather than to
     // the ~165-package baseline set. `Git.read` does not echo, because the
     // read is one `git show` per moved baseline, and echoing each would
-    // bury the classification the caller exists to print.
+    // bury the classification the caller exists to print. The doc-coverage
+    // sidecar is dropped here, once, so neither caller can count it.
     let surfaceChangesSince (root: string) (tag: string) : SemVerBump.PackageChange list =
         let changedPaths =
             Git.read root [ "diff"; "--name-only"; tag; "--"; "api-baselines" ]
@@ -3328,6 +3329,7 @@ let main args =
                 (SemVerBump.packageOfBaselinePath path)
                 taggedText
                 (SemVerBump.currentBaseline root path))
+        |> SemVerBump.surfaceChanges
 
     // What a release tag's project files said, read in two git calls rather
     // than one per project: the paths, then every `<AssemblyName>` and
@@ -3964,7 +3966,7 @@ let main args =
 
             if Directory.Exists dir then
                 Directory.GetFiles(dir, "*.approved.txt")
-                |> Array.filter (fun p -> Path.GetFileName p <> "doc-coverage.approved.txt")
+                |> Array.filter (SemVerBump.packageOfBaselinePath >> SemVerBump.isPackageSurface)
                 |> Array.sort
                 |> Array.map (fun p -> Path.GetFileName p, File.ReadAllText p)
                 |> List.ofArray
@@ -4088,7 +4090,7 @@ let main args =
         let isBaseline (path: string) =
             path.StartsWith "api-baselines/"
             && path.EndsWith ".approved.txt"
-            && not (path.EndsWith "doc-coverage.approved.txt")
+            && SemVerBump.isPackageSurface (SemVerBump.packageOfBaselinePath path)
 
         // ── the release line, oldest first ──
         //
@@ -4406,8 +4408,6 @@ let main args =
                 // `v1.0.0-rc.2` → `1.0.0-rc.2`: the tag shape is already
                 // validated, so the version is the tag minus its `v`.
                 ReleaseChannel.PromotionEvidence.Publication = candidatePublication (tag.Substring 1)
-                // The doc-coverage sidecar moves with documentation, not
-                // with the surface — excluded as the scorecard excludes it.
                 // The soak is the core's (docs/platform/release-process.md):
                 // a companion line rides the core's release act and is not
                 // held to a candidate's surface, so only core packages count.
@@ -4424,7 +4424,6 @@ let main args =
                         | Error e -> failwithf "promotion: %s" e
 
                     surfaceChangesSince root tag
-                    |> List.filter (fun c -> c.Package <> "doc-coverage")
                     |> ReleaseChannel.coreSurfaceOnly companionAssemblies
                 ReleaseChannel.PromotionEvidence.Now = now
             }
