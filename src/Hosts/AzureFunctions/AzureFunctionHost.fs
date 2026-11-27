@@ -17,52 +17,38 @@ open ToolUp.Platform.Compose
 
 // ─── ToolUp.Hosts.AzureFunctions — Azure Functions Worker adapter ────
 //
-// Phase 16 host-adapter companion. Bridges Azure Functions Worker HTTP
+// Host-adapter companion. Bridges Azure Functions Worker HTTP
 // triggers through `IServerHost.Invoke` so a compose-built ToolUp
 // deployment runs on Azure Functions Consumption / Premium plans
 // without touching its handler code. Same code-path as Kestrel; only
 // the host driver differs.
 //
-// **Usage in a consumer Functions Worker project.**
+// **Usage in a consumer Functions Worker project.** The package README
+// carries the full walk-through; in outline:
 //
-// 1. Compose the SDK app at worker startup and register `IServerHost`
-//    as a DI singleton in the Functions Worker host:
+// 1. Compose the SDK at worker startup WITHOUT running it, and register
+//    the resulting `IServerHost` as a DI singleton in the Functions
+//    Worker host. `ServerApp` has no compose-only entry point:
+//    `ServerApp.run` composes and then calls `RunBlocking()`, which a
+//    Functions worker must never do. The one call that returns an
+//    `IServerHost` without running it is the low-level `Server.compose`,
+//    over a `CompositionPlan` (start from `CompositionPlan.ofConfig`
+//    with `ServerConfig.ServerlessHost = ServerlessHost`). Then:
 //
-//        let serverHost =
-//            ServerApp.empty
-//            |> ServerApp.withConfig {
-//                ServerConfig.defaults with
-//                    Mode = Anonymous
-//                    ServerlessHost = ServerlessHost
-//                    JobScheduler = NoJobScheduler
-//                    Webhooks = FeatureMode.Disabled
-//                    Notifications = NoNotificationsExplicit
-//                    AuditLog = FeatureMode.Disabled
-//                    UsageMetering = FeatureMode.Disabled
-//                    HealthStateTracking = false
-//            }
-//            |> ServerApp.addModule (myModule.register ())
-//            |> ServerApp.composeOnly   // returns IServerHost; never calls RunBlocking
+//        let host =
+//            Host
+//                .CreateDefaultBuilder()
+//                .ConfigureFunctionsWorkerDefaults()
+//                .ConfigureServices(fun services ->
+//                    services.AddSingleton<IServerHost>(serverHost) |> ignore)
+//                .Build()
 //
-//        Host
-//            .CreateDefaultBuilder()
-//            .ConfigureFunctionsWorkerDefaults()
-//            .ConfigureServices(fun services ->
-//                services.AddSingleton<IServerHost>(serverHost) |> ignore
-//                AzureFunctionHost.cacheServerHost serverHost)
-//            .Build()
-//            .Run()
-//
-//    (ServerApp.composeOnly is a hypothetical helper that returns
-//    `IServerHost` without calling `RunBlocking()`. Until that helper
-//    lands as a top-level pattern, consumers can cache the
-//    `IServerHost` returned by `compose` directly via the low-level
-//    entry point, OR call `AzureFunctionHost.cacheServerHost` from
-//    the worker's `ConfigureServices` callback once they obtain the
-//    host instance.)
+//        serverHost.Host.StartAsync(CancellationToken.None).Wait()
+//        host.Run()
 //
 // 2. Write one HTTP-trigger function with a `{*path}` catchall route
-//    that forwards every request to `AzureFunctionHost.bridge`:
+//    that forwards every request to `AzureFunctionHost.bridge`; the
+//    Functions Worker injects the registered `IServerHost`:
 //
 //        type CatchallFunction(host: IServerHost) =
 //            [<Function("Catchall")>]
@@ -70,9 +56,8 @@ open ToolUp.Platform.Compose
 //                ([<HttpTrigger(AuthorizationLevel.Anonymous,
 //                               "get", "post", "put", "delete", "patch", "options",
 //                               Route = "{*path}")>]
-//                 req: HttpRequestData,
-//                 ctx: FunctionContext) =
-//                AzureFunctionHost.bridge host req
+//                 req: HttpRequestData) =
+//                AzureFunctionHost.bridge (host, req)
 //
 // The bridge translates `HttpRequestData` → `DefaultHttpContext`,
 // invokes the compose-registered pipeline via `IServerHost.Invoke`,
