@@ -308,6 +308,22 @@ let classifyPackage (package: string) (released: string option) (current: string
 let rollUp (changes: PackageChange list) : SurfaceClass =
     changes |> List.fold (fun acc c -> SurfaceClass.max acc c.Class) Unchanged
 
+/// `api-baselines/doc-coverage.approved.txt` (Phase 261) sits beside the
+/// baselines but is a count file, not a package's public surface: its
+/// numbers move with documentation, and a line of it that changes reads to
+/// the comparer as a removal. It is no package, so it is no version line's
+/// break.
+let docCoverageSidecar = "doc-coverage"
+
+/// Whether a baseline name is a package's public surface. The ONE
+/// predicate every surface reading filters through, so the bump check and
+/// the soak gate cannot come to disagree about the sidecar again.
+let isPackageSurface (package: string) = package <> docCoverageSidecar
+
+/// The moved baselines that are package surfaces.
+let surfaceChanges (changes: PackageChange list) =
+    changes |> List.filter (fun c -> isPackageSurface c.Package)
+
 // ─── Release-point selection ─────────────────────────────────────────
 
 /// Tag names paired with the versions they parse to, unparseable tags

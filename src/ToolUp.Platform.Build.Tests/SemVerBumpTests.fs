@@ -159,6 +159,25 @@ let tests =
         testCase "the roll-up over no changes is unchanged" (fun _ ->
             Expect.equal (rollUp []) Unchanged "nothing moved")
 
+        // ── The doc-coverage sidecar is no package ────────────────────
+
+        testCase "a change set holding only the doc-coverage sidecar is no surface change" (fun _ ->
+            let sidecar =
+                classifyPackage docCoverageSidecar (Some(baseline [ alpha; beta ])) (Some(baseline [ alpha; gamma ]))
+
+            Expect.equal sidecar.Class Breaking "the sidecar's own diff reads as a removal, which is the hazard"
+            Expect.equal (rollUp (surfaceChanges [ sidecar ])) Unchanged "a count file moving is not a break")
+
+        testCase "the doc-coverage sidecar hides no real break beside it" (fun _ ->
+            let changes = [
+                classifyPackage docCoverageSidecar (Some(baseline [ alpha ])) (Some(baseline [ beta ]))
+                classifyPackage "C" (Some(baseline [ alpha; beta ])) (Some(baseline [ alpha ]))
+            ]
+
+            let surface = surfaceChanges changes
+            Expect.equal (rollUp surface) Breaking "a real package's removal still breaks"
+            Expect.equal (surface |> List.map _.Package) [ "C" ] "only the sidecar is dropped")
+
         // ── The two policy tables ─────────────────────────────────────
 
         testCase "on 0.x a breaking surface demands a MINOR" (fun _ ->

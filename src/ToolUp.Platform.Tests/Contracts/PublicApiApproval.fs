@@ -775,6 +775,11 @@ let sortSurfaceBody (body: string seq) : string list =
                     yield! members[token].Value
         ]
 
+/// A type whose members the renderer could not enumerate, and why: the
+/// exception's type and message, which names the dependency it could not
+/// load.
+type UnreadableType = { Type: string; Cause: string }
+
 /// A rendered type: its surface lines (member tokens plus any Phase 258
 /// obsolete markers), the obsolete markings the same walk observed, and
 /// the Phase 261 documentable subjects it contributes. All three come out
@@ -784,6 +789,7 @@ type private RenderedType = {
     Lines: string list
     Obsolete: ObsoleteMember list
     DocSubjects: DocSubject list
+    Unreadable: UnreadableType list
 }
 
 let private renderType (t: Type) : RenderedType =
@@ -794,7 +800,7 @@ let private renderType (t: Type) : RenderedType =
     // Each entry is (surface token, the [<Obsolete>] message if marked,
     // the Phase 261 doc-comment id — `None` where the entry is not a
     // documentable subject, i.e. the unenumerable-members placeholder).
-    let members: (string * string option * string option)[] =
+    let enumerated: Result<(string * string option * string option)[], exn> =
         try
             let ctors =
                 t.GetConstructors memberFlags
@@ -903,16 +909,29 @@ let private renderType (t: Type) : RenderedType =
             [ ctors; methods; props; fields; events ]
             |> Array.concat
             |> Array.sortWith (fun (a, _, _) (b, _, _) -> compareSurfaceToken a b)
+            |> Ok
         with ex ->
-            // A dependency the resolver couldn't satisfy makes this one
-            // type's members unenumerable. Surface it visibly rather than
-            // silently dropping the type (which would mask a real removal).
-            // It contributes NO doc subject: counting a placeholder as an
-            // undocumented member would make an unresolvable dependency
-            // read as a documentation shortfall.
+            Error ex
+
+    // A dependency the resolver couldn't satisfy makes this one type's
+    // members unenumerable. Surface it visibly rather than silently
+    // dropping the type (which would mask a real removal), and record the
+    // cause so a regeneration can refuse to approve it. It contributes NO
+    // doc subject: counting a placeholder as an undocumented member would
+    // make an unresolvable dependency read as a documentation shortfall.
+    let members, unreadable =
+        match enumerated with
+        | Ok members -> members, []
+        | Error ex ->
             [|
                 sprintf "%s  # <members unavailable: %s>" fullName (ex.GetType().Name), None, None
-            |]
+            |],
+            [
+                {
+                    Type = fullName
+                    Cause = sprintf "%s: %s" (ex.GetType().Name) ex.Message
+                }
+            ]
 
     // The type's own `[<Obsolete>]` (an F# module or a retired type carries
     // it here, not on its members) leads, then the members in token order.
@@ -958,6 +977,7 @@ let private renderType (t: Type) : RenderedType =
             // own first remedy, "document it", is impossible for the class.
             |> List.filter (fun (token, _, _) -> not (isCompilerVersionDependent token))
             |> List.choose (fun (token, _, docId) -> docId |> Option.map (fun d -> { Token = token; DocId = d }))
+        Unreadable = unreadable
     }
 
 let private exportedTypes (asm: Assembly) =
@@ -983,6 +1003,9 @@ type SurfaceRender = {
     Text: string
     Obsolete: ObsoleteMember list
     DocSubjects: DocSubject list
+    /// The types whose members could not be read; their lines in `Text`
+    /// are placeholders, not a surface.
+    Unreadable: UnreadableType list
 }
 
 /// Render the deterministic public-surface text for one packable DLL,
@@ -1063,6 +1086,7 @@ let renderSurfaceDetail (dllPath: string) (resolverPaths: string seq) : SurfaceR
             // denominator inflates and coverage reads lower than it is.
             |> List.distinctBy _.DocId
             |> List.sortWith (fun a b -> String.CompareOrdinal(a.DocId, b.DocId))
+        Unreadable = rendered |> Array.toList |> List.collect _.Unreadable
     }
 
 /// The baseline text alone — the shape every existing caller and fixture
@@ -1070,6 +1094,26 @@ let renderSurfaceDetail (dllPath: string) (resolverPaths: string seq) : SurfaceR
 /// obsolete markings retained.
 let renderSurface (dllPath: string) (resolverPaths: string seq) : string =
     (renderSurfaceDetail dllPath resolverPaths).Text
+
+/// What a regeneration may write for one assembly: its rendered baseline, or
+/// a refusal when any of its types could not be enumerated. A placeholder
+/// written as an approved surface compares equal to the next unreadable
+/// render, so it would pass the gate while recording nothing; an unreadable
+/// render is therefore an error, and the caller writes nothing.
+let approvedText (assemblyName: string) (dllPath: string) (render: SurfaceRender) : Result<string, string> =
+    match render.Unreadable with
+    | [] -> Ok render.Text
+    | unreadable ->
+        Error(
+            sprintf
+                "%s: the members of %d type(s) could not be read from %s, so its baseline was NOT written:\n%s\n\nThe reader resolves dependencies from every built `src/**/bin/<config>/net10.0/`: build the solution (`dotnet build ToolUp.Forge.sln`) and regenerate. A dependency that no built project copies stays unreadable after a full build; that is a gap in the resolver pool, not a surface to approve."
+                assemblyName
+                unreadable.Length
+                dllPath
+                (unreadable
+                 |> List.map (fun u -> sprintf "  - %s: %s" u.Type u.Cause)
+                 |> String.concat "\n")
+        )
 
 // ─── Failure text (pure — so the wording itself is unit-testable) ────
 
