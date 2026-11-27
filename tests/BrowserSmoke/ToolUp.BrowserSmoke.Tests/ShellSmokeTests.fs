@@ -516,6 +516,109 @@ let private scenarios = [
             })
     })
 
+    shellScenario "the audit trail opens from the rail and a filtered query reaches the server" (fun page -> async {
+        do! openFromRail page "Team Management" "_sdk.AuditLog"
+
+        do!
+            wait "the audit tree to read the trail" (fun () -> async {
+                let! table = count page (node "audit-table")
+                let! empty = count page (node "audit-empty")
+                return table + empty = 1
+            })
+
+        // A window that starts in the future matches nothing the trail holds.
+        do!
+            page.Locator(node "audit-filters" + " input[type='date']").First.FillAsync "2999-01-01"
+            |> Async.AwaitTask
+
+        do! page.Locator(node "audit-apply" + " button").ClickAsync() |> Async.AwaitTask
+
+        do!
+            wait "the server's answer: nothing matching the window" (fun () -> async {
+                let! table = count page (node "audit-table")
+                let! empty = count page (node "audit-empty")
+                return table = 0 && empty = 1
+            })
+    })
+
+    shellScenario "data subject requests open from the rail and an erasure preview comes back" (fun page -> async {
+        do! openFromRail page "Platform Management" "_sdk.DataSubjectRequests"
+
+        do!
+            wait "the data-subject-request tree to draw its export tab" (fun () -> async {
+                let! panels = count page (node "dsr-export")
+                return panels = 1
+            })
+
+        do!
+            page.Locator(node "dsr-tabs" + " [role='tab']").Nth(1).ClickAsync()
+            |> Async.AwaitTask
+
+        do!
+            wait "the erase tab" (fun () -> async {
+                let! panels = count page (node "dsr-erase")
+                return panels = 1
+            })
+
+        // The fields hold what is typed until they are left.
+        do!
+            page.Locator(node "dsr-subject-id" + " input").FillAsync "dev-admin"
+            |> Async.AwaitTask
+
+        do! page.Keyboard.PressAsync "Tab" |> Async.AwaitTask
+
+        do!
+            page.Locator(node "dsr-subject-reason" + " input").FillAsync "a browser check"
+            |> Async.AwaitTask
+
+        do! page.Keyboard.PressAsync "Tab" |> Async.AwaitTask
+
+        do!
+            page.Locator(node "dsr-erase-preview" + " button").ClickAsync()
+            |> Async.AwaitTask
+
+        do!
+            wait "the server's preview of the erasure" (fun () -> async {
+                let! previews = count page (node "dsr-preview")
+                return previews = 1
+            })
+    })
+
+    shellScenario "external contacts open from the rail and a new contact is saved and listed" (fun page -> async {
+        do! openFromRail page "Team Management" "_sdk.ExternalContactManager"
+
+        do!
+            wait "the contacts tree, with no contact yet" (fun () -> async {
+                let! none = count page (node "contacts-none")
+                return none = 1
+            })
+
+        do! page.Locator(node "contacts-add" + " button").ClickAsync() |> Async.AwaitTask
+
+        do!
+            page.Locator(node "contact-form-display-name" + " input").FillAsync "Ada Lovelace"
+            |> Async.AwaitTask
+
+        do! page.Keyboard.PressAsync "Tab" |> Async.AwaitTask
+
+        // A contact is filed under an address; one with none is refused.
+        do!
+            page.Locator(node "contact-form-email" + " input").FillAsync "ada@example.com"
+            |> Async.AwaitTask
+
+        do! page.Keyboard.PressAsync "Tab" |> Async.AwaitTask
+
+        do!
+            page.Locator(node "contact-form-save" + " button").ClickAsync()
+            |> Async.AwaitTask
+
+        do!
+            wait "the saved contact, listed from the server" (fun () -> async {
+                let! text = innerTextOf page (node "contacts-table")
+                return text.Contains "Ada Lovelace"
+            })
+    })
+
     shellScenario "the command palette opens on Ctrl+K, narrows on a query and navigates" (fun page -> async {
         let input = "[data-toolup-palette='input']"
         let rows = "[data-toolup-palette='results'] [data-toolup-palette-index]"
