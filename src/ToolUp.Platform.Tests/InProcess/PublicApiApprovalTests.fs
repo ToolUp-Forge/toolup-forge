@@ -51,8 +51,13 @@ let private assemblyCase (a: PackableAssembly) = test a.Name {
         let baselinePath = Path.Combine(baselineDir root, a.Name + ".approved.txt")
 
         if approveModeFor a.Name then
+            let approved =
+                match approvedText a.Name dll render with
+                | Ok text -> text
+                | Error report -> failtest report
+
             Directory.CreateDirectory(baselineDir root) |> ignore
-            File.WriteAllText(baselinePath, rendered)
+            File.WriteAllText(baselinePath, approved)
 
             // Phase 261 — the doc-coverage floor rides the SAME switch, so
             // a reviewer accepting this assembly's current shape accepts
@@ -386,6 +391,42 @@ let private comparerFixtures =
 //    thing — an addition is not a break, and the text has to say so. ──
 let private messageFixtures =
     testList "drift report" [
+        test "a render whose members could not be read is refused, naming the assembly and the cause" {
+            let render = {
+                Text = "Demo.T (class)\nDemo.T  # <members unavailable: FileNotFoundException>\n"
+                Obsolete = []
+                DocSubjects = []
+                Unreadable = [
+                    {
+                        Type = "Demo.T"
+                        Cause = "FileNotFoundException: Could not find assembly 'Vendor.Sdk'."
+                    }
+                ]
+            }
+
+            match approvedText "Demo" "src/Demo/bin/Debug/net10.0/Demo.dll" render with
+            | Ok text -> failtestf "an unreadable render must not be approved, yet it would write:\n%s" text
+            | Error report ->
+                Expect.stringContains report "Demo:" "the assembly must be named"
+                Expect.stringContains report "Demo.T" "the unreadable type must be named"
+                Expect.stringContains report "Vendor.Sdk" "the cause must be named"
+                Expect.stringContains report "NOT written" "the report must say nothing was written"
+        }
+
+        test "a fully read render is approved as rendered" {
+            let render = {
+                Text = "Demo.T (class)\nDemo.T.Alpha() : System.Int32\n"
+                Obsolete = []
+                DocSubjects = []
+                Unreadable = []
+            }
+
+            Expect.equal
+                (approvedText "Demo" "Demo.dll" render)
+                (Ok render.Text)
+                "a readable surface is written byte for byte"
+        }
+
         test "a matching surface reports nothing" {
             let text = "Demo.T (class)\nDemo.T.Alpha() : System.Int32\n"
 
