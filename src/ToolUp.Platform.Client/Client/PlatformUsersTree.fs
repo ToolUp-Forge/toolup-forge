@@ -10,9 +10,7 @@
 /// id comes from the record's identity and every row message carries it. What
 /// stays React is an island: the dialog's reason and confirmation-token fields
 /// hold display state in a hook, committed on leaving the field or on Enter,
-/// so free typing does not round-trip through `update`; and the team-less
-/// filter's checkbox, since the vocabulary's only free checkbox is a filter
-/// chip, which reads its name from the browser's filter store.
+/// so free typing does not round-trip through `update`.
 module internal PlatformUsersTree
 
 open Fuaran.UI
@@ -36,22 +34,16 @@ let private badge (id: string) (variant: BadgeVariant) (label: string) : Node<'M
         Variant = variant
     }
 
-/// A labelled checkbox calling `onToggle` when it is toggled. An island: the
-/// vocabulary has no checkbox outside a form but a filter chip, and a chip
-/// reads its name from the browser's filter store.
-let private checkbox (id: string) (label: string) (value: bool) (onToggle: unit -> unit) =
-    TreeLowering.island id (fun () ->
-        Feliz.Html.label [
-            Feliz.prop.className "inline-flex items-center gap-2 text-sm cursor-pointer"
-            Feliz.prop.children [
-                Feliz.Html.input [
-                    Feliz.prop.type' "checkbox"
-                    Feliz.prop.isChecked value
-                    Feliz.prop.onChange (fun (_: bool) -> onToggle ())
-                ]
-                Feliz.Html.span [ Feliz.prop.text label ]
-            ]
-        ])
+/// The list's filter: a checkbox chip sending `msg` when it is toggled. A chip
+/// whose change carries a message dispatches it and writes no filter store.
+let private filter (id: string) (label: string) (value: bool) (msg: Msg) : Node<Msg> =
+    Fuaran.filters id [
+        {
+            Kind = FormFieldKind.checkboxControl (Binding.Static(Some value), onChange = (fun _ -> Action.dispatch msg))
+            Label = Nodes.literal label
+            Name = id
+        }
+    ]
 
 /// A text field that holds what is typed until the field is left, an island
 /// named by the label that wraps it.
@@ -64,6 +56,21 @@ let private field (id: string) (label: string) (placeholder: string) (value: str
                 Forms.Input.text value onChange placeholder
             ]
         ])
+
+/// One record of a list: a card with what the record is on the left and its
+/// actions on the right, on a two-track grid so the actions keep their width.
+let private listRow (id: string) (children: Node<'Msg> list) : Node<'Msg> =
+    Fuaran.box id {
+        Defaults.box with
+            Role = BoxRole.Card
+            Children = [
+                Fuaran.box (Nodes.Ids.child id "grid") {
+                    Defaults.box with
+                        Layout = BoxLayout.Grid(2, Some "minmax(0, 1fr) auto", Some 16)
+                        Children = children
+                }
+            ]
+    }
 
 // ─── The principal rows ──────────────────────────────────────────────
 
@@ -102,7 +109,7 @@ let private principalRows =
 
             let lastSeen = p.LastSeenAt |> Option.map formatDate |> Option.defaultValue "—"
 
-            Nodes.Layout.row id [
+            listRow id [
                 Nodes.Layout.column (Nodes.Ids.child id "about") [
                     Nodes.Layout.row (Nodes.Ids.child id "title") [
                         Nodes.text (Nodes.Ids.child id "name") primary
@@ -352,7 +359,7 @@ let private offboard
 // ─── The page ────────────────────────────────────────────────────────
 
 /// The page: the filter, the principals and an open offboard dialog.
-/// `dispatch` reaches the islands only; every node sends its message
+/// `dispatch` reaches the dialog's islands only; every node sends its message
 /// through the tree.
 let tree (msgs: PlatformUsersMessages) (model: Model) (dispatch: Msg -> unit) : Node<Msg> =
     Nodes.Layout.column "platform-users" [
@@ -365,7 +372,7 @@ let tree (msgs: PlatformUsersMessages) (model: Model) (dispatch: Msg -> unit) : 
             Nodes.Actions.banner "platform-users-error" ToneVariant.Info text msgs.Dismiss DismissError
         | None -> ()
         Nodes.Layout.row "principals-filter" [
-            checkbox "principals-team-less" msgs.TeamLessOnly model.TeamLessOnly (fun () -> dispatch ToggleTeamLessOnly)
+            filter "principals-team-less" msgs.TeamLessOnly model.TeamLessOnly ToggleTeamLessOnly
             Nodes.Actions.button "principals-refresh" ButtonVariant.Tertiary msgs.Refresh false LoadPrincipals
         ]
         match model.Principals with

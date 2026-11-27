@@ -25,6 +25,21 @@ let private notice (id: string) (msgs: SessionSecurityMessages) (notice: Notice 
     | Some(Notice.Info text) -> [ Nodes.Actions.banner id ToneVariant.Info text msgs.Dismiss dismiss ]
     | None -> []
 
+/// One record of a list: a card with what the record is on the left and its
+/// actions on the right, on a two-track grid so the actions keep their width.
+let private listRow (id: string) (children: Node<'Msg> list) : Node<'Msg> =
+    Fuaran.box id {
+        Defaults.box with
+            Role = BoxRole.Card
+            Children = [
+                Fuaran.box (Nodes.Ids.child id "grid") {
+                    Defaults.box with
+                        Layout = BoxLayout.Grid(2, Some "minmax(0, 1fr) auto", Some 16)
+                        Children = children
+                }
+            ]
+    }
+
 /// What every row shows besides its record: the catalog, the minute the
 /// "last seen" labels are read against, whether a call is in flight, and the
 /// row awaiting its confirmation.
@@ -49,7 +64,7 @@ let private sessionRows =
             let id = Nodes.Ids.keyed "session" record.SessionId
             let active = SessionRecord.isActive record
 
-            Nodes.Layout.row id [
+            listRow id [
                 Nodes.Layout.column (Nodes.Ids.child id "about") [
                     Nodes.text (Nodes.Ids.child id "device") record.DeviceDescriptor
                     Nodes.text

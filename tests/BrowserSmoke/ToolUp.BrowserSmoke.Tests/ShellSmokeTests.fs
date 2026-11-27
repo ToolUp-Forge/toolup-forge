@@ -435,6 +435,87 @@ let private scenarios = [
             })
     })
 
+    shellScenario
+        "session security opens from the rail, lists this browser's session and asks before signing it out"
+        (fun page -> async {
+            // The session registry records a session only for a request that
+            // presents a bearer credential, and the header-auth identity
+            // presents none: from here the page sends one, which the
+            // header-auth provider ignores.
+            do!
+                page.Context.SetExtraHTTPHeadersAsync(dict [ "Authorization", "Bearer browser-smoke-session" ])
+                |> Async.AwaitTask
+
+            do! openFromRail page "_other" "_sdk.SessionSecurity"
+
+            let signOut =
+                "[data-fuaran-node-id^='session-'][data-fuaran-node-id$='-sign-out'] button"
+
+            let confirm =
+                "[data-fuaran-node-id^='session-'][data-fuaran-node-id$='-confirm'] button"
+
+            do!
+                wait "the session-security tree to list one live session" (fun () -> async {
+                    let! buttons = count page signOut
+                    let! text = innerTextOf page (node "sessions")
+                    return buttons = 1 && text.Contains "HeaderAuthProvider"
+                })
+
+            do! page.Locator(signOut).ClickAsync() |> Async.AwaitTask
+
+            do!
+                wait "the row to ask for its confirmation in place" (fun () -> async {
+                    let! confirms = count page confirm
+                    let! signOuts = count page signOut
+                    return confirms = 1 && signOuts = 0
+                })
+        })
+
+    shellScenario "the permissions admin opens from the rail and a default's checkbox stages an edit" (fun page -> async {
+        do! openFromRail page "Team Management" "_sdk.PermissionsAdmin"
+
+        let read = node "defaults-matrix-HelloWorld-Read-granted" + " input"
+        let save = node "defaults-actions-save" + " button"
+
+        do!
+            wait "the defaults matrix to list the HelloWorld module, nothing staged" (fun () -> async {
+                let! boxes = count page read
+                let! saveDisabled = page.Locator(save).IsDisabledAsync() |> Async.AwaitTask
+                return boxes = 1 && saveDisabled
+            })
+
+        let! before = page.Locator(read).IsCheckedAsync() |> Async.AwaitTask
+        do! page.Locator(read).ClickAsync() |> Async.AwaitTask
+
+        do!
+            wait "the toggle to stage the edit and offer Save" (fun () -> async {
+                let! isChecked = page.Locator(read).IsCheckedAsync() |> Async.AwaitTask
+                let! saveDisabled = page.Locator(save).IsDisabledAsync() |> Async.AwaitTask
+                return isChecked <> before && not saveDisabled
+            })
+    })
+
+    shellScenario "the platform-users admin opens from the rail and its team-less filter narrows the list" (fun page -> async {
+        do! openFromRail page "Platform Management" "_sdk.PlatformUsers"
+
+        let filter = node "principals-team-less" + " input"
+
+        do!
+            wait "the platform-users tree to list the identity" (fun () -> async {
+                let! rows = count page (node "principal-dev-admin")
+                return rows = 1
+            })
+
+        do! page.Locator(filter).ClickAsync() |> Async.AwaitTask
+
+        do!
+            wait "the filter to hide the identity, who belongs to a team" (fun () -> async {
+                let! rows = count page (node "principal-dev-admin")
+                let! none = count page (node "principals-none-team-less")
+                return rows = 0 && none = 1
+            })
+    })
+
     shellScenario "the command palette opens on Ctrl+K, narrows on a query and navigates" (fun page -> async {
         let input = "[data-toolup-palette='input']"
         let rows = "[data-toolup-palette='results'] [data-toolup-palette-index]"

@@ -175,11 +175,22 @@ let main _ =
 #endif
     let logger = ConsoleLogger.fromEnv ()
 
-    let config = {
-        ServerConfig.fromEnv logger ServerConfigOverrides.referenceApp with
-            ModuleVisibility = SurfacingModuleVisibility
-            Notifications = InMemoryNotifications
-    }
+    // The client opens the session-security page and the platform-users
+    // admin, so the server composes what each calls: a session registry over
+    // the blob store, and the tenant lifecycle the offboard flow drives.
+    let config =
+        let fromEnv = ServerConfig.fromEnv logger ServerConfigOverrides.referenceApp
+
+        {
+            fromEnv with
+                ModuleVisibility = SurfacingModuleVisibility
+                Notifications = InMemoryNotifications
+                TenantLifecycle = FeatureMode.Enabled
+                Stores = {
+                    fromEnv.Stores with
+                        SessionRegistry = BlobSessionRegistry SessionRegistryOptions.defaults
+                }
+        }
 
     // `ServerModule.Name` is the module's ID TOKEN, not its display name —
     // it is the RBAC permission key, the `ServerConfig.ModuleNames` entry,

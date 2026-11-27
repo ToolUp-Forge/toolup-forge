@@ -9,9 +9,8 @@
 /// The member list is kept per member, each id from the member's user id and
 /// each message carrying it; the two matrices and the modules table are lists
 /// of module names, which cannot key a `Keep`, so each is kept whole on what it
-/// shows. The page owns no hook; the matrices' checkboxes are islands, since the
-/// vocabulary's only free checkbox is a filter chip, which reads its name from
-/// the browser's filter store.
+/// shows. The page owns no hook; the matrices' checkboxes are islands (see
+/// `checkbox`).
 module internal PermissionsAdminTree
 
 open Fuaran.UI
@@ -40,8 +39,10 @@ let private banner (msgs: PermissionsAdminMessages) (notice: Notice option) : No
     | None -> []
 
 /// A labelled checkbox calling `onToggle` when it is toggled, inert while
-/// `disabled`. An island: the vocabulary has no checkbox outside a form but a
-/// filter chip, and a chip reads its name from the browser's filter store.
+/// `disabled`. An island: outside a form the vocabulary's only checkbox is a
+/// filter chip, which is a filter by meaning, draws its label above the box in
+/// a padded panel of its own and has no disabled state, where a matrix cell is
+/// a box beside its level that a save in flight must make inert.
 let private checkbox (id: string) (label: string) (value: bool) (disabled: bool) (onToggle: unit -> unit) =
     TreeLowering.island id (fun () ->
         Feliz.Html.label [
