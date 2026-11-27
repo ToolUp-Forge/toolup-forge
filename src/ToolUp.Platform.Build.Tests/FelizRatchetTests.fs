@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-/// The Feliz ratchet: the committed census of `open Feliz` files and
-/// ReactElement baseline lines, held against the tree. The first arm IS the
+/// The Feliz ratchet: the committed census of the files that depend on
+/// Feliz and of the ReactElement baseline lines, held against the tree. The first arm IS the
 /// gate (`VerifyAll` runs this pack); the rest pin its laws, its teeth and
 /// its writer.
 module ToolUp.Platform.Build.Tests.FelizRatchetTests
@@ -32,6 +32,30 @@ let private census sources tests baselines : FelizRatchet.Census = {
     Sources = Map.ofList sources
     Tests = Map.ofList tests
     Baselines = Map.ofList baselines
+    Allowances = []
+}
+
+/// A census file rewritten with one allowance added, as a reviewer adds it.
+let private withAllowance (root: string) (allowance: FelizRatchet.Allowance) =
+    let path = Path.Combine(root, FelizRatchet.CensusFile)
+
+    match FelizRatchet.parse (File.ReadAllText path) with
+    | Ok c ->
+        File.WriteAllText(
+            path,
+            FelizRatchet.render {
+                c with
+                    Allowances = c.Allowances @ [ allowance ]
+            }
+        )
+    | Error why -> failtestf "the seeded census does not parse: %s" why
+
+let private allowance (sources: (string * int) list) : FelizRatchet.Allowance = {
+    Date = "2026-11-26"
+    Reason = "the counting rule widened"
+    Sources = Map.ofList sources
+    Baselines = Map.empty
+    Spent = false
 }
 
 /// A scratch tree: one client project, one test project, one baseline.
@@ -173,14 +197,134 @@ let tests =
             expectRed (FelizRatchet.check root) "not the census's render" "the totals are part of the file"
         }
 
+        test "an allowance admits one rise, is spent by the write, and admits nothing after" {
+            use dir = TempDir.create "feliz-ratchet"
+            let root = dir.Path
+            seedTree root
+            expectGreen (FelizRatchet.write root) "seed"
+
+            let island (name: string) =
+                Path.Combine(root, "src", "Ratchet.Client", name)
+
+            let plant (name: string) =
+                File.WriteAllText(island name, "module Ratchet.Island\n\nlet v = Feliz.Html.none\n")
+
+            plant "IslandA.fs"
+            plant "IslandB.fs"
+            expectRed (FelizRatchet.write root) "may only fall" "no allowance: the rise is refused"
+
+            withAllowance root (allowance [ "src/Ratchet.Client", 1 ])
+            expectRed (FelizRatchet.write root) "may only fall" "an allowance of one does not admit two"
+
+            // Reseed without the short allowance, then admit the rise properly.
+            File.Delete(Path.Combine(root, FelizRatchet.CensusFile))
+            File.Delete(island "IslandA.fs")
+            File.Delete(island "IslandB.fs")
+            expectGreen (FelizRatchet.write root) "reseed"
+            plant "IslandA.fs"
+            plant "IslandB.fs"
+
+            withAllowance root (allowance [ "src/Ratchet.Client", 2 ])
+            expectRed (FelizRatchet.check root) "is unspent" "the gate names an allowance not yet spent"
+            expectGreen (FelizRatchet.write root) "the allowance admits the rise"
+            expectGreen (FelizRatchet.check root) "and the gate holds"
+
+            match FelizRatchet.parse (File.ReadAllText(Path.Combine(root, FelizRatchet.CensusFile))) with
+            | Ok c ->
+                Expect.equal (c.Sources |> Map.find "src/Ratchet.Client") 3 "the rise recorded"
+                Expect.equal (c.Allowances |> List.map _.Spent) [ true ] "the allowance kept, spent"
+            | Error why -> failtestf "%s" why
+
+            // A later rise is refused exactly as before: the spent allowance
+            // admits nothing, even for the same cell and amount.
+            plant "IslandC.fs"
+            expectRed (FelizRatchet.check root) "may only fall" "the gate refuses the later rise"
+            expectRed (FelizRatchet.write root) "may only fall" "and so does the writer"
+        }
+
+        test "an unspent allowance with no rise is red, and a write spends it" {
+            use dir = TempDir.create "feliz-ratchet"
+            let root = dir.Path
+            seedTree root
+            expectGreen (FelizRatchet.write root) "seed"
+            withAllowance root (allowance [ "src/Ratchet.Client", 5 ])
+            expectRed (FelizRatchet.check root) "is unspent" "an allowance cannot be staged for later"
+            expectGreen (FelizRatchet.write root) "the write spends it"
+            expectGreen (FelizRatchet.check root) "spent, it is a record"
+        }
+
         // ── Laws ───────────────────────────────────────────────────────
-        test "only an `open Feliz` line counts" {
-            Expect.isTrue (FelizRatchet.opensFeliz "module M\n\nopen Feliz\n") "bare"
-            Expect.isTrue (FelizRatchet.opensFeliz "module M\r\n  open Feliz // the DSL\r\n") "indented, CRLF, comment"
-            Expect.isFalse (FelizRatchet.opensFeliz "open Feliz.AgGrid\n") "a Feliz.* namespace"
-            Expect.isFalse (FelizRatchet.opensFeliz "open Feliz.ViewEngine\n") "the SSR engine"
-            Expect.isFalse (FelizRatchet.opensFeliz "// open Feliz\n") "a comment"
-            Expect.isFalse (FelizRatchet.opensFeliz "let s = \"open Feliz\"\n") "a string literal"
+        test "an open Feliz line or a qualified Feliz name counts, once" {
+            let counts (text: string) = FelizRatchet.dependsOnFeliz text
+            Expect.isTrue (counts "module M\n\nopen Feliz\n") "bare open"
+            Expect.isTrue (counts "module M\r\n  open Feliz // the DSL\r\n") "indented, CRLF, comment"
+
+            Expect.isTrue
+                (counts "module M\n\nlet v = Feliz.Html.label [ Feliz.prop.className \"c\" ]\n")
+                "elements and props"
+
+            Expect.isTrue (counts "module M\n\n[<Feliz.ReactComponent>]\nlet C () = 1\n") "a component attribute"
+            Expect.isTrue (counts "module M\n\nlet f (e: Feliz.ReactElement) = e\n") "a type"
+            Expect.isTrue (counts "module M\n\nopen type Feliz.prop\n") "open type"
+            Expect.isTrue (counts "module M\n\nlet v = global.Feliz.Html.none\n") "through global."
+            Expect.isTrue (counts "module M\n\nmodule H = Feliz.Html\n") "an alias"
+
+            let both = "module M\n\nopen Feliz\n\nlet v = Feliz.Html.none\n"
+            let census = FelizRatchet.censusOf (set [ "src/A" ]) [ "src/A/Both.fs", both ] []
+            Expect.equal census.Sources (Map.ofList [ "src/A", 1 ]) "a file counted both ways is counted once"
+        }
+
+        test "comments, strings and other packages' names do not count" {
+            let counts (text: string) = FelizRatchet.dependsOnFeliz text
+            Expect.isFalse (counts "// open Feliz\n") "a line comment"
+            Expect.isFalse (counts "/// Renders a Feliz.Html.div\nlet v = 1\n") "a doc comment"
+            Expect.isFalse (counts "(* old:\nopen Feliz\nFeliz.Html.none *)\nlet v = 1\n") "a block comment"
+            Expect.isFalse (counts "(* outer (* inner *) open Feliz *)\nlet v = 1\n") "a nested block comment"
+            Expect.isFalse (counts "let s = \"open Feliz\"\n") "a string literal"
+            Expect.isFalse (counts "let s = \"open Feliz\nFeliz.Html.none\n\"\n") "a multi-line string"
+            Expect.isFalse (counts "let s = \"Feliz.Html \\\" Feliz.prop\"\n") "an escaped quote in a string"
+            Expect.isFalse (counts "let s = @\"C:\\src\\\"\"Feliz.Html\"\"\"\n") "a verbatim string"
+            Expect.isFalse (counts "let s = \"\"\"\nopen Feliz\nFeliz.Html.none\n\"\"\"\n") "a triple-quoted string"
+            Expect.isFalse (counts "let q = '\"'\nlet s = \"Feliz.Html\"\n") "a quote character literal"
+            Expect.isTrue (counts "let f (x: 'a) = x\nlet v = Feliz.Html.none\n") "a type variable is not a literal"
+            Expect.isFalse (counts "let x = (*)\nlet v = 1\n") "the (*) operator is not a comment"
+            Expect.isFalse (counts "open Feliz.AgGrid\nopen Feliz.AgCharts\n") "the AG Grid / AG Charts bindings"
+            Expect.isFalse (counts "open Feliz.ViewEngine\nlet v = Feliz.ViewEngine.Html.div []\n") "the SSR engine"
+
+            Expect.isFalse (counts "let c : Feliz.AgGrid.AgGridModuleConfig option = None\n") "a qualified AG Grid type"
+
+            Expect.isFalse
+                (counts "do Feliz.AgGridRuntime.load ()\ndo Feliz.AgChartRuntime.load ()\n")
+                "the runtime modules"
+
+            Expect.isFalse (counts "let id = ToolUp.Feliz.AgGrid.version\n") "a name that only ends in Feliz"
+        }
+
+        test "a namespace or module declaration is the file naming itself, not a use" {
+            let counts (text: string) = FelizRatchet.dependsOnFeliz text
+            Expect.isFalse (counts "namespace Feliz.AgGrid\n\ntype T = int\n") "the namespace of another package"
+            Expect.isFalse (counts "module Feliz.Custom\n\nlet v = 1\n") "a module declared in the namespace, alone"
+            Expect.isFalse (counts "module internal Feliz.Custom\n\nlet v = 1\n") "with an access modifier"
+            Expect.isTrue (counts "module Feliz.AgGrid\n\nopen Feliz\n") "a declaration does not hide an open"
+            Expect.isTrue (counts "module Feliz.Custom\n\nlet v = Feliz.Html.none\n") "nor a qualified use"
+        }
+
+        test "every name the rule sets aside is another package in this tree" {
+            let props = File.ReadAllText(Path.Combine(repoRoot, "Directory.Packages.props"))
+
+            let declared =
+                Directory.EnumerateDirectories(Path.Combine(repoRoot, "src"), "Feliz.*")
+                |> Seq.collect (fun d -> Directory.EnumerateFiles(d, "*.fs"))
+                |> Seq.map (fun f -> File.ReadAllText(f).Replace("\r\n", "\n"))
+                |> String.concat "\n"
+
+            for name in FelizRatchet.otherPackages do
+                let isBinding = declared.Contains($"\nmodule Feliz.{name}\n")
+                let isPackage = props.Contains($"Include=\"Feliz.{name}\"")
+
+                Expect.isTrue
+                    (isBinding || isPackage)
+                    $"Feliz.{name} is neither a binding module under src/Feliz.* nor a Feliz.{name} package: a stale exclusion hides Feliz use"
         }
 
         test "test files, projects and the walk's exclusions" {
@@ -209,6 +353,20 @@ let tests =
             Expect.equal (FelizRatchet.parse (FelizRatchet.render c)) (Ok c) "round trip"
             Expect.isError (FelizRatchet.parse "{\"kind\":\"gateReads\"}") "another file's kind"
             Expect.isError (FelizRatchet.parse "not json") "not JSON"
+
+            let withA = {
+                c with
+                    Allowances = [ allowance [ "src/A", 2 ] ]
+            }
+
+            Expect.equal (FelizRatchet.parse (FelizRatchet.render withA)) (Ok withA) "round trip with an allowance"
+
+            let undated =
+                (FelizRatchet.render withA).Replace("\"date\": \"2026-11-26\"", "\"date\": \"soon\"")
+
+            Expect.isError (FelizRatchet.parse undated) "an allowance needs a date"
+            let zero = (FelizRatchet.render withA).Replace("\"src/A\": 2 }", "\"src/A\": 0 }")
+            Expect.isError (FelizRatchet.parse zero) "an allowance admits a positive amount"
         }
 
         test "the driver accepts --write for the FelizRatchet target" {

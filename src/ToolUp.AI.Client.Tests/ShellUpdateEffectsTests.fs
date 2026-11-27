@@ -3,6 +3,10 @@
 
 module ToolUp.AI.Client.Tests.ShellUpdateEffectsTests
 
+// `RemoteEffect.legacy` is obsolete; this pack keeps it on purpose, as a
+// body that holds its dispatch until the test answers it.
+#nowarn "44"
+
 // ─── Phase 1069 — the shell's `update` emits effects, it does not run them ──
 //
 // The shell's `update` is documented as pure; before Phase 1069 it was

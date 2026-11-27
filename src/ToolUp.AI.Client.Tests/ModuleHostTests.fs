@@ -3,6 +3,10 @@
 
 module ToolUp.AI.Client.Tests.ModuleHostTests
 
+// `RemoteEffect.legacy` is obsolete; this pack keeps it on purpose, as a
+// body that holds its dispatch until the test answers it.
+#nowarn "44"
+
 // The shell hosts every module through one function: `initModule` decides
 // whether a module may init now and addresses its command to it, and
 // `stepModule` delivers an inbound message, initialising first. These drive

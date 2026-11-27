@@ -636,6 +636,23 @@ let private across (tree: 'Model -> Node<'Msg>) (harness: ModuleHarness<'Model, 
     let after = tree (harness.Dispatch msg).Model
     constructed before after
 
+/// How many nodes of `root` are rows of a table (`role="row"`) whose id
+/// starts with `prefix`: the records a page holds, whatever each row shows.
+let private rowsOf (prefix: string) (root: Node<'Msg>) : int =
+    let rec count (node: Node<'Msg>) : int =
+        let own =
+            match node.Accessibility with
+            | Some a when
+                a.Role = Some(Fuaran.UI.HostPrelude.AriaRole.Custom "row")
+                && node.Id.StartsWith prefix
+                ->
+                1
+            | _ -> 0
+
+        own + (Fuaran.UI.Generated.children node |> List.sumBy count)
+
+    count root
+
 let private manyTeams (count: int) : TeamInfo list =
     List.init count (fun i -> team (sprintf "t%03d" i) (sprintf "Team %03d" i))
 
@@ -733,8 +750,17 @@ let private constructedTests =
                     harness
                     (PlatformAdminUI.TeamsLoaded(Ok(renamed 7 teams (fun t -> { t with Name = "Team 007b" }))))
 
+            let oneRow, _ =
+                across
+                    tree
+                    ((adminInit ()).Dispatch(PlatformAdminUI.SwitchTab PlatformAdminUI.TeamsTab))
+                    (PlatformAdminUI.TeamsLoaded(Ok [ { teams[7] with Name = "Team 007b" } ]))
+
             Expect.isTrue (built < 80) (sprintf "built %d of %d" built total)
-            Expect.isTrue (total > 4000) "the page holds the 200 rows")
+
+            Expect.isTrue (built <= oneRow) (sprintf "built %d of %d (a one-row page builds %d)" built total oneRow)
+
+            Expect.equal (rowsOf "team-" (tree harness.Model)) 200 "the page holds the 200 rows")
     ]
 
 // ─── The kit's own go-red proofs ─────────────────────────────────────

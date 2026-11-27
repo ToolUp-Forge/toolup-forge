@@ -259,6 +259,13 @@ Toolup.UIToolkit.Nodes+Layout.row`1(System.String, Microsoft.FSharp.Collections.
 Toolup.UIToolkit.Nodes+Panel (class)
 Toolup.UIToolkit.Nodes+Panel.card`1(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Generated+Node`1[Msg]]) : Fuaran.UI.Generated+Node`1[Msg]
 Toolup.UIToolkit.Nodes+Panel.section`1(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Generated+Node`1[Msg]]) : Fuaran.UI.Generated+Node`1[Msg]
+Toolup.UIToolkit.Nodes+Table (class)
+Toolup.UIToolkit.Nodes+Table.cell`1(System.String, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Generated+Node`1[Msg]]) : Fuaran.UI.Generated+Node`1[Msg]
+Toolup.UIToolkit.Nodes+Table.column(System.String, System.String, System.Int32) : Toolup.UIToolkit.Nodes+Table+Column
+Toolup.UIToolkit.Nodes+Table.row`1(System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.UIToolkit.Nodes+Table+Column], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Generated+Node`1[Msg]]) : Fuaran.UI.Generated+Node`1[Msg]
+Toolup.UIToolkit.Nodes+Table.table`1(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.UIToolkit.Nodes+Table+Column], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Generated+Node`1[Msg]]) : Fuaran.UI.Generated+Node`1[Msg]
+Toolup.UIToolkit.Nodes+Table.template(Microsoft.FSharp.Collections.FSharpList`1[Toolup.UIToolkit.Nodes+Table+Column]) : System.String
+Toolup.UIToolkit.Nodes+Table+Column (class)
 Toolup.UIToolkit.OutputFormatting (class)
 Toolup.UIToolkit.OutputFormatting.formatCurrency(System.String, System.String, System.Decimal) : System.String
 Toolup.UIToolkit.OutputFormatting.formatDate(System.DateTime) : System.String

@@ -285,15 +285,7 @@ let internal triggerOnce (jobId: Guid) : Step<Msg, RemoteEffect<Msg>> list = [
 
 /// The poll timer: one `PollJob` after the interval.
 let internal poll (jobId: Guid) : Step<Msg, RemoteEffect<Msg>> list = [
-    Do(
-        RemoteEffect.legacy ("JobsAdminUI.poll " + string jobId) (fun dispatch ->
-            Async.StartImmediate(
-                async {
-                    do! Async.Sleep pollIntervalMs
-                    dispatch (PollJob jobId)
-                }
-            ))
-    )
+    Do(RemoteEffect.delay ("JobsAdminUI.poll " + string jobId) pollIntervalMs (PollJob jobId))
 ]
 
 let init () : Model * Step<Msg, RemoteEffect<Msg>> list =

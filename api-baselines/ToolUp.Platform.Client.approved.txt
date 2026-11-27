@@ -4353,13 +4353,16 @@ ToolUp.Platform.RemoteEffect.SubscriptionKind : System.String (literal)
 ToolUp.Platform.RemoteEffect.await`3(System.String, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[result]], a, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpResult`2[result, System.Exception], msg]) : ToolUp.Platform.RemoteEffect`1[msg]
 ToolUp.Platform.RemoteEffect.callWithRetry`3(System.String, ToolUp.Platform.RemoteRetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[result]], a, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpResult`2[result, System.Exception], msg]) : ToolUp.Platform.RemoteEffect`1[msg]
 ToolUp.Platform.RemoteEffect.call`3(System.String, Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Control.FSharpAsync`1[result]], a, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpResult`2[result, System.Exception], msg]) : ToolUp.Platform.RemoteEffect`1[msg]
+ToolUp.Platform.RemoteEffect.delay`1(System.String, System.Int32, msg) : ToolUp.Platform.RemoteEffect`1[msg]
 ToolUp.Platform.RemoteEffect.flatten`1(Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpResult`2[t, System.String], System.Exception]) : Microsoft.FSharp.Core.FSharpResult`2[t, System.String]
 ToolUp.Platform.RemoteEffect.handle`1(ToolUp.Platform.RemoteEffect`1[msg]) : Fuaran.MVU.Handled`1[msg]
 ToolUp.Platform.RemoteEffect.interpreter`1() : Fuaran.MVU.Interpreter`3[msg, ToolUp.Platform.RemoteEffect`1[msg], ToolUp.Platform.Subscription`1[msg]]
 ToolUp.Platform.RemoteEffect.kinds : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.MVU.EffectKind] { get }
 ToolUp.Platform.RemoteEffect.legacy`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.RemoteEffect`1[msg]
+ToolUp.Platform.RemoteEffect.legacy`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.RemoteEffect`1[msg]  (obsolete)
 ToolUp.Platform.RemoteEffect.map`2(Microsoft.FSharp.Core.FSharpFunc`2[a, b], ToolUp.Platform.RemoteEffect`1[a]) : ToolUp.Platform.RemoteEffect`1[b]
 ToolUp.Platform.RemoteEffect.perform`1(ToolUp.Platform.RemoteEffect`1[msg]) : Fuaran.MVU.Performance`1[msg]
+ToolUp.Platform.RemoteEffect.readFile`1(System.String, Browser.Types.File, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.Exception], msg]) : ToolUp.Platform.RemoteEffect`1[msg]
 ToolUp.Platform.RemoteEffect.signal`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.RemoteEffect`1[msg]
 ToolUp.Platform.RemoteEffect.start`1(Fuaran.MVU.ResourceKey, ToolUp.Platform.Subscription`1[msg]) : Fuaran.MVU.Started`1[msg]
 ToolUp.Platform.RemoteEffect+Interceptors (class)

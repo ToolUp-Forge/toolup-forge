@@ -213,6 +213,16 @@ type private TeamsContext = {
     Errors: Map<string, Notice>
 }
 
+/// The teams table's columns: the header a reader meets once per column.
+let private teamColumns (msgs: PlatformAdminMessages) : Nodes.Table.Column list = [
+    Nodes.Table.column "team" msgs.ColumnTeam 3
+    Nodes.Table.column "created" msgs.ColumnCreated 2
+    Nodes.Table.column "members" msgs.ColumnMembers 1
+    Nodes.Table.column "owners" msgs.ColumnOwners 3
+    Nodes.Table.column "admins" msgs.ColumnAdmins 3
+    Nodes.Table.column "actions" msgs.ColumnActions 3
+]
+
 let private teamRows =
     Rows(
         (fun (a: TeamsContext) b ->
@@ -225,12 +235,12 @@ let private teamRows =
             let id = Nodes.Ids.keyed "team" team.TeamId
             let pending = context.Pending |> Set.contains team.TeamId
 
-            // A labelled value; a list of user ids stacks, one per line.
-            let field (part: string) (label: string) (values: string list) =
+            // A value under its column's header; a list of user ids stacks,
+            // one per line.
+            let field (part: string) (values: string list) =
                 let fieldId = Nodes.Ids.child id part
 
-                Nodes.Layout.column fieldId [
-                    Nodes.text (Nodes.Ids.child fieldId "label") label
+                Nodes.Table.cell fieldId [
                     match values with
                     | [] -> Nodes.text (Nodes.Ids.child fieldId "none") "—"
                     | _ ->
@@ -240,18 +250,18 @@ let private teamRows =
 
             let emails = List.map (UserDirectory.email context.Directory)
 
-            Nodes.Layout.column id [
-                Nodes.Layout.row (Nodes.Ids.child id "row") [
-                    Nodes.Layout.column (Nodes.Ids.child id "about") [
-                        Nodes.text (Nodes.Ids.child id "name") team.Name
-                        if team.Archived then
-                            Nodes.text (Nodes.Ids.child id "archived") msgs.ArchivedBadge
-                        Nodes.text (Nodes.Ids.child id "id") team.TeamId
-                    ]
-                    field "created" msgs.ColumnCreated [ formatDate team.CreatedAt ]
-                    field "members" msgs.ColumnMembers [ string team.MemberCount ]
-                    field "owners" msgs.ColumnOwners (emails team.Owners)
-                    field "admins" msgs.ColumnAdmins (emails team.Admins)
+            Nodes.Table.row id (teamColumns msgs) [
+                Nodes.Table.cell (Nodes.Ids.child id "about") [
+                    Nodes.text (Nodes.Ids.child id "name") team.Name
+                    if team.Archived then
+                        Nodes.text (Nodes.Ids.child id "archived") msgs.ArchivedBadge
+                    Nodes.text (Nodes.Ids.child id "id") team.TeamId
+                ]
+                field "created" [ formatDate team.CreatedAt ]
+                field "members" [ string team.MemberCount ]
+                field "owners" (emails team.Owners)
+                field "admins" (emails team.Admins)
+                Nodes.Table.cell (Nodes.Ids.child id "actions-cell") [
                     Nodes.Layout.row (Nodes.Ids.child id "actions") [
                         if team.Archived then
                             Nodes.Actions.button
@@ -275,8 +285,8 @@ let private teamRows =
                                 pending
                                 (SetTeamArchived(team.TeamId, true))
                     ]
+                    yield! noticeOf (Nodes.Ids.child id "error") (context.Errors |> Map.tryFind team.TeamId)
                 ]
-                yield! noticeOf (Nodes.Ids.child id "error") (context.Errors |> Map.tryFind team.TeamId)
             ]
     )
 
@@ -290,15 +300,18 @@ let private teamsList (msgs: PlatformAdminMessages) (model: Model) : Node<Msg> =
         | Remote.Failed error -> yield! noticeOf "teams-list-error" (Some(Notice.Problem error))
         | Remote.Loaded [] -> Nodes.text "teams-list-none" msgs.NoTeamsYet
         | Remote.Loaded teams ->
-            yield!
-                teamRows.List
+            Nodes.Table.table
+                "teams-table"
+                msgs.AllTeamsHeading
+                (teamColumns msgs)
+                (teamRows.List
                     {
                         Msgs = msgs
                         Directory = model.Directory
                         Pending = model.TeamActionPending
                         Errors = model.TeamActionError
                     }
-                    teams
+                    teams)
     ]
 
 /// Create a team: its name, the initial owner (a typeahead, or the caller

@@ -8,10 +8,10 @@
 
 .DESCRIPTION
     feliz-census.json, at the repository root, counts per project the source
-    files carrying an `open Feliz` line (test files apart), and per assembly
-    the public-API baseline lines naming ReactElement. A source or baseline
-    cell may only fall. docs/platform/budgets.md says what is counted and what
-    is not.
+    files that depend on Feliz, by an `open Feliz` line or a qualified
+    `Feliz.` name (test files apart), and per assembly the public-API baseline
+    lines naming ReactElement. A source or baseline cell may only fall.
+    docs/platform/budgets.md says what is counted and what is not.
 
     Without -Write this runs the check the gate runs (VerifyAll reaches it
     through the Build test pack): red on a rise, and red on a fall the census
@@ -19,9 +19,13 @@
 
     With -Write it rewrites the census from the tree. It refuses, writing
     nothing, when that would raise a source or baseline cell: removing Feliz
-    is the only way down, and a hand edit of the committed file, reviewed, is
-    the only way up. A test-file cell may rise. Commit the rewritten file in
-    the same change as the files that moved it.
+    is the only way down. The only way up is an allowance, a dated entry with
+    its reason and the cells and amounts it admits, added to the committed
+    file by hand and reviewed; the next -Write admits that rise and marks the
+    allowance spent, so it admits nothing again. A test-file cell may rise.
+    The rewrite is deterministic: run it again on the same tree and the file
+    does not change. Commit the rewritten file in the same change as the
+    files that moved it.
 
     Both are the FelizRatchet target of the build driver; this script is the
     short spelling.
