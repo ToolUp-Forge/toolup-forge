@@ -328,17 +328,12 @@ let private createTeam (msgs: PlatformAdminMessages) (self: Caller) (model: Mode
         // The name is display state its input holds until the operator leaves
         // it or presses Enter, so free typing does not round-trip through
         // `update`: an island, named by the label wrapping it.
-        TreeLowering.island "create-team-name" (fun () ->
-            Feliz.Html.label [
-                Feliz.prop.className "flex flex-col gap-1"
-                Feliz.prop.children [
-                    Feliz.Html.span [
-                        Feliz.prop.className "text-xs font-medium"
-                        Feliz.prop.text msgs.TeamNameLabel
-                    ]
-                    Forms.Input.text model.NewTeamName (SetNewTeamName >> dispatch) msgs.TeamNamePlaceholder
-                ]
-            ])
+        TreeIslands.textField
+            "create-team-name"
+            msgs.TeamNameLabel
+            msgs.TeamNamePlaceholder
+            model.NewTeamName
+            (SetNewTeamName >> dispatch)
         Nodes.Layout.row "create-team-owner" [
             userPicker
                 "create-team-owner-user"

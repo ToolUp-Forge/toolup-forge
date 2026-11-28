@@ -9,8 +9,11 @@
 /// The member list is kept per member, each id from the member's user id and
 /// each message carrying it; the two matrices and the modules table are lists
 /// of module names, which cannot key a `Keep`, so each is kept whole on what it
-/// shows. The page owns no hook; the matrices' checkboxes are islands (see
-/// `checkbox`).
+/// shows. The page owns no hook; the matrices' checkboxes are islands
+/// (`TreeIslands.checkbox`): outside a form the vocabulary's only checkbox is a
+/// filter chip, which is a filter by meaning, draws its label above the box in
+/// a padded panel of its own and has no disabled state, where a matrix cell is
+/// a box beside its level that a save in flight must make inert.
 module internal PermissionsAdminTree
 
 open Fuaran.UI
@@ -37,26 +40,6 @@ let private banner (msgs: PermissionsAdminMessages) (notice: Notice option) : No
         Nodes.Actions.banner "permissions-banner" ToneVariant.Info text msgs.Dismiss DismissBanner
       ]
     | None -> []
-
-/// A labelled checkbox calling `onToggle` when it is toggled, inert while
-/// `disabled`. An island: outside a form the vocabulary's only checkbox is a
-/// filter chip, which is a filter by meaning, draws its label above the box in
-/// a padded panel of its own and has no disabled state, where a matrix cell is
-/// a box beside its level that a save in flight must make inert.
-let private checkbox (id: string) (label: string) (value: bool) (disabled: bool) (onToggle: unit -> unit) =
-    TreeLowering.island id (fun () ->
-        Feliz.Html.label [
-            Feliz.prop.className "inline-flex items-center gap-1 text-xs select-none"
-            Feliz.prop.children [
-                Feliz.Html.input [
-                    Feliz.prop.type' "checkbox"
-                    Feliz.prop.isChecked value
-                    Feliz.prop.disabled disabled
-                    Feliz.prop.onChange (fun (_: bool) -> onToggle ())
-                ]
-                Feliz.Html.span [ Feliz.prop.text label ]
-            ]
-        ])
 
 /// A button sending every message of `msgs` in order.
 let private chainButton (id: string) (label: string) (msgs: Msg list) : Node<Msg> =
@@ -158,7 +141,7 @@ let private matrix
                     let cellId = Nodes.Ids.keyed rowId (string level)
 
                     Nodes.Table.cell cellId [
-                        checkbox
+                        TreeIslands.checkbox
                             (Nodes.Ids.child cellId "granted")
                             (permLabel msgs level)
                             (List.contains level granted)

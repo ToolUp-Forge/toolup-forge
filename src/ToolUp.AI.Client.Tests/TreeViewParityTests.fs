@@ -440,6 +440,12 @@ let private visibilityTests =
 
 // ─── The subject: Platform Management ────────────────────────────────
 
+/// The buttons of a page, in tab order, but for those `skip` names.
+let private buttonsOf (skip: string option -> bool) (outline: TreeViewParity.Outline) =
+    outline.TabOrder
+    |> List.filter (fun stop -> stop.Role = "button" && not (skip stop.Name))
+    |> List.map _.Name
+
 let private adminMsgs = MessageCatalog.english.PlatformAdmin
 let private widgetMsgs = MessageCatalog.english.PublicUtilityWidgets
 
@@ -583,10 +589,7 @@ let private adminTests =
                             | TreeViewParity.MissingFromTree _ -> true
                             | _ -> false))
 
-            let buttons (outline: TreeViewParity.Outline) =
-                outline.TabOrder
-                |> List.filter (fun stop -> stop.Role = "button" && stop.Name <> Some "Close")
-                |> List.map _.Name
+            let buttons = buttonsOf ((=) (Some "Close"))
 
             for name, harness in adminStates () do
                 let unjudged =
@@ -859,10 +862,7 @@ let private permissionsTests =
                 | TreeViewParity.MissingFromTree s
                 | TreeViewParity.ExtraInTree s -> s.Role = "tabpanel" || (s.Role = "button" && isMember s.Name)
 
-            let buttons (outline: TreeViewParity.Outline) =
-                outline.TabOrder
-                |> List.filter (fun stop -> stop.Role = "button" && not (isMember stop.Name))
-                |> List.map _.Name
+            let buttons = buttonsOf isMember
 
             for name, harness in permissionsStates () do
                 let unjudged =
@@ -1032,10 +1032,7 @@ let private usersTests =
                             | TreeViewParity.ExtraInTree _ -> true
                             | _ -> false))
 
-            let buttons (outline: TreeViewParity.Outline) =
-                outline.TabOrder
-                |> List.filter (fun stop -> stop.Role = "button" && stop.Name <> Some "Close")
-                |> List.map _.Name
+            let buttons = buttonsOf ((=) (Some "Close"))
 
             for name, harness in usersStates () do
                 let unjudged =
@@ -1051,6 +1048,574 @@ let private usersTests =
                     (buttons (outline usersTree))
                     (buttons (outline usersFeliz))
                     (sprintf "state \"%s\": the buttons, in tab order" name))
+    ]
+
+/// Whether `difference` is a select named by its label as the renderer draws
+/// it, the label wrapping the select so its options' text follows the label,
+/// where the Feliz page's select was named by `label` or not at all.
+let private selectRenamed (label: string) (difference: TreeViewParity.Difference) =
+    match difference with
+    | TreeViewParity.MissingFromTree s -> s.Role = "combobox" && (s.Name.IsNone || s.Name = Some label)
+    | TreeViewParity.ExtraInTree s -> s.Role = "combobox" && s.Name |> Option.exists (fun n -> n.StartsWith label)
+    | TreeViewParity.TabOrderDiffers _ -> false
+
+// ─── The subject: the audit trail ────────────────────────────────────
+
+let private auditMsgs = MessageCatalog.english.AuditLog
+
+let private auditFeliz (model: AuditLogUI.Model) (dispatch: AuditLogUI.Msg -> unit) : Feliz.ReactElement =
+    FelizReferenceViews.AuditLog.body auditMsgs model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let auditTree (model: AuditLogUI.Model) (dispatch: AuditLogUI.Msg -> unit) : Feliz.ReactElement =
+    lowerTree dispatch (AuditLogTree.tree auditMsgs model dispatch)
+
+let private auditEvent (n: int) : AuditEventView = {
+    Id = System.Guid(sprintf "00000000-0000-0000-0000-%012d" n)
+    OccurredAt = System.DateTime(2026, 11, 1, 12, n % 60, 0, System.DateTimeKind.Utc)
+    EventType = (if n % 2 = 0 then "TeamCreated" else "MemberAdded")
+    Actor = (if n % 3 = 0 then None else Some "dev-admin")
+    Summary = sprintf "event %d" n
+    Payload = sprintf """{"n":%d}""" n
+}
+
+let auditInit () =
+    fromUnitInit AuditLogUI.init AuditLogUI.update
+
+/// Two events of a trail of three, the older page still to come.
+let auditLoaded () =
+    (auditInit ())
+        .Dispatch(AuditLogUI.EventTypesLoaded(Ok [ "MemberAdded"; "TeamCreated" ]))
+        .Dispatch(
+            AuditLogUI.PageLoaded(
+                Ok {
+                    Events = [ auditEvent 1; auditEvent 2 ]
+                    NextCursor = Some "c2"
+                    MatchedCount = 3
+                }
+            )
+        )
+
+/// The states the audit trail is held to, each reached through `update`.
+let auditStates () = [
+    "loading", auditInit ()
+    "nothing recorded",
+    (auditInit ())
+        .Dispatch(
+            AuditLogUI.PageLoaded(
+                Ok {
+                    Events = []
+                    NextCursor = None
+                    MatchedCount = 0
+                }
+            )
+        )
+    "two events of three", auditLoaded ()
+    "a row's detail open", (auditLoaded ()).Dispatch(AuditLogUI.ToggleDetail((auditEvent 2).Id))
+    "the older page in flight", (auditLoaded ()).Dispatch AuditLogUI.LoadMore
+    "an export in flight", (auditLoaded ()).Dispatch AuditLogUI.ExportCsv
+    "nothing matching the filters",
+    (auditLoaded ())
+        .Dispatch(AuditLogUI.SetEventType "TeamCreated")
+        .Dispatch(AuditLogUI.ApplyFilters)
+        .Dispatch(
+            AuditLogUI.PageLoaded(
+                Ok {
+                    Events = []
+                    NextCursor = None
+                    MatchedCount = 0
+                }
+            )
+        )
+    "the read failed", (auditInit ()).Dispatch(AuditLogUI.PageLoaded(Error "the audit trail is unreachable"))
+]
+
+let private auditTests =
+    testList "the audit trail as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            for name, harness in auditStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, auditTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "assertion 2: a kept row's toggle, the filters and the actor reach update" (fun () ->
+            (auditLoaded ())
+                .Interact(ViewMount.mountAndInteract, auditTree, Drive.click auditMsgs.ShowDetail)
+                .AssertModelWith(
+                    "the first row's toggle opens its detail",
+                    fun m -> m.Expanded = Set.singleton (auditEvent 1).Id
+                )
+            |> ignore
+
+            (auditLoaded ())
+                .Interact(ViewMount.mountAndInteract, auditTree, Drive.edit auditMsgs.FromLabel "2026-11-01")
+                .AssertModelWith("the from date reaches the draft", fun m -> m.Draft.From = "2026-11-01")
+            |> ignore
+
+            (auditLoaded ())
+                .Interact(
+                    ViewMount.mountAndInteract,
+                    auditTree,
+                    Drive.edit
+                        (auditMsgs.EventTypeLabel + auditMsgs.AllEventTypes + "MemberAddedTeamCreated")
+                        "TeamCreated"
+                )
+                .AssertModelWith("the event type reaches the draft", fun m -> m.Draft.EventType = "TeamCreated")
+            |> ignore
+
+            (auditLoaded ())
+                .Interact(
+                    ViewMount.mountAndInteract,
+                    auditTree,
+                    fun host ->
+                        Drive.typeInto auditMsgs.ActorLabel "sam" host
+                        Drive.leave auditMsgs.ActorLabel host
+                )
+                .AssertModelWith("the actor reaches the draft on leaving it", fun m -> m.Draft.Actor = "sam")
+            |> ignore
+
+            (auditLoaded ())
+                .Dispatch(AuditLogUI.SetActor "sam")
+                .Interact(ViewMount.mountAndInteract, auditTree, Drive.click auditMsgs.ApplyFilters)
+                .AssertModelWith(
+                    "Apply starts a fresh sequence under the draft",
+                    fun m -> m.Applied.Actor = "sam" && List.isEmpty m.Events
+                )
+            |> ignore
+
+            (auditLoaded ())
+                .Interact(ViewMount.mountAndInteract, auditTree, Drive.click auditMsgs.LoadMore)
+                .AssertModelWith("Load older events asks for the next page", fun m -> m.LoadingMore)
+            |> ignore)
+
+        // Three differences, all judged, and nothing else. (1) The event type is
+        // a select its label wraps, so it is named by the label and then its
+        // options, where the Feliz page's was named by an aria-label alone. (2)
+        // A row's open payload is a code block, which draws no control. (3) The
+        // tab order, which differs only by that name. The buttons and their
+        // order match.
+        testCase "assertion 3: parity with the Feliz page, but for the judged differences" (fun () ->
+            let judged (difference: TreeViewParity.Difference) =
+                match difference with
+                | TreeViewParity.TabOrderDiffers _ -> true
+                | _ -> selectRenamed auditMsgs.EventTypeLabel difference
+
+            for name, harness in auditStates () do
+                let outline view =
+                    harness.RenderViewHtml(ViewMount.mount, view) |> TreeViewParity.ofHtml
+
+                Expect.equal
+                    (buttonsOf (fun _ -> false) (outline auditTree))
+                    (buttonsOf (fun _ -> false) (outline auditFeliz))
+                    (sprintf "state \"%s\": the buttons, in tab order" name)
+
+            let unjudged = [
+                for name, harness in auditStates () do
+                    let found =
+                        harness.CheckViewParity(ViewMount.mount, auditFeliz, auditTree)
+                        |> List.filter (judged >> not)
+
+                    if not found.IsEmpty then
+                        sprintf "state \"%s\": %s" name (TreeViewParity.report found)
+            ]
+
+            Expect.isEmpty unjudged (String.concat "\n" unjudged))
+    ]
+
+// ─── The subject: data subject requests ──────────────────────────────
+
+let private dsrMsgs = MessageCatalog.english.DataSubjectRequestAdmin
+
+let private dsrFeliz
+    (model: DataSubjectRequestAdminUI.Model)
+    (dispatch: DataSubjectRequestAdminUI.Msg -> unit)
+    : Feliz.ReactElement =
+    FelizReferenceViews.DataSubjectRequestAdmin.body dsrMsgs model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let dsrTree
+    (model: DataSubjectRequestAdminUI.Model)
+    (dispatch: DataSubjectRequestAdminUI.Msg -> unit)
+    : Feliz.ReactElement =
+    lowerTree dispatch (DataSubjectRequestAdminTree.tree dsrMsgs model dispatch)
+
+let private dsrRequest: DataSubjectRequest = {
+    Id = "dsr-1"
+    Kind = DataSubjectRequestKind.Erase
+    SubjectUserId = "subject-1"
+    TeamId = None
+    RequestedBy = "op"
+    RequestedAt = System.DateTimeOffset(2026, 11, 1, 12, 0, 0, System.TimeSpan.Zero)
+    Reason = "asked to be forgotten"
+    Policy = ErasurePolicy.Tombstone
+}
+
+let private dsrSummary (name: string) (affected: int) : ErasureSummary = {
+    HandlerName = name
+    RecordsAffected = affected
+    Note = None
+}
+
+let private dsrPreview: DataSubjectRequestApi.ErasurePreview = {
+    Request = dsrRequest
+    PerHandlerCounts = Map.ofList [ "blobs", dsrSummary "blobs" 3; "audit", dsrSummary "audit" 0 ]
+}
+
+let private dsrRun: DataSubjectRequestApi.ErasureRunSummary = {
+    Request = dsrRequest
+    StartedAt = dsrRequest.RequestedAt
+    CompletedAt = dsrRequest.RequestedAt.AddSeconds 2.0
+    PerHandler =
+        Map.ofList [
+            "blobs", Ok(dsrSummary "blobs" 3)
+            "audit", Error(ErasureError.HandlerRefused("audit", "kept for the record"))
+        ]
+    OverallSuccess = false
+}
+
+let dsrInit () =
+    fromUnitInit (fun () -> DataSubjectRequestAdminUI.init ClientModuleContext.empty) DataSubjectRequestAdminUI.update
+
+let private dsrErase () =
+    (dsrInit ())
+        .Dispatch(DataSubjectRequestAdminUI.SwitchTab DataSubjectRequestAdminUI.EraseTab)
+        .Dispatch(DataSubjectRequestAdminUI.SetSubjectInput "subject-1")
+        .Dispatch(DataSubjectRequestAdminUI.SetReasonInput "asked to be forgotten")
+
+/// The erase tab with a preview pending.
+let dsrPreviewed () =
+    (dsrErase ()).Dispatch(DataSubjectRequestAdminUI.PreviewResolved(Ok dsrPreview))
+
+/// The states data subject requests are held to, each reached through `update`.
+let dsrStates () = [
+    "the export tab", dsrInit ()
+    "an export without a subject", (dsrInit ()).Dispatch DataSubjectRequestAdminUI.SubmitExport
+    "a background export preparing",
+    (dsrInit ())
+        .Dispatch(DataSubjectRequestAdminUI.SetAsyncMode true)
+        .Dispatch(DataSubjectRequestAdminUI.AsyncExportStarted(Ok "ticket-1"))
+    "the erase tab", dsrErase ()
+    "a policy chosen",
+    (dsrErase ()).Dispatch(DataSubjectRequestAdminUI.SetOverridePolicy(Some ErasurePolicy.HardDelete))
+    "a preview pending", dsrPreviewed ()
+    "an empty preview",
+    (dsrErase ())
+        .Dispatch(
+            DataSubjectRequestAdminUI.PreviewResolved(
+                Ok {
+                    dsrPreview with
+                        PerHandlerCounts = Map.empty
+                }
+            )
+        )
+    "an erasure confirmed",
+    (dsrPreviewed ())
+        .Dispatch(
+            DataSubjectRequestAdminUI.ConfirmResolved(Ok(DataSubjectRequestApi.ErasureRunResult.Completed dsrRun))
+        )
+    "an erasure refused",
+    (dsrPreviewed ())
+        .Dispatch(
+            DataSubjectRequestAdminUI.ConfirmResolved(Ok(DataSubjectRequestApi.ErasureRunResult.Refused "no handlers"))
+        )
+]
+
+let private dsrTests =
+    testList "data subject requests as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            for name, harness in dsrStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, dsrTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "assertion 2: the tabs, the fields, a policy and the preview reach update" (fun () ->
+            (dsrInit ())
+                .Interact(
+                    ViewMount.mountAndInteract,
+                    dsrTree,
+                    fun host ->
+                        Drive.typeInto dsrMsgs.SubjectPlaceholder "subject-1" host
+                        Drive.leave dsrMsgs.SubjectPlaceholder host
+                )
+                .AssertModelWith("the subject reaches the model on leaving it", fun m -> m.SubjectInput = "subject-1")
+            |> ignore
+
+            (dsrInit ())
+                .Interact(ViewMount.mountAndInteract, dsrTree, Drive.edit dsrMsgs.AsyncModeLabel "true")
+                .AssertModelWith("the async-mode checkbox turns the background path on", fun m -> m.AsyncMode)
+            |> ignore
+
+            (dsrErase ())
+                .Interact(
+                    ViewMount.mountAndInteract,
+                    dsrTree,
+                    Drive.edit (dsrMsgs.PolicyHardDeleteLabel + dsrMsgs.PolicyHardDeleteDescription) "true"
+                )
+                .AssertModelWith(
+                    "a policy's radio overrides the deployment default",
+                    fun m -> m.OverridePolicy = Some ErasurePolicy.HardDelete
+                )
+            |> ignore
+
+            // The chosen policy is announced: its radio, and only its radio, is checked.
+            let checkedRadio (harness: ModuleHarness<DataSubjectRequestAdminUI.Model, DataSubjectRequestAdminUI.Msg>) =
+                harness.RenderViewHtml(ViewMount.mount, dsrTree).Split("type=\"radio\"")
+                |> Array.skip 1
+                |> Array.map (fun after -> after.Substring(0, after.IndexOf '>').Contains "checked")
+                |> List.ofArray
+
+            Expect.equal (checkedRadio (dsrErase ())) [ true; false; false; false ] "the deployment default is checked"
+
+            Expect.equal
+                (checkedRadio (
+                    (dsrErase ()).Dispatch(DataSubjectRequestAdminUI.SetOverridePolicy(Some ErasurePolicy.HardDelete))
+                ))
+                [ false; true; false; false ]
+                "a chosen policy is checked"
+
+            (dsrErase ())
+                .Interact(ViewMount.mountAndInteract, dsrTree, Drive.click dsrMsgs.PreviewErase)
+                .AssertModelWith(
+                    "Preview erasure asks for the preview",
+                    fun m -> m.Busy = DataSubjectRequestAdminUI.RunningPreview
+                )
+            |> ignore
+
+            (dsrPreviewed ())
+                .Interact(ViewMount.mountAndInteract, dsrTree, Drive.click dsrMsgs.Cancel)
+                .AssertModelWith("Cancel drops the pending preview", fun m -> m.PendingPreview.IsNone)
+            |> ignore)
+
+        // One difference, judged, and nothing else: the tabs are one tab stop
+        // with the active tab's panel after it, so the tab order differs by
+        // that alone. The buttons and their order match, and the policy radios
+        // are named as the Feliz page's were. "An erasure confirmed" is not
+        // compared: the Feliz page threw drawing its run summary (a custom
+        // DateTimeOffset format under Fable), which the tree draws from the
+        // instant's components.
+        testCase "assertion 3: parity with the Feliz page, but for the judged differences" (fun () ->
+            let judged (difference: TreeViewParity.Difference) =
+                match difference with
+                | TreeViewParity.TabOrderDiffers _ -> true
+                | _ -> false
+
+            let compared =
+                dsrStates () |> List.filter (fun (name, _) -> name <> "an erasure confirmed")
+
+            let unjudged = [
+                for name, harness in compared do
+                    let found =
+                        harness.CheckViewParity(ViewMount.mount, dsrFeliz, dsrTree)
+                        |> List.filter (judged >> not)
+
+                    if not found.IsEmpty then
+                        sprintf "state \"%s\": %s" name (TreeViewParity.report found)
+            ]
+
+            Expect.isEmpty unjudged (String.concat "\n" unjudged)
+
+            for name, harness in compared do
+                let outline view =
+                    harness.RenderViewHtml(ViewMount.mount, view) |> TreeViewParity.ofHtml
+
+                Expect.equal
+                    (buttonsOf (fun _ -> false) (outline dsrTree))
+                    (buttonsOf (fun _ -> false) (outline dsrFeliz))
+                    (sprintf "state \"%s\": the buttons, in tab order" name))
+    ]
+
+// ─── The subject: external contacts ──────────────────────────────────
+
+let private contactMsgs = MessageCatalog.english.ExternalContact
+
+let private contactsFeliz
+    (model: ExternalContactManagerUI.Model)
+    (dispatch: ExternalContactManagerUI.Msg -> unit)
+    : Feliz.ReactElement =
+    FelizReferenceViews.ExternalContactManager.body contactMsgs model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let contactsTree
+    (model: ExternalContactManagerUI.Model)
+    (dispatch: ExternalContactManagerUI.Msg -> unit)
+    : Feliz.ReactElement =
+    lowerTree dispatch (ExternalContactManagerTree.tree contactMsgs model dispatch)
+
+let private contact (id: string) (name: string) (consented: bool) : ExternalContact = {
+    Id = id
+    Type = ExternalContact.EntityType
+    Version = 1
+    DisplayName = name
+    OptionalEmailAddress = Some(id + "@example.com")
+    OptionalPhoneNumber = None
+    OptionalWhatsAppNumber = None
+    Owner = ContactOwner.Team "team-1"
+    OptIns =
+        if consented then
+            Map.ofList [
+                NotificationKind.SinkKind.Email,
+                {
+                    GrantedAt = System.DateTime(2026, 11, 1)
+                    Source = "signed form"
+                    ExpiresAt = None
+                }
+            ]
+        else
+            Map.empty
+    Tags = [ "client" ]
+    CreatedAt = System.DateTime(2026, 10, 1)
+    LastInboundUtc = None
+    Notes = None
+}
+
+let contactsInit () =
+    fromUnitInit ExternalContactManagerUI.init ExternalContactManagerUI.update
+
+/// One contact who consented to email and one who consented to nothing.
+let contactsLoaded () =
+    (contactsInit ())
+        .Dispatch(ExternalContactManagerUI.ContactsLoaded(Ok [ contact "c1" "Ada" true; contact "c2" "Grace" false ]))
+
+let private contactOpen () =
+    (contactsLoaded ()).Dispatch(ExternalContactManagerUI.OpenContact "c1")
+
+/// The states external contacts are held to, each reached through `update`.
+let contactsStates () = [
+    "loading", contactsInit ()
+    "no contacts", (contactsInit ()).Dispatch(ExternalContactManagerUI.ContactsLoaded(Ok []))
+    "two contacts", contactsLoaded ()
+    "the add form", (contactsLoaded ()).Dispatch ExternalContactManagerUI.StartAdd
+    "the list failed", (contactsInit ()).Dispatch(ExternalContactManagerUI.ContactsLoaded(Error "not an admin"))
+    "a contact open", contactOpen ()
+    "a contact with no consent", (contactsLoaded ()).Dispatch(ExternalContactManagerUI.OpenContact "c2")
+    "a contact being edited", (contactOpen ()).Dispatch(ExternalContactManagerUI.StartEdit "c1")
+    "a consent source typed", (contactOpen ()).Dispatch(ExternalContactManagerUI.SetOptInSource "verbal, 1 Nov")
+    "a contact gone", (contactsLoaded ()).Dispatch(ExternalContactManagerUI.OpenContact "c9")
+]
+
+let private contactsTests =
+    testList "external contacts as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            for name, harness in contactsStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, contactsTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "assertion 2: a kept row's button, the form and the consent controls reach update" (fun () ->
+            (contactsLoaded ())
+                .Interact(ViewMount.mountAndInteract, contactsTree, Drive.click contactMsgs.Manage)
+                .AssertModelWith(
+                    "the first row's Manage opens that contact",
+                    fun m -> m.CurrentView = ExternalContactManagerUI.ContactDetail "c1"
+                )
+            |> ignore
+
+            (contactsLoaded ())
+                .Dispatch(ExternalContactManagerUI.StartAdd)
+                .Interact(
+                    ViewMount.mountAndInteract,
+                    contactsTree,
+                    fun host ->
+                        Drive.typeInto contactMsgs.FieldDisplayName "Ada" host
+                        Drive.leave contactMsgs.FieldDisplayName host
+                )
+                .AssertModelWith(
+                    "the display name reaches the form on leaving it",
+                    fun m -> m.Form |> Option.exists (fun f -> f.DisplayName = "Ada")
+                )
+            |> ignore
+
+            (contactOpen ())
+                .Interact(
+                    ViewMount.mountAndInteract,
+                    contactsTree,
+                    Drive.edit
+                        (contactMsgs.FieldChannel
+                         + String.concat "" ExternalContactManagerUI.channelOptions)
+                        "Sms"
+                )
+                .AssertModelWith("the channel reaches the draft", fun m -> m.OptIn.Channel = "Sms")
+            |> ignore
+
+            (contactOpen ())
+                .Interact(ViewMount.mountAndInteract, contactsTree, Drive.click contactMsgs.WithdrawConsent)
+                .AssertModelWith("a consent's withdrawal is asked for", fun m -> m.Busy)
+            |> ignore
+
+            (contactOpen ())
+                .Interact(ViewMount.mountAndInteract, contactsTree, Drive.click contactMsgs.BackToList)
+                .AssertModelWith(
+                    "Back returns to the list",
+                    fun m -> m.CurrentView = ExternalContactManagerUI.ContactList
+                )
+            |> ignore)
+
+        // Four differences, all judged, and nothing else. (1) The contact list is
+        // a table whose rows each hold a Manage button, where the Feliz page's
+        // AG Grid draws two focusable grid regions and, under jsdom, no cell
+        // renderer: its Manage buttons never render here. (2) Names: the Feliz
+        // page's field labels were not associated with their inputs, which were
+        // named by their placeholders; the islands' labels wrap them. (3) The
+        // channel is a select its label wraps, named by the label and then its
+        // options, where the Feliz select had no name. (4) The tab order, which
+        // differs only by these. The other buttons and their order match.
+        testCase "assertion 3: parity with the Feliz page, but for the judged differences" (fun () ->
+            let m = contactMsgs
+
+            let renamed =
+                set [
+                    m.PlaceholderDisplayName, m.FieldDisplayName
+                    m.PlaceholderEmail, m.FieldEmail
+                    m.PlaceholderPhone, m.FieldPhone
+                    m.PlaceholderPhone, m.FieldWhatsApp
+                    m.PlaceholderTags, m.FieldTags
+                    m.PlaceholderNotes, m.FieldNotes
+                    m.PlaceholderConsentSource, m.FieldConsentSource
+                ]
+
+            let placeholders = renamed |> Set.map fst
+            let labels = renamed |> Set.map snd
+
+            let judged (difference: TreeViewParity.Difference) =
+                match difference with
+                | TreeViewParity.TabOrderDiffers _ -> true
+                | TreeViewParity.MissingFromTree s when s.Role = "textbox" ->
+                    s.Name |> Option.exists placeholders.Contains
+                | TreeViewParity.ExtraInTree s when s.Role = "textbox" -> s.Name |> Option.exists labels.Contains
+                | TreeViewParity.ExtraInTree s when s.Role = "button" -> s.Name = Some m.Manage
+                | _ -> selectRenamed m.FieldChannel difference
+
+            for name, harness in contactsStates () do
+                let outline view =
+                    harness.RenderViewHtml(ViewMount.mount, view) |> TreeViewParity.ofHtml
+
+                let skip (n: string option) = n = Some m.Manage
+
+                Expect.equal
+                    (buttonsOf skip (outline contactsTree))
+                    (buttonsOf skip (outline contactsFeliz))
+                    (sprintf "state \"%s\": the buttons, in tab order" name)
+
+            let unjudged = [
+                for name, harness in contactsStates () do
+                    let found =
+                        harness.CheckViewParity(ViewMount.mount, contactsFeliz, contactsTree)
+                        |> List.filter (judged >> not)
+
+                    if not found.IsEmpty then
+                        sprintf "state \"%s\": %s" name (TreeViewParity.report found)
+            ]
+
+            Expect.isEmpty unjudged (String.concat "\n" unjudged))
     ]
 
 // ─── What a dispatch constructs ──────────────────────────────────────
@@ -1305,6 +1870,86 @@ let private constructedTests =
 
             Expect.isTrue kept "the member rows are served again"
             Expect.isTrue (built < total) (sprintf "built %d of %d" built total))
+        testCase "the audit trail: opening one row among 100 builds that row" (fun () ->
+            let page = {
+                Events = List.init 100 auditEvent
+                NextCursor = None
+                MatchedCount = 100
+            }
+
+            let tree m = AuditLogTree.tree auditMsgs m ignore
+            let harness = (auditInit ()).Dispatch(AuditLogUI.PageLoaded(Ok page))
+
+            let built, total = across tree harness (AuditLogUI.ToggleDetail((auditEvent 7).Id))
+
+            // A one-row page with that row open.
+            let oneRow, _ =
+                across
+                    tree
+                    ((auditInit ()).Dispatch(AuditLogUI.PageLoaded(Ok { page with Events = [ auditEvent 7 ] })))
+                    (AuditLogUI.ToggleDetail((auditEvent 7).Id))
+
+            Expect.isTrue (built <= oneRow) (sprintf "built %d of %d (a one-row page builds %d)" built total oneRow)
+            Expect.isTrue (total > 1000) (sprintf "the page holds the 100 rows (%d nodes)" total))
+
+        testCase "external contacts: the list loaded again with one contact changed builds that row" (fun () ->
+            let many () =
+                List.init 100 (fun i -> contact (sprintf "c%03d" i) (sprintf "Contact %03d" i) (i % 2 = 0))
+
+            let tree m =
+                ExternalContactManagerTree.tree contactMsgs m ignore
+
+            let harness =
+                (contactsInit ()).Dispatch(ExternalContactManagerUI.ContactsLoaded(Ok(many ())))
+
+            let built, total =
+                across
+                    tree
+                    harness
+                    (ExternalContactManagerUI.ContactsLoaded(
+                        Ok(renamed 7 (many ()) (fun c -> { c with DisplayName = "Renamed" }))
+                    ))
+
+            let oneRow, _ =
+                across
+                    tree
+                    (contactsInit ())
+                    (ExternalContactManagerUI.ContactsLoaded(
+                        Ok [
+                            {
+                                contact "c007" "Renamed" false with
+                                    Version = 1
+                            }
+                        ]
+                    ))
+
+            Expect.isTrue (built <= oneRow) (sprintf "built %d of %d (a one-row page builds %d)" built total oneRow)
+            Expect.isTrue (total > 1000) (sprintf "the page holds the 100 rows (%d nodes)" total))
+
+        testCase "data subject requests: choosing a policy keeps the pending preview" (fun () ->
+            let tree m =
+                DataSubjectRequestAdminTree.tree dsrMsgs m ignore
+
+            let harness = dsrPreviewed ()
+            let before = tree harness.Model
+
+            let after =
+                tree
+                    (harness.Dispatch(DataSubjectRequestAdminUI.SetOverridePolicy(Some ErasurePolicy.HardDelete)))
+                        .Model
+
+            let rec find (id: string) (node: Node<DataSubjectRequestAdminUI.Msg>) =
+                if node.Id = id then
+                    Some node
+                else
+                    Fuaran.UI.Generated.children node |> List.tryPick (find id)
+
+            let kept =
+                match find "dsr-preview" before, find "dsr-preview" after with
+                | Some a, Some b -> obj.ReferenceEquals(a, b)
+                | _ -> false
+
+            Expect.isTrue kept "the preview panel is served again")
     ]
 
 // ─── The kit's own go-red proofs ─────────────────────────────────────
@@ -1526,6 +2171,9 @@ let tests =
         sessionTests
         permissionsTests
         usersTests
+        auditTests
+        dsrTests
+        contactsTests
         constructedTests
         goRedTests
         nameTests

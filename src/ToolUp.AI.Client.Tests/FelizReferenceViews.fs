@@ -2519,3 +2519,883 @@ module PlatformUsers =
                 | None -> Html.none
             ]
         ]
+
+/// The audit-trail viewer as Feliz (`AuditLogUI`'s view before its tree).
+module AuditLog =
+    open AuditLogUI
+
+    let private formatTimestamp (ts: DateTime) : string =
+        ts.ToUniversalTime().ToString "yyyy-MM-dd HH:mm:ss"
+
+    /// Pretty-print the recorded payload for the detail expansion. A
+    /// payload that will not parse is shown as stored rather than hidden —
+    /// a tombstoned row (the GDPR erasure marker) is exactly that case, and
+    /// the fact that a row was redacted is itself audit-relevant.
+    let private prettyPayload (payload: string) : string =
+        try
+            emitJsExpr payload "JSON.stringify(JSON.parse($0), null, 2)"
+        with _ ->
+            payload
+
+    let private filterBar (msgs: AuditLogMessages) (model: Model) (dispatch: Msg -> unit) =
+        // Each visible <label> sits BESIDE its control rather than wrapping
+        // it and this tier has no `for`/`id` pairing convention, so every
+        // control carries its own accessible name read from the SAME
+        // binding as the label — see `UsageDashboard.renderControls` for the
+        // full rationale.
+        let field (label: string) (control: ReactElement) =
+            Html.div [
+                prop.className "flex flex-col"
+                prop.children [
+                    Html.label [ prop.className ("text-xs mb-1 " + Tokens.Text.secondary); prop.text label ]
+                    control
+                ]
+            ]
+
+        Html.div [
+            prop.className "flex flex-wrap items-end gap-4 mb-4"
+            prop.children [
+                field
+                    msgs.FromLabel
+                    (Html.input [
+                        prop.type' "date"
+                        prop.ariaLabel msgs.FromLabel
+                        prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
+                        prop.value model.Draft.From
+                        prop.onChange (SetFrom >> dispatch)
+                    ])
+                field
+                    msgs.ToLabel
+                    (Html.input [
+                        prop.type' "date"
+                        prop.ariaLabel msgs.ToLabel
+                        prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
+                        prop.value model.Draft.To
+                        prop.onChange (SetTo >> dispatch)
+                    ])
+                field
+                    msgs.EventTypeLabel
+                    (Html.select [
+                        prop.ariaLabel msgs.EventTypeLabel
+                        prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
+                        prop.value model.Draft.EventType
+                        prop.onChange (SetEventType >> dispatch)
+                        prop.children (
+                            Html.option [ prop.value ""; prop.text msgs.AllEventTypes ]
+                            :: (model.EventTypes
+                                |> List.map (fun t -> Html.option [ prop.value t; prop.text t ]))
+                        )
+                    ])
+                // The text input commits on Enter / blur, so it takes its
+                // accessible name from a wrapping <label>.
+                Html.label [
+                    prop.className "flex flex-col"
+                    prop.children [
+                        Html.span [
+                            prop.className [ "text-xs mb-1"; Tokens.Text.secondary ]
+                            prop.text msgs.ActorLabel
+                        ]
+                        Forms.Input.text model.Draft.Actor (SetActor >> dispatch) msgs.ActorPlaceholder
+                    ]
+                ]
+                Forms.Button.primaryWith Forms.Button.Enabled msgs.ApplyFilters (fun () -> dispatch ApplyFilters)
+                Forms.Button.secondaryWith Forms.Button.Enabled msgs.ClearFilters (fun () -> dispatch ClearFilters)
+                Forms.Button.secondaryWith Forms.Button.Enabled msgs.Refresh (fun () -> dispatch Refresh)
+                Forms.Button.primaryWith
+                    (Forms.Button.stateOf model.Exporting msgs.Exporting (List.isEmpty model.Events))
+                    msgs.ExportCsv
+                    (fun () -> dispatch ExportCsv)
+            ]
+        ]
+
+    /// The recorded payload, shown under the row's summary while its detail is open.
+    let private detail (msgs: AuditLogMessages) (view: AuditEventView) =
+        Html.div [
+            prop.className [ "mt-2 p-3 rounded"; Tokens.Bg.subtle ]
+            prop.children [
+                Html.div [
+                    prop.className [ "text-xs font-semibold uppercase tracking-wider mb-1"; Tokens.Text.secondary ]
+                    prop.text msgs.PayloadHeading
+                ]
+                Html.pre [
+                    prop.className [ "text-xs font-mono whitespace-pre-wrap break-all"; Tokens.Text.secondary ]
+                    prop.text (prettyPayload view.Payload)
+                ]
+            ]
+        ]
+
+    let private columns
+        (msgs: AuditLogMessages)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        : Data.Column<AuditEventView> list =
+        let mono (text: string) =
+            Html.span [ prop.className "font-mono whitespace-nowrap"; prop.text text ]
+
+        [
+            {
+                Header = msgs.ColumnTime
+                Align = Data.Left
+                Cell = fun v -> mono (formatTimestamp v.OccurredAt)
+            }
+            {
+                Header = msgs.ColumnEventType
+                Align = Data.Left
+                Cell = fun v -> mono v.EventType
+            }
+            {
+                Header = msgs.ColumnActor
+                Align = Data.Left
+                Cell = fun v -> mono (v.Actor |> Option.defaultValue msgs.UnattributedActor)
+            }
+            {
+                Header = msgs.ColumnSummary
+                Align = Data.Left
+                Cell =
+                    fun v ->
+                        Html.div [
+                            prop.className "break-all"
+                            prop.children [
+                                Html.text v.Summary
+                                if Set.contains v.Id model.Expanded then
+                                    detail msgs v
+                            ]
+                        ]
+            }
+            {
+                Header = ""
+                Align = Data.Right
+                Cell =
+                    fun v ->
+                        let isExpanded = Set.contains v.Id model.Expanded
+
+                        Html.button [
+                            prop.ariaExpanded isExpanded
+                            prop.ariaLabel (if isExpanded then msgs.HideDetail else msgs.ShowDetail)
+                            prop.className
+                                "px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded"
+                            prop.onClick (fun _ -> dispatch (ToggleDetail v.Id))
+                            prop.text (if isExpanded then "−" else "+")
+                        ]
+            }
+        ]
+
+    /// The two empty states are DIFFERENT states, not one message with two
+    /// wordings: nothing recorded means the trail is off (or nothing
+    /// audited has happened yet) and the remedy is server-side; nothing
+    /// matching means the filters are too narrow and the remedy is right
+    /// here. A single "no results" would send the operator to the wrong one
+    /// half the time.
+    let private emptyState (msgs: AuditLogMessages) (model: Model) =
+        let filtered = model.Applied <> emptyFilters || not (List.isEmpty model.EventTypes)
+
+        Html.div [
+            prop.className ("p-8 text-center text-sm " + Tokens.Text.muted)
+            prop.text (if filtered then msgs.NoMatches else msgs.NoEvents)
+        ]
+
+    let private eventTable (msgs: AuditLogMessages) (model: Model) (dispatch: Msg -> unit) =
+        if List.isEmpty model.Events then
+            emptyState msgs model
+        else
+            Html.div [
+                prop.children [
+                    Data.table (columns msgs model dispatch) model.Events
+                    Html.div [
+                        prop.className "flex items-center justify-between mt-3"
+                        prop.children [
+                            Html.span [
+                                prop.className ("text-xs " + Tokens.Text.muted)
+                                prop.text (msgs.ShowingCount (List.length model.Events) model.MatchedCount)
+                            ]
+                            match model.NextCursor with
+                            | None -> Html.none
+                            | Some _ ->
+                                Forms.Button.secondaryWith
+                                    (Forms.Button.stateOf model.LoadingMore msgs.Loading false)
+                                    msgs.LoadMore
+                                    (fun () -> dispatch LoadMore)
+                        ]
+                    ]
+                ]
+            ]
+
+    /// The module's page, over the catalog section the view hands it.
+    let body (msgs: AuditLogMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+        Html.div [
+            prop.className "p-4"
+            prop.children [
+                Html.h2 [
+                    prop.className ("text-lg font-semibold mb-2 " + Tokens.Text.primary)
+                    prop.text msgs.Heading
+                ]
+                Html.p [
+                    prop.className ("text-sm mb-4 " + Tokens.Text.secondary)
+                    prop.text msgs.Subheading
+                ]
+                filterBar msgs model dispatch
+
+                match model.Status with
+                | Remote.Failed err -> StateViews.noticeStatic (Notice.Problem err)
+                | Remote.NotAsked
+                | Remote.Loading -> Html.div [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
+                | Remote.Reloading()
+                | Remote.Loaded() -> eventTable msgs model dispatch
+            ]
+        ]
+
+/// The data-subject-request admin as Feliz (`DataSubjectRequestAdminUI`'s view before its tree).
+module DataSubjectRequestAdmin =
+    open ToolUp.Platform.DataSubjectRequestApi
+    open DataSubjectRequestAdminUI
+
+    let private tabBar (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
+        Html.div [
+            prop.className [ "px-4"; Tokens.Bg.card ]
+            prop.children [
+                Tabs.bar [ ExportTab, msgs.TabExport; EraseTab, msgs.TabErase ] model.ActiveTab (SwitchTab >> dispatch)
+            ]
+        ]
+
+    let private subjectFormRows (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
+        Html.div [
+            prop.className "flex flex-col gap-3"
+            prop.children [
+                Forms.Input.text model.SubjectInput (fun v -> dispatch (SetSubjectInput v)) msgs.SubjectPlaceholder
+
+                Forms.Input.text model.TeamInput (fun v -> dispatch (SetTeamInput v)) msgs.TeamPlaceholder
+
+                Forms.Input.text model.ReasonInput (fun v -> dispatch (SetReasonInput v)) msgs.ReasonPlaceholder
+            ]
+        ]
+
+    let private ticketStatusLabel (msgs: DataSubjectRequestAdminMessages) =
+        function
+        | ExportStatus.Preparing -> msgs.TicketPreparing
+        | ExportStatus.Ready size -> msgs.TicketReady size
+        | ExportStatus.Failed reason -> msgs.TicketFailed reason
+        | ExportStatus.Cancelled -> msgs.TicketCancelled
+        | ExportStatus.Expired -> msgs.TicketExpired
+        | ExportStatus.Unknown -> msgs.TicketUnknown
+
+    /// The in-flight background-export panel. Shows the active
+    /// ticket's status (auto-polled) with a cancel control. Download happens
+    /// automatically when the ticket flips to `Ready`.
+    let private activeTicketPanel (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
+        match model.ActiveTicket, model.TicketStatus with
+        | Some ticket, Some status ->
+            Html.div [
+                prop.className "mt-4 p-3 border border-border rounded bg-gray-50"
+                prop.children [
+                    Html.div [
+                        prop.className "flex items-center justify-between"
+                        prop.children [
+                            Html.div [
+                                prop.children [
+                                    Html.div [
+                                        prop.className "text-sm font-medium"
+                                        prop.text msgs.BackgroundExportHeading
+                                    ]
+                                    Html.div [
+                                        prop.className "text-xs text-muted"
+                                        prop.text (msgs.TicketLine ticket (ticketStatusLabel msgs status))
+                                    ]
+                                ]
+                            ]
+                            match status with
+                            | ExportStatus.Preparing ->
+                                Forms.Button.secondaryWith Forms.Button.Enabled msgs.Cancel (fun () ->
+                                    dispatch CancelAsyncExport)
+                            | _ -> Html.none
+                        ]
+                    ]
+                ]
+            ]
+        | _ -> Html.none
+
+    let private exportTabView (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
+        let submitState =
+            Forms.Button.stateOf (model.Busy = RunningExport) msgs.Exporting (model.Busy <> Idle)
+
+        Layout.Panel.panel msgs.ExportPanelTitle [
+            Html.p [
+                prop.className "text-sm text-text-secondary mb-3"
+                prop.text msgs.ExportPanelBody
+            ]
+            subjectFormRows msgs model dispatch
+            Html.label [
+                prop.className "mt-3 flex items-center gap-2 text-sm cursor-pointer"
+                prop.children [
+                    Html.input [
+                        prop.type' "checkbox"
+                        prop.isChecked model.AsyncMode
+                        prop.onChange (fun (v: bool) -> dispatch (SetAsyncMode v))
+                    ]
+                    Html.span [ prop.text msgs.AsyncModeLabel ]
+                ]
+            ]
+            Html.div [
+                prop.className "mt-4 flex items-center gap-3"
+                prop.children [
+                    Forms.Button.primaryWith submitState msgs.RequestExport (fun () -> dispatch SubmitExport)
+                    if model.Busy = RunningExport then
+                        Html.span [ prop.className "text-xs text-muted"; prop.text msgs.AggregatingSegments ]
+                ]
+            ]
+            activeTicketPanel msgs model dispatch
+        ]
+
+    let private policyRadio (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
+        let radio (selected: bool) (label: string) (description: string) (onSelect: unit -> unit) =
+            Html.label [
+                prop.className [
+                    "flex items-start gap-2 p-3 border rounded cursor-pointer transition-colors"
+                    if selected then
+                        "border-brand bg-brand/5"
+                    else
+                        "border-border hover:bg-gray-50"
+                ]
+                prop.onClick (fun _ -> onSelect ())
+                prop.children [
+                    Html.input [
+                        prop.type' "radio"
+                        prop.isChecked selected
+                        prop.readOnly true
+                        prop.className "mt-1"
+                    ]
+                    Html.div [
+                        prop.children [
+                            Html.div [ prop.className "text-sm font-medium"; prop.text label ]
+                            Html.div [ prop.className "text-xs text-muted"; prop.text description ]
+                        ]
+                    ]
+                ]
+            ]
+
+        Html.div [
+            prop.className "flex flex-col gap-2"
+            prop.children [
+                Html.span [ prop.className "text-xs text-muted"; prop.text msgs.OverridePolicyPrompt ]
+                radio
+                    (model.OverridePolicy = None)
+                    msgs.UseDeploymentDefault
+                    msgs.UseDeploymentDefaultDescription
+                    (fun () -> dispatch (SetOverridePolicy None))
+                for policy in
+                    [
+                        ErasurePolicy.HardDelete
+                        ErasurePolicy.Tombstone
+                        ErasurePolicy.RetainPerCompliance
+                    ] do
+                    radio
+                        (model.OverridePolicy = Some policy)
+                        (policyLabel msgs policy)
+                        (policyDescription msgs policy)
+                        (fun () -> dispatch (SetOverridePolicy(Some policy)))
+            ]
+        ]
+
+    let private previewPanel
+        (msgs: DataSubjectRequestAdminMessages)
+        (preview: ErasurePreview)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        =
+        let total = preview.PerHandlerCounts.Values |> Seq.sumBy _.RecordsAffected
+
+        let confirmState =
+            Forms.Button.stateOf (model.Busy = RunningConfirm) msgs.Confirming (model.Busy <> Idle)
+
+        let cancelState =
+            if model.Busy = RunningConfirm then
+                Forms.Button.Disabled
+            else
+                Forms.Button.Enabled
+
+        Layout.Panel.panel msgs.PreviewPanelTitle [
+            Html.div [
+                prop.className "flex items-center justify-between mb-3"
+                prop.children [
+                    Html.div [
+                        prop.children [
+                            Html.div [ prop.className "text-sm"; prop.text (msgs.RequestIdLine preview.Request.Id) ]
+                            Html.div [
+                                prop.className "text-xs text-muted"
+                                prop.text (
+                                    msgs.PreviewSummaryLine
+                                        (policyLabel msgs preview.Request.Policy)
+                                        total
+                                        preview.PerHandlerCounts.Count
+                                )
+                            ]
+                        ]
+                    ]
+                    Forms.Button.secondaryWith cancelState msgs.Cancel (fun () -> dispatch CancelPreview)
+                ]
+            ]
+            if preview.PerHandlerCounts.IsEmpty then
+                Html.p [ prop.className "text-sm text-muted py-2"; prop.text msgs.PreviewEmpty ]
+            else
+                Html.div [
+                    prop.className "flex flex-col gap-1 mb-4"
+                    prop.children [
+                        for KeyValue(name, summary) in preview.PerHandlerCounts do
+                            Html.div [
+                                prop.className
+                                    "flex items-center justify-between p-2 border border-border rounded text-sm"
+                                prop.children [
+                                    Html.span [ prop.className "font-medium"; prop.text name ]
+                                    Html.span [
+                                        prop.className "text-xs text-muted"
+                                        prop.text (msgs.HandlerRecordsAffected summary.RecordsAffected)
+                                    ]
+                                ]
+                            ]
+                    ]
+                ]
+            Html.div [
+                prop.className "flex items-center gap-3"
+                prop.children [
+                    Forms.Button.dangerWith confirmState msgs.ConfirmErase (fun () -> dispatch SubmitConfirm)
+                    Html.span [
+                        prop.className "text-xs text-muted"
+                        prop.text msgs.ConfirmIrreversibleFootnote
+                    ]
+                ]
+            ]
+        ]
+
+    let private runSummaryPanel (msgs: DataSubjectRequestAdminMessages) (summary: ErasureRunSummary) =
+        let perHandlerRow (name: string) (outcome: Result<ErasureSummary, ErasureError>) =
+            let body, badgeClass =
+                match outcome with
+                | Result.Ok s -> msgs.HandlerRecordsAffected s.RecordsAffected, "bg-green-100 text-green-700"
+                | Result.Error err -> ErasureError.toMessage err, "bg-red-100 text-red-700"
+
+            Html.div [
+                prop.className "flex items-center justify-between p-2 border border-border rounded text-sm"
+                prop.children [
+                    Html.span [ prop.className "font-medium"; prop.text name ]
+                    Html.span [ prop.className $"text-xs px-2 py-0.5 rounded {badgeClass}"; prop.text body ]
+                ]
+            ]
+
+        let started = summary.StartedAt.ToString "u"
+        let completed = summary.CompletedAt.ToString "u"
+
+        let overall =
+            if summary.OverallSuccess then
+                msgs.OverallSuccess
+            else
+                msgs.OverallPartialFailure
+
+        Layout.Panel.panel msgs.RunSummaryPanelTitle [
+            Html.div [
+                prop.className "text-xs text-muted mb-2"
+                prop.text (msgs.RunSummaryLine started completed overall)
+            ]
+            Html.div [
+                prop.className "flex flex-col gap-1"
+                prop.children [
+                    for KeyValue(name, outcome) in summary.PerHandler do
+                        perHandlerRow name outcome
+                ]
+            ]
+        ]
+
+    let private eraseTabView (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) =
+        let previewState =
+            Forms.Button.stateOf (model.Busy = RunningPreview) msgs.Previewing (model.Busy <> Idle)
+
+        Html.div [
+            prop.className "flex flex-col gap-4"
+            prop.children [
+                Layout.Panel.panel msgs.ErasePanelTitle [
+                    Html.p [
+                        prop.className "text-sm text-text-secondary mb-3"
+                        prop.text msgs.ErasePanelBody
+                    ]
+                    subjectFormRows msgs model dispatch
+                    Html.div [ prop.className "mt-3"; prop.children [ policyRadio msgs model dispatch ] ]
+                    Html.div [
+                        prop.className "mt-4 flex items-center gap-3"
+                        prop.children [
+                            Forms.Button.primaryWith previewState msgs.PreviewErase (fun () -> dispatch SubmitPreview)
+                            if model.PendingPreview.IsSome then
+                                Html.span [ prop.className "text-xs text-muted"; prop.text msgs.PendingPreviewHint ]
+                        ]
+                    ]
+                ]
+
+                match model.PendingPreview with
+                | Some preview -> previewPanel msgs preview model dispatch
+                | None -> Html.none
+
+                match model.LastRunSummary with
+                | Some summary -> runSummaryPanel msgs summary
+                | None -> Html.none
+            ]
+        ]
+
+    /// The module's page, over the catalog section the view hands it.
+    let body (msgs: DataSubjectRequestAdminMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+        let body =
+            Html.div [
+                prop.className "flex flex-col"
+                prop.children [
+                    tabBar msgs model dispatch
+                    Html.div [
+                        prop.className "p-4"
+                        prop.children [
+                            match model.ActiveTab with
+                            | ExportTab -> exportTabView msgs model dispatch
+                            | EraseTab -> eraseTabView msgs model dispatch
+                        ]
+                    ]
+                ]
+            ]
+
+        // 0.5.6 — FullWidth render. The notice stacks above the body.
+        Html.div [
+            prop.className "flex flex-col gap-3 h-full"
+            prop.children [
+                StateViews.notice { Dismiss = msgs.DismissBanner } model.Banner (fun () -> dispatch DismissBanner)
+                body
+            ]
+        ]
+
+/// The external-contact admin as Feliz (`ExternalContactManagerUI`'s view before its tree).
+module ExternalContactManager =
+    open Feliz.AgGrid
+    open ExternalContactManagerUI
+
+    /// The channels an operator can record a consent on. The wire strings
+    /// are `NotificationKind.SinkKind.toWireString` values, which the
+    /// server parses back with `tryParse` — one vocabulary, not two.
+    let private channelOptions = [ "Email"; "Sms"; "Push.WebPush"; "Push.Fcm"; "Push.Apns" ]
+
+    let private pill (label: string) (cls: string) =
+        Html.span [
+            prop.className $"inline-block text-xs px-2 py-0.5 rounded {cls}"
+            prop.text label
+        ]
+
+    /// The consent summary shown in the grid row: the channels this contact
+    /// is actually reachable on, or a plain statement that it is reachable
+    /// on none. The empty case is spelled out rather than left blank —
+    /// "no consent recorded" is the single most important fact about a
+    /// contact and a blank cell reads as a rendering bug.
+    let private consentSummary (msgs: ExternalContactMessages) (contact: ExternalContact) =
+        let channels =
+            contact.OptIns
+            |> Map.toList
+            |> List.map (fst >> NotificationKind.SinkKind.toWireString)
+
+        if List.isEmpty channels then
+            pill msgs.NoConsent ("bg-gray-100 " + Tokens.Text.secondary)
+        else
+            Html.div [
+                prop.className "flex gap-1 flex-wrap"
+                prop.children [ for channel in channels -> pill channel "bg-green-100 text-green-700" ]
+            ]
+
+    let private contactFormPanel
+        (msgs: ExternalContactMessages)
+        (busy: bool)
+        (form: ContactForm)
+        (dispatch: Msg -> unit)
+        =
+        let heading =
+            match form.EditingId with
+            | None -> msgs.NewContactHeading
+            | Some _ -> msgs.EditContactHeading
+
+        Layout.Panel.panel heading [
+            Html.div [
+                prop.className "flex flex-col gap-3"
+                prop.children [
+                    Html.p [ prop.className "text-xs text-muted"; prop.text msgs.ContactFormHelp ]
+
+                    Forms.Field.field
+                        msgs.FieldDisplayName
+                        (Forms.Input.text
+                            form.DisplayName
+                            (fun v -> dispatch (SetFormField(fun f -> { f with DisplayName = v })))
+                            msgs.PlaceholderDisplayName)
+
+                    Forms.Field.field
+                        msgs.FieldEmail
+                        (Forms.Input.text
+                            form.Email
+                            (fun v -> dispatch (SetFormField(fun f -> { f with Email = v })))
+                            msgs.PlaceholderEmail)
+
+                    Forms.Field.field
+                        msgs.FieldPhone
+                        (Forms.Input.text
+                            form.Phone
+                            (fun v -> dispatch (SetFormField(fun f -> { f with Phone = v })))
+                            msgs.PlaceholderPhone)
+
+                    Forms.Field.field
+                        msgs.FieldWhatsApp
+                        (Forms.Input.text
+                            form.WhatsApp
+                            (fun v -> dispatch (SetFormField(fun f -> { f with WhatsApp = v })))
+                            msgs.PlaceholderPhone)
+
+                    Forms.Field.field
+                        msgs.FieldTags
+                        (Forms.Input.text
+                            form.Tags
+                            (fun v -> dispatch (SetFormField(fun f -> { f with Tags = v })))
+                            msgs.PlaceholderTags)
+
+                    Forms.Field.field
+                        msgs.FieldNotes
+                        (Forms.Input.text
+                            form.Notes
+                            (fun v -> dispatch (SetFormField(fun f -> { f with Notes = v })))
+                            msgs.PlaceholderNotes)
+
+                    Forms.Field.actions [
+                        Forms.Button.primaryWith
+                            (Forms.Button.stateOf busy msgs.SaveContact false)
+                            msgs.SaveContact
+                            (fun () -> dispatch SubmitForm)
+                        Forms.Button.secondary msgs.Cancel (fun () -> dispatch CancelForm)
+                    ]
+                ]
+            ]
+        ]
+
+    /// The consent panel: what this contact has agreed to, one row per
+    /// channel with a withdrawal beside it, and the form that records a new
+    /// one. The source box is the point of the panel — see the preamble.
+    let private consentPanel
+        (msgs: ExternalContactMessages)
+        (model: Model)
+        (contact: ExternalContact)
+        (dispatch: Msg -> unit)
+        =
+        let recorded = contact.OptIns |> Map.toList
+
+        Layout.Panel.panel msgs.ConsentHeading [
+            Html.div [
+                prop.className "flex flex-col gap-4"
+                prop.children [
+                    Html.p [ prop.className "text-xs text-muted"; prop.text msgs.ConsentHelp ]
+
+                    if List.isEmpty recorded then
+                        Html.p [ prop.className "text-sm text-muted py-2"; prop.text msgs.NoConsentBody ]
+                    else
+                        Html.div [
+                            prop.className "flex flex-col gap-2"
+                            prop.children [
+                                for channel, record in recorded ->
+                                    let wire = NotificationKind.SinkKind.toWireString channel
+
+                                    Html.div [
+                                        prop.className
+                                            "flex items-center justify-between gap-3 p-2 rounded border border-gray-200"
+                                        prop.children [
+                                            Html.div [
+                                                prop.className "flex flex-col"
+                                                prop.children [
+                                                    Html.span [ prop.className "text-sm font-medium"; prop.text wire ]
+                                                    Html.span [
+                                                        prop.className "text-xs text-muted"
+                                                        prop.text (msgs.ConsentEvidence record.Source)
+                                                    ]
+                                                ]
+                                            ]
+                                            Forms.Button.secondary msgs.WithdrawConsent (fun () ->
+                                                dispatch (WithdrawOptIn(contact.Id, wire)))
+                                        ]
+                                    ]
+                            ]
+                        ]
+
+                    Html.div [
+                        prop.className "flex flex-col gap-3 pt-2 border-t border-gray-200"
+                        prop.children [
+                            Html.p [ prop.className "text-xs text-muted"; prop.text msgs.RecordConsentHelp ]
+
+                            Forms.Field.field
+                                msgs.FieldChannel
+                                (Html.select [
+                                    prop.className "border rounded px-2 py-1 text-sm"
+                                    prop.value model.OptIn.Channel
+                                    prop.onChange (fun (v: string) -> dispatch (SetOptInChannel v))
+                                    prop.children [
+                                        for option in channelOptions ->
+                                            Html.option [ prop.value option; prop.text option ]
+                                    ]
+                                ])
+
+                            Forms.Field.field
+                                msgs.FieldConsentSource
+                                (Forms.Input.text
+                                    model.OptIn.Source
+                                    (fun v -> dispatch (SetOptInSource v))
+                                    msgs.PlaceholderConsentSource)
+
+                            Forms.Field.actions [
+                                // Disabled rather than hidden while the source
+                                // is blank: the operator should see that the
+                                // control exists and what it is waiting for.
+                                Forms.Button.primaryWith
+                                    (Forms.Button.stateOf
+                                        model.Busy
+                                        msgs.RecordConsent
+                                        (String.IsNullOrWhiteSpace model.OptIn.Source))
+                                    msgs.RecordConsent
+                                    (fun () -> dispatch (RecordOptIn contact.Id))
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+    let private contactListView (msgs: ExternalContactMessages) (model: Model) (dispatch: Msg -> unit) =
+        Html.div [
+            prop.className "space-y-4"
+            prop.children [
+                Layout.Panel.panel msgs.ContactsPanel [
+                    if model.Contacts.IsEmpty then
+                        Html.p [ prop.className "text-sm text-muted py-4"; prop.text msgs.NoContactsYet ]
+                    else
+                        AgGrid.grid [
+                            AgGrid.baseTheme BaseTheme.themeBalham
+                            AgGrid.domLayout AutoHeight
+                            AgGrid.columnDefs [
+                                ColumnDef.create [
+                                    ColumnDef.headerName msgs.ColumnName
+                                    ColumnDef.valueGetter (fun (c: ExternalContact) -> c.DisplayName)
+                                ]
+                                ColumnDef.create [
+                                    ColumnDef.headerName msgs.ColumnEmail
+                                    ColumnDef.valueGetter (fun (c: ExternalContact) ->
+                                        c.OptionalEmailAddress |> Option.defaultValue "")
+                                ]
+                                ColumnDef.create [
+                                    ColumnDef.headerName msgs.ColumnPhone
+                                    ColumnDef.valueGetter (fun (c: ExternalContact) ->
+                                        c.OptionalPhoneNumber |> Option.defaultValue "")
+                                ]
+                                ColumnDef.create [
+                                    ColumnDef.headerName msgs.ColumnTags
+                                    ColumnDef.valueGetter (fun (c: ExternalContact) -> c.Tags |> String.concat ", ")
+                                ]
+                                ColumnDef.create [
+                                    ColumnDef.headerName msgs.ColumnConsent
+                                    ColumnDef.cellRenderer (fun (p: ICellRendererParams<ExternalContact, obj>) ->
+                                        match p.data with
+                                        | Some contact -> consentSummary msgs contact
+                                        | None -> Html.none)
+                                ]
+                                ColumnDef.create [
+                                    ColumnDef.headerName ""
+                                    ColumnDef.cellRenderer (fun (p: ICellRendererParams<ExternalContact, obj>) ->
+                                        match p.data with
+                                        | Some contact ->
+                                            Forms.Button.secondary msgs.Manage (fun () ->
+                                                dispatch (OpenContact contact.Id))
+                                        | None -> Html.none)
+                                ]
+                            ]
+                            AgGrid.rowData (List.toArray model.Contacts)
+                        ]
+                ]
+
+                match model.Form with
+                | Some form when form.EditingId.IsNone -> contactFormPanel msgs model.Busy form dispatch
+                | _ ->
+                    Html.div [
+                        prop.children [ Forms.Button.primary msgs.AddContact (fun () -> dispatch StartAdd) ]
+                    ]
+            ]
+        ]
+
+    let private contactDetailView
+        (msgs: ExternalContactMessages)
+        (model: Model)
+        (contactId: string)
+        (dispatch: Msg -> unit)
+        =
+        match model.Contacts |> List.tryFind (fun c -> c.Id = contactId) with
+        | None ->
+            Html.div [
+                prop.className "space-y-3"
+                prop.children [
+                    Html.p [ prop.className "text-sm text-muted"; prop.text msgs.ContactGone ]
+                    Forms.Button.secondary msgs.BackToList (fun () -> dispatch BackToList)
+                ]
+            ]
+        | Some contact ->
+            Html.div [
+                prop.className "space-y-4"
+                prop.children [
+                    Html.div [
+                        prop.className "flex items-center justify-between gap-3"
+                        prop.children [
+                            Html.h3 [ prop.className "text-base font-semibold"; prop.text contact.DisplayName ]
+                            Forms.Button.secondary msgs.BackToList (fun () -> dispatch BackToList)
+                        ]
+                    ]
+
+                    match model.Form with
+                    | Some form when form.EditingId = Some contact.Id -> contactFormPanel msgs model.Busy form dispatch
+                    | _ ->
+                        Layout.Panel.panel msgs.DetailsPanel [
+                            Html.div [
+                                prop.className "flex flex-col gap-2 text-sm"
+                                prop.children [
+                                    Html.div [
+                                        prop.text (
+                                            msgs.DetailEmail(contact.OptionalEmailAddress |> Option.defaultValue "—")
+                                        )
+                                    ]
+                                    Html.div [
+                                        prop.text (
+                                            msgs.DetailPhone(contact.OptionalPhoneNumber |> Option.defaultValue "—")
+                                        )
+                                    ]
+                                    Html.div [ prop.text (msgs.DetailTags(contact.Tags |> String.concat ", ")) ]
+                                    Forms.Field.actions [
+                                        Forms.Button.secondary msgs.EditContact (fun () ->
+                                            dispatch (StartEdit contact.Id))
+                                        Forms.Button.secondary msgs.DeleteContact (fun () ->
+                                            dispatch (DeleteContact contact.Id))
+                                    ]
+                                ]
+                            ]
+                        ]
+
+                    consentPanel msgs model contact dispatch
+                ]
+            ]
+
+    /// The module's page, over the catalog section the view hands it.
+    let body (msgs: ExternalContactMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+        let body =
+            if not model.Loaded then
+                Html.p [ prop.className "text-sm text-muted py-4"; prop.text msgs.Loading ]
+            else
+                match model.CurrentView with
+                | ContactList -> contactListView msgs model dispatch
+                | ContactDetail contactId -> contactDetailView msgs model contactId dispatch
+
+        Html.div [
+            prop.className "p-6 max-w-5xl"
+            prop.children [
+                Html.h2 [ prop.className "text-lg font-semibold mb-1"; prop.text msgs.Heading ]
+                Html.p [
+                    prop.className ("text-sm mb-4 " + Tokens.Text.secondary)
+                    prop.text msgs.Subheading
+                ]
+                StateViews.notice { Dismiss = msgs.Dismiss } model.Error (fun () -> dispatch DismissError)
+                body
+            ]
+        ]

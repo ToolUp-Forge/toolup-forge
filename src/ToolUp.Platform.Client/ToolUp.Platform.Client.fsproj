@@ -40,7 +40,7 @@
          the nupkg; Fable's package loader extracts and compiles source
          directly. Mirrors the Feliz / Fable.Elmish convention. -->
     <ItemGroup>
-        <Content Include="**\*.fsproj;**\*.fs;**\*.svg;**\*.png;**\TreeLoweringRuntime.js;**\TeamManagerTree.js;**\ModuleVisibilityAdminTree.js;**\PlatformAdminTree.js;**\CommandPaletteTree.js;**\SessionSecurityTree.js;**\PermissionsAdminTree.js;**\PlatformUsersTree.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg;**\*.png;**\TreeLoweringRuntime.js;**\TeamManagerTree.js;**\ModuleVisibilityAdminTree.js;**\PlatformAdminTree.js;**\CommandPaletteTree.js;**\SessionSecurityTree.js;**\PermissionsAdminTree.js;**\PlatformUsersTree.js;**\DataSubjectRequestAdminTree.js;**\AuditLogTree.js;**\ExternalContactManagerTree.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
@@ -300,6 +300,7 @@
         <Compile Include="Client\UI\TreeSurface.fs" />
         <Compile Include="Client\UI\TreeLoweringRuntime.fs" />
         <Compile Include="Client\UI\TreeLowering.fs" />
+        <Compile Include="Client\UI\TreeIslands.fs" />
         <Compile Include="Client\UI\KeepScoped.fs" />
         <!-- Phase 278 — hosted-tree render-cost budget gate: HostRenderBudget
              (max nodes / depth / render-time) + a generic measureTree + an
@@ -409,6 +410,7 @@
              the only thing making them reachable). Owner/Admin nav role;
              opt-in via ClientConfig.ExternalContactManager. -->
         <Compile Include="Client\ExternalContactManagerUI.fs" />
+        <Compile Include="Client\ExternalContactManagerTree.fs" />
         <!-- Phase 441 — built-in notification preference centre over
              INotificationPreferenceApi; gated by ClientConfig.NotificationPreferences. -->
         <Compile Include="Client\NotificationPreferencesUI.fs" />
@@ -434,6 +436,7 @@
              IAuditViewApi. Auto-injected in non-Anonymous modes unless
              ClientConfig.Slots.AuditViewer = SlotFill.Empty. -->
         <Compile Include="Client\AuditLogUI.fs" />
+        <Compile Include="Client\AuditLogTree.fs" />
         <!-- Phase 593 - composition-inspector admin module over
              ICompositionInspectorApi. Fills the CompositionInspector shell
              slot, admitted in non-Anonymous modes. -->
@@ -476,6 +479,7 @@
              ShellSlots.fs (its slot builds the module and the tile). -->
         <Compile Include="Client\JobsAdminUI.fs" />
         <Compile Include="Client\DataSubjectRequestAdminUI.fs" />
+        <Compile Include="Client\DataSubjectRequestAdminTree.fs" />
         <!-- Phase 54e — tenant-lifecycle diagnostics admin. Surfaces the
              durable last LifecycleSummary (IPlatformTenantApi.GetLifecycleSummary)
              per scope; Platform-Admin gated like the other _sdk.* admin

@@ -45,18 +45,6 @@ let private filter (id: string) (label: string) (value: bool) (msg: Msg) : Node<
         }
     ]
 
-/// A text field that holds what is typed until the field is left, an island
-/// named by the label that wraps it.
-let private field (id: string) (label: string) (placeholder: string) (value: string) (onChange: string -> unit) =
-    TreeLowering.island id (fun () ->
-        Feliz.Html.label [
-            Feliz.prop.className "flex flex-col gap-1"
-            Feliz.prop.children [
-                Feliz.Html.span [ Feliz.prop.className "text-xs font-medium"; Feliz.prop.text label ]
-                Forms.Input.text value onChange placeholder
-            ]
-        ])
-
 /// One record of a list: a card with what the record is on the left and its
 /// actions on the right, on a two-track grid so the actions keep their width.
 let private listRow (id: string) (children: Node<'Msg> list) : Node<'Msg> =
@@ -277,7 +265,12 @@ let private offboard
         | None -> []
 
     let reason () =
-        field "offboard-reason" msgs.ReasonLabel msgs.ReasonPlaceholder state.Reason (SetOffboardReason >> dispatch)
+        TreeIslands.textField
+            "offboard-reason"
+            msgs.ReasonLabel
+            msgs.ReasonPlaceholder
+            state.Reason
+            (SetOffboardReason >> dispatch)
 
     let cancel = Nodes.Actions.secondary "offboard-cancel" msgs.Cancel CloseOffboard
 
@@ -328,7 +321,7 @@ let private offboard
                 | ExportOffboard -> Nodes.text "offboard-confirmation-export" msgs.ExportConfirmationNote
                 | PlainOffboard -> ()
                 Nodes.Layout.row "offboard-token" [
-                    field
+                    TreeIslands.textField
                         "offboard-token-field"
                         msgs.ConfirmationTokenLabel
                         msgs.ConfirmationTokenPlaceholder

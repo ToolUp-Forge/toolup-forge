@@ -175,9 +175,12 @@ let main _ =
 #endif
     let logger = ConsoleLogger.fromEnv ()
 
-    // The client opens the session-security page and the platform-users
-    // admin, so the server composes what each calls: a session registry over
-    // the blob store, and the tenant lifecycle the offboard flow drives.
+    // The client opens the session-security page, the platform-users admin,
+    // the data-subject-request admin and the external-contact admin, so the
+    // server composes what each calls: a session registry over the blob store,
+    // the tenant lifecycle the offboard flow drives, data subject requests and
+    // the contact store over the entity store it is kept in. The audit log is
+    // kept, so the audit trail has rows.
     let config =
         let fromEnv = ServerConfig.fromEnv logger ServerConfigOverrides.referenceApp
 
@@ -186,9 +189,14 @@ let main _ =
                 ModuleVisibility = SurfacingModuleVisibility
                 Notifications = InMemoryNotifications
                 TenantLifecycle = FeatureMode.Enabled
+                AuditLog = FeatureMode.Enabled
+                DataSubjectRequests =
+                    DataSubjectRequestMode.Enabled(DataSubjectRequestConfig.sync ErasurePolicy.Tombstone)
                 Stores = {
                     fromEnv.Stores with
                         SessionRegistry = BlobSessionRegistry SessionRegistryOptions.defaults
+                        EntityStore = FeatureMode.Enabled
+                        ExternalContactStore = FeatureMode.Enabled
                 }
         }
 

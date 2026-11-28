@@ -409,6 +409,34 @@ let private treeSurfaceTests =
                 with e ->
                     failwithf "state \"%s\": %s" name e.Message)
 
+        testCase "every audit-trail state passes the Strict floor as a tree" (fun () ->
+            for name, harness in TreeViewParityTests.auditStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.auditTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "every data-subject-request state passes the Strict floor as a tree" (fun () ->
+            for name, harness in TreeViewParityTests.dsrStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.dsrTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "every external-contact state passes the Strict floor as a tree" (fun () ->
+            for name, harness in TreeViewParityTests.contactsStates () do
+                try
+                    harness.AssertAccessibleView(
+                        ViewMount.mount,
+                        TreeViewParityTests.contactsTree,
+                        Accessibility.Strict
+                    )
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
         testCase "the palette's tree, its overlay an island, passes the Strict floor" (fun () ->
             let html = ViewMount.mount (Components.CommandPaletteTree.Surface paletteProps)
             let node = Accessibility.ofHtml html
@@ -501,6 +529,34 @@ let private treeSurfaceTests =
                 "platform users",
                 pageOf PlatformUsersUI.builtIn.View (TreeViewParityTests.usersLoaded ()).Model,
                 MessageCatalog.english.PlatformUsers.Heading
+            ]
+
+            for name, page, heading in pages do
+                Expect.isTrue
+                    (page.Contains "role=\"status\"" && page.Contains "aria-busy=\"true\"")
+                    (name + " shows the loading state until its tree arrives")
+
+                Expect.isFalse (page.Contains heading) (name + " draws nothing of the tree synchronously"))
+
+        testCase "the third batch's views mount their trees on demand, not at boot" (fun () ->
+            let pageOf (view: BuiltInView<'Model, 'Msg>) (model: 'Model) =
+                match view with
+                | BuiltInView.Page view ->
+                    match view model (RenderContext.create MessageCatalog.english ignore) with
+                    | PageContent.FullWidth element -> ViewMount.mount element
+                    | other -> failwithf "a full-width page, not %A" other
+                | BuiltInView.Pages _ -> failwith "one page"
+
+            let pages = [
+                "the audit trail",
+                pageOf AuditLogUI.builtIn.View (TreeViewParityTests.auditLoaded ()).Model,
+                MessageCatalog.english.AuditLog.Heading
+                "data subject requests",
+                pageOf DataSubjectRequestAdminUI.builtIn.View (TreeViewParityTests.dsrPreviewed ()).Model,
+                MessageCatalog.english.DataSubjectRequestAdmin.PreviewPanelTitle
+                "external contacts",
+                pageOf ExternalContactManagerUI.builtIn.View (TreeViewParityTests.contactsLoaded ()).Model,
+                MessageCatalog.english.ExternalContact.Heading
             ]
 
             for name, page, heading in pages do
