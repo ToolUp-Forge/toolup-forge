@@ -1849,7 +1849,7 @@ let startupTests =
             services
                 .AddSingleton<ILogger>(Logger.silent)
                 .AddSingleton<IEventStore>(events)
-                .AddSingleton<IFactStore>(BlobFactStore.create (InMemoryBlobStorage()) events)
+                .AddSingleton<BlobStorage.IBlobStorage>(InMemoryBlobStorage())
                 .AddSingleton<INotificationChannel>(
                     NotificationChannel.InMemoryNotificationChannel(None) :> INotificationChannel
                 )
@@ -1866,11 +1866,20 @@ let startupTests =
                 Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
                     configured
 
+            // The coherence check's own start step, among those the fact
+            // store composes beside it.
             let hosted =
-                Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<
-                    Microsoft.Extensions.Hosting.IHostedService
-                 >
-                    provider
+                configured
+                |> Seq.choose (fun d ->
+                    match d.ImplementationInstance with
+                    | :? ToolUp.Platform.Compose.PendingAdmission as pending when
+                        pending.Record.Id = ToolUp.Platform.Compose.BackgroundUnit.id "fact-coherence-check-scheduling"
+                        ->
+                        Some(
+                            pending.Hosted.ImplementationFactory.Invoke provider
+                            :?> Microsoft.Extensions.Hosting.IHostedService
+                        )
+                    | _ -> None)
                 |> List.ofSeq
 
             Expect.equal hosted.Length 1 "one start step"

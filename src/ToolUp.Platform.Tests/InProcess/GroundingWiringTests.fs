@@ -1,5 +1,9 @@
 module ToolUp.Platform.Tests.InProcess.GroundingWiringTests
 
+// One test holds an obsolete setter to the field it names, for the
+// deprecation window; nothing else here calls an obsolete member.
+#nowarn "44"
+
 open System
 open System.Collections.Concurrent
 open Expecto
@@ -17,7 +21,7 @@ open ToolUp.Platform.Compose
 
 // ─── Grounding-plane wiring follow-ups ───────────────────────────────
 //
-// Covers the three post-batch tidy-ups: FactsCompose.withFactStore
+// Covers the three post-batch tidy-ups: FactsCompose.withOptions
 // (config-driven IFactStore DI registration), FactStoreEvidenceSource
 // (the IFactStore -> IFactEvidenceSource adapter), and the grounding
 // registrations folded into the ConfigDriftDetector snapshot.
@@ -69,12 +73,161 @@ let private silentLogger =
         member _.Error(_, _) = ()
     }
 
+// ─── FactsComposeOptions: one record, refused once ──────────────────
+
+let private enabledApp () = {
+    ServerApp.empty with
+        Config = {
+            ServerConfig.defaults with
+                Stores = {
+                    ServerConfig.defaults.Stores with
+                        FactStore = FeatureMode.Enabled
+                }
+        }
+}
+
+let private fieldsOf (refusals: CompositionRefusal list) =
+    refusals
+    |> List.map (fun refusal ->
+        match refusal with
+        | CompositionRefusal.MissingDependency(field, _, _)
+        | CompositionRefusal.InvalidDeclaration(field, _)
+        | CompositionRefusal.UnsupportedImplementation(field, _, _) -> field)
+
+let private noRuns: string -> string list = fun _ -> []
+
+let private optionsTests =
+    testList "FactsComposeOptions — one record, refused once" [
+
+        test "the defaults are refused for nothing, and compose the store alone" {
+            Expect.isEmpty (FactsComposeOptions.refusals FactsComposeOptions.defaults) "nothing to refuse"
+
+            let app = FactsCompose.withOptions FactsComposeOptions.defaults (enabledApp ())
+
+            Expect.equal
+                (app.AITools |> List.map (fun (d, _) -> d.Name))
+                (NarrativeGrounding.factTools |> List.map (fun (d, _) -> d.Name))
+                "the fact tools, and nothing on top of them"
+
+            Expect.isEmpty app.FactTableBindings "no writer, no table bound"
+        }
+
+        test "a trigger with no table writer is refused by its field; a writer from either field admits it" {
+            let delivery = {
+                FactsComposeOptions.defaults with
+                    DeliveryTrigger = Some noRuns
+            }
+
+            Expect.equal
+                (fieldsOf (FactsComposeOptions.refusals delivery))
+                [ "FactsComposeOptions.DeliveryTrigger" ]
+                "the delivery trigger names itself"
+
+            Expect.isEmpty
+                (FactsComposeOptions.refusals { delivery with FactTableWriter = true })
+                "the default writer admits it"
+
+            Expect.isEmpty
+                (FactsComposeOptions.refusals {
+                    delivery with
+                        DelegateFacts = [ "sku-sales" ]
+                })
+                "the delegate writer admits it"
+        }
+
+        test "a malformed declaration is refused by its field" {
+            let visibility = {
+                FactsComposeOptions.defaults with
+                    TeamOutputVisibility = Some(TeamOutputVisibilityDeclaration.create TeamAdmins [ TeamVisible ])
+            }
+
+            Expect.equal
+                (fieldsOf (FactsComposeOptions.refusals visibility))
+                [ "FactsComposeOptions.TeamOutputVisibility" ]
+                "a default outside the allowed set"
+        }
+
+        test "withOptions refuses the whole record once, before anything composes, naming the first field at fault" {
+            let contradictory = {
+                FactsComposeOptions.defaults with
+                    DeliveryTrigger = Some noRuns
+                    TeamOutputVisibility = Some(TeamOutputVisibilityDeclaration.create TeamAdmins [])
+            }
+
+            Expect.equal
+                (fieldsOf (FactsComposeOptions.refusals contradictory))
+                [
+                    "FactsComposeOptions.TeamOutputVisibility"
+                    "FactsComposeOptions.DeliveryTrigger"
+                ]
+                "every refusal, in the order they are checked"
+
+            match
+                (try
+                    FactsCompose.withOptions contradictory (enabledApp ()) |> ignore
+                    None
+                 with CompositionRefused refusal ->
+                     Some refusal)
+            with
+            | Some(CompositionRefusal.InvalidDeclaration(field, _)) ->
+                Expect.equal field "FactsComposeOptions.TeamOutputVisibility" "the first refusal is raised"
+            | other -> failtestf "expected one typed refusal, got %A" other
+
+            Expect.isTrue
+                (Object.ReferenceEquals(FactsCompose.withOptions contradictory ServerApp.empty, ServerApp.empty))
+                "a deployment without the fact store composes nothing, and so refuses nothing (GP 11)"
+        }
+
+        test "a writer an earlier withOptions composed admits a later trigger, and the store composes once" {
+            let first =
+                FactsCompose.withOptions
+                    {
+                        FactsComposeOptions.defaults with
+                            FactTableWriter = true
+                    }
+                    (enabledApp ())
+
+            let second =
+                FactsCompose.withOptions
+                    {
+                        FactsComposeOptions.defaults with
+                            DeliveryTrigger = Some noRuns
+                    }
+                    first
+
+            Expect.equal second.AITools.Length first.AITools.Length "the store's tools are declared once"
+
+            Expect.equal second.FactTableBindings first.FactTableBindings "the writer is bound once"
+        }
+
+        test "an obsolete setter is the one field it names" {
+            let viaSetter = FactsCompose.withFactTableWriter (enabledApp ())
+
+            let viaRecord =
+                FactsCompose.withOptions
+                    {
+                        FactsComposeOptions.defaults with
+                            FactTableWriter = true
+                    }
+                    (enabledApp ())
+
+            Expect.equal viaSetter.FactTableBindings viaRecord.FactTableBindings "the same binding"
+
+            Expect.equal
+                (viaSetter.AITools |> List.map (fun (d, _) -> d.Name))
+                (viaRecord.AITools |> List.map (fun (d, _) -> d.Name))
+                "the same tools"
+
+            Expect.equal viaSetter.Contributions.Length viaRecord.Contributions.Length "the same contributions"
+        }
+    ]
+
 let tests =
     testList "Grounding-plane wiring (tidy-ups)" [
 
-        // ─── FactsCompose.withFactStore (item 1) ──────────────────────
+        // ─── FactsCompose.withOptions (item 1) ────────────────────────
 
-        test "withFactStore registers IFactStore + IFactEvidenceSource when FeatureMode.Enabled" {
+        test "withOptions registers IFactStore + IFactEvidenceSource when FeatureMode.Enabled" {
             let app =
                 {
                     ServerApp.empty with
@@ -105,9 +258,9 @@ let tests =
             Expect.isFalse (isNull (box (sp.GetService<IFactEvidenceSource>()))) "IFactEvidenceSource resolves from DI"
         }
 
-        test "withFactStore is a no-op under FeatureMode.Disabled (byte-identical)" {
+        test "withOptions is a no-op under FeatureMode.Disabled (byte-identical)" {
             let before = ServerApp.empty
-            let after = before |> (FactsCompose.withOptions FactsComposeOptions.defaults)
+            let after = before |> FactsCompose.withOptions FactsComposeOptions.defaults
             Expect.isTrue (ServerApp.serviceConfig after).IsNone "no service registration under FeatureMode.Disabled"
             Expect.isTrue (Object.ReferenceEquals(after, before)) "the app is returned unchanged"
         }
@@ -191,4 +344,6 @@ let tests =
 
             Expect.isEmpty drifts "no drift when nothing changed"
         }
+
+        optionsTests
     ]

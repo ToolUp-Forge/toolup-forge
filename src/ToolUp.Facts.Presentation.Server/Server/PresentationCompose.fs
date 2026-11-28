@@ -50,11 +50,7 @@ module PresentationCompose =
                 |> Set.ofList
 
             let app =
-                app
-                |> FactsCompose.withOptions {
-                    FactsComposeOptions.defaults with
-                        WithholdingSurfaces = [ "the fact render tools", FactToolResult ]
-                }
+                app |> FactsCompose.addWithholdingSurface "the fact render tools" FactToolResult
 
             match
                 RenderTools.tools
@@ -103,7 +99,7 @@ module PresentationCompose =
     /// caller's gate) and the per-session `PageResolutionCache`, and arms the
     /// fact-table change signal the cache is invalidated by. Only under
     /// `FeatureMode.Enabled`; under `FeatureMode.Disabled` the app is returned unchanged
-    /// and nothing is registered. Call it after `FactsCompose.withFactStore`,
+    /// and nothing is registered. Call it after `FactsCompose.withOptions`,
     /// which composes the signal. Idempotent. **Adds** its registrations and
     /// one handler: the resolution route
     /// (`PageRequestRoute.Path`, `POST`), answering a request set through the
@@ -112,7 +108,7 @@ module PresentationCompose =
     ///
     /// ```fsharp skip=fragment
     /// ServerApp.empty
-    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withOptions FactsComposeOptions.defaults
     /// |> PresentationCompose.withPageRequests
     /// |> ServerApp.run
     /// ```
@@ -125,10 +121,7 @@ module PresentationCompose =
                 app with
                     Extensions.Handlers = app.Extensions.Handlers @ [ PageRequestRoute.handler ]
             }
-            |> FactsCompose.withOptions {
-                FactsComposeOptions.defaults with
-                    WithholdingSurfaces = [ "the page requests", FactBrowse ]
-            }
+            |> FactsCompose.addWithholdingSurface "the page requests" FactBrowse
             |> ServerApp.addContribution (Contribution.service owner PageRequestResolvers.register)
 
     /// The layout tools' runtime is contributed under its own slot, so that

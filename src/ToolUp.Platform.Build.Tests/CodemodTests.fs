@@ -980,9 +980,9 @@ let tests =
                         "    |> FactsCompose.withFactTableWriter"
                         "    |> FactsCompose.withDelegateFacts [ \"sku-sales\" ]"
                         "    |> FactsCompose.withTeamOutputVisibility TeamVisible [ TeamVisible; TeamAdmins ]"
-                        "    |> FactsCompose.withWithholdingSurface \"the page requests\" FactBrowse"
                         "    |> FactsCompose.withSpecTool totals"
                         "    |> FactsCompose.withSpecTool shares"
+                        "    |> FactsCompose.withWithholdingSurface \"the page requests\" FactBrowse"
                         "    |> ServerApp.run"
                         ""
                     ]
@@ -995,13 +995,18 @@ let tests =
                         "let app ="
                         "    ServerApp.empty"
                         "    |> ServerApp.withStorage blob"
-                        "    |> FactsCompose.withOptions { FactsComposeOptions.defaults with FactTableWriter = true; DelegateFacts = [ \"sku-sales\" ]; TeamOutputVisibility = Some(TeamOutputVisibilityDeclaration.create TeamVisible [ TeamVisible; TeamAdmins ]); WithholdingSurfaces = [ \"the page requests\", FactBrowse ]; SpecTools = [ FactsComposeOptions.specTool totals ] @ [ FactsComposeOptions.specTool shares ] }"
+                        "    |> FactsCompose.withOptions { FactsComposeOptions.defaults with FactTableWriter = true; DelegateFacts = [ \"sku-sales\" ]; TeamOutputVisibility = Some(TeamOutputVisibilityDeclaration.create TeamVisible [ TeamVisible; TeamAdmins ]); SpecTools = [ FactsComposeOptions.specTool totals ] @ [ FactsComposeOptions.specTool shares ] }"
+                        "    |> FactsCompose.addWithholdingSurface \"the page requests\" FactBrowse"
                         "    |> ServerApp.run"
                         ""
                     ])
-                    "seven knobs, one record; a list field appends"
+                    "six knobs, one record, a list field appending; the withholding surface keeps its builder seam, renamed"
 
-                Expect.equal (rewrites |> List.map (fun r -> r.RuleId, r.Line)) [ "1159-knob-chain", 4 ] "one rewrite"
+                Expect.equal
+                    (rewrites |> List.map (fun r -> r.RuleId, r.Line))
+                    [ "1159-knob-chain", 4; "1159-knob-value", 10 ]
+                    "the chain, and the rename"
+
                 Expect.isEmpty (findChains rewritten) "nothing left to review"
 
                 let again, none = rewriteChains rewritten

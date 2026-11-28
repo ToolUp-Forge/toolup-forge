@@ -3316,14 +3316,6 @@ module Codemod =
             "withToleranceTriggers", ListOf "ToleranceTriggers"
             "withDelegateFacts", ListOf "DelegateFacts"
             "withSpecTool", ItemOf("SpecTools", (fun args -> Some("FactsComposeOptions.specTool " + args)))
-            "withWithholdingSurface",
-            ItemOf(
-                "WithholdingSurfaces",
-                fun args ->
-                    match topLevelArgs args with
-                    | Some [ name; surface ] -> Some(name + ", " + surface)
-                    | _ -> None
-            )
         ]
 
     /// The record a knob chain states, or `None` when the chain cannot be
@@ -3385,6 +3377,11 @@ module Codemod =
             @"^(?<indent>\s*)\|>\s*FactsCompose\.(?<knob>with(?!Options\b)\w+)\b(?<args>.*)$",
             RegexOptions.CultureInvariant
         )
+
+    /// The knob that only renamed: it adds, so it is `addWithholdingSurface`,
+    /// and a builder's call keeps composing no store.
+    let private knobRenamed =
+        Regex(@"\bFactsCompose\.withWithholdingSurface\b", RegexOptions.CultureInvariant)
 
     let private knobValue =
         Regex(
@@ -3471,13 +3468,26 @@ module Codemod =
             | None ->
                 let line = segments[i]
 
-                if not (line.TrimStart().StartsWith "//") && knobValue.IsMatch line then
-                    let after =
-                        knobValue.Replace(
+                if
+                    not (line.TrimStart().StartsWith "//")
+                    && (knobValue.IsMatch line || knobRenamed.IsMatch line)
+                then
+                    let renamed =
+                        knobRenamed.Replace(
                             line,
                             fun m ->
+                                if inStringAt line m.Index then
+                                    m.Value
+                                else
+                                    "FactsCompose.addWithholdingSurface"
+                        )
+
+                    let after =
+                        knobValue.Replace(
+                            renamed,
+                            fun m ->
                                 match optionsRecord [ m.Groups["knob"].Value, "" ] with
-                                | Some record when not (inStringAt line m.Index) ->
+                                | Some record when not (inStringAt renamed m.Index) ->
                                     "(FactsCompose.withOptions " + record + ")"
                                 | _ -> m.Value
                         )

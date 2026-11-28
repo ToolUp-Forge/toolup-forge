@@ -125,7 +125,7 @@ module BlobFactStoreScale =
         | Some _ -> ConfigValidation.ValidationResult.Ok
 
 /// Which `IFactStore` implementation the composition registered — a DI
-/// marker `withFactStore` sets to the blob default and
+/// marker the composed store sets to the blob default and
 /// `withFactStoreImplementation` replaces, so the scale guard can tell the
 /// blob store from a replacement even when a decorator wraps it.
 type internal FactStoreBackend = { Backend: string }
@@ -507,7 +507,7 @@ module FactsCompose =
                     | _ -> gate)
             )
             // Phase 1125 — the held form of whichever gate is composed last
-            // (`withTeamOutputVisibility` replaces the gate above), resolved
+            // (`TeamOutputVisibility` replaces the gate above), resolved
             // through DI rather than registered beside it, so the two can
             // never disagree: the platform gate is its own held form, and a
             // decorating gate is judged through its id form, never bypassed.
@@ -710,7 +710,7 @@ module FactsCompose =
     //      `RecomputePolicy`, so a fact deployment that declares none pays
     //      one boolean test per save.
     //
-    // A `FeatureMode.Disabled` deployment reaches none of this — `withFactStore`
+    // A `FeatureMode.Disabled` deployment reaches none of this — `withOptions`
     // returns before `registerFactStore` is ever composed into
     // `ServiceConfig` (GP 13).
 
@@ -1189,10 +1189,10 @@ module FactsCompose =
                         CoverageNarrative.decorate (resolveInner sp) sp options (sp.GetRequiredService<ILogger>()))
                 ))
 
-    // ─── Phase 563 — fact-base coherence checking (opt-in) ────────────
+    // ─── Fact-base coherence checking (opt-in) ────────────
     //
     // A separate, explicit opt-in on top of the fact store: the standing
-    // self-audit is NOT folded into `withFactStore`, so a deployment that
+    // self-audit is NOT folded into the store, so a deployment that
     // only wants the store is byte-for-byte unchanged (GP 11 / GP 13). The
     // registrations are `Contribution.service` values under the companion's id:
     //
@@ -1204,7 +1204,7 @@ module FactsCompose =
     //   * an `IHealthCheck` that re-scans the configured scope on each
     //     probe and reports `Degraded` when any finding stands.
 
-    // Phase 889 — the store a coherence sweep reads. When delegate facts are
+    // The store a coherence sweep reads. When delegate facts are
     // composed it is the delegated store itself, so the sweep takes the
     // delegated path (`CoherenceCheck.findings`) whatever decorates it above;
     // the sweep only reads, so bypassing an assertion-hook decorator costs
@@ -1488,7 +1488,7 @@ module FactsCompose =
             s.RemoveAll<FactStoreBackend>() |> ignore
             s.AddSingleton<FactStoreBackend>({ Backend = replacement.Backend }))
 
-    // ─── Phase 889 — delegate facts (opt-in) ──────────────────────────
+    // ─── Delegate facts (opt-in) ──────────────────────────
     //
     // A declared fact table can hold its metric populations as delegates:
     // the table is kept as rows (one image per committed run), the fact tier
@@ -1590,7 +1590,7 @@ module FactsCompose =
                 app
             |> contribute (registerDelegateFacts tableIds)
 
-    // ─── Phase 896 — team output visibility (opt-in) ──────────────────
+    // ─── Team output visibility (opt-in) ──────────────────
     //
     // Module permission governs USE; the team's policy governs who sees the
     // OUTPUT modules published. This knob arms the second axis at the one
@@ -1600,12 +1600,12 @@ module FactsCompose =
     //
     // The team's level is read through `ITeamOutputVisibilitySource`, whose
     // implementation lives with the per-team policy record that also holds
-    // the team's conversation level — at the platform tier since Phase
-    // 936, and registered here, so a deployment without the AI assistant
+    // the team's conversation level — at the platform tier, and
+    // registered here, so a deployment without the AI assistant
     // honours each team's choice. A deployment that registers its own
     // source keeps it; with none at all every team sits at the default.
     //
-    // Self-contained on purpose: the gate registered by `withFactStore` is
+    // Self-contained on purpose: the gate the store registers is
     // decorated in place (`FactDisclosureGate.WithViewerAwareness`), so the
     // registration above is untouched and every facet it composed (taint,
     // purpose, budgets) is kept.
@@ -1730,7 +1730,7 @@ module FactsCompose =
                 TeamOutputVisibility = Some settings
         }
         |> contribute register
-    // ─── Phase 897 — team-to-team fact publication (opt-in) ───────────
+    // ─── Team-to-team fact publication (opt-in) ───────────
     //
     // A consolidated view is built by PUBLISHING, never by reading across
     // teams. This knob registers the publication service — grants, the two
@@ -1741,8 +1741,8 @@ module FactsCompose =
     //
     // Self-contained on purpose: it decorates nothing and replaces nothing,
     // so the store, the gate, the writer and every facet composed above are
-    // untouched. A deployment that does not call it is unchanged, and one
-    // that calls it but records no grant writes nothing anywhere.
+    // untouched. A deployment that does not set it is unchanged, and one
+    // that sets it but records no grant writes nothing anywhere.
 
     /// Team-to-team fact publication: the publication service (grants, the
     /// two consents, the one cross-scope write seam) and the publication and
@@ -1756,7 +1756,7 @@ module FactsCompose =
                 Func<IServiceProvider, IFactPublication>(fun sp ->
                     let teams = tryService<ToolUp.Platform.Config.TeamManagement.ITeamStore> sp
 
-                    // Phase 935 — grants persist when the platform's
+                    // Grants persist when the platform's
                     // scope carrier is composed (it is, beside the
                     // DataProtection key ring, in every composition).
                     let create =
@@ -1817,6 +1817,16 @@ module FactsCompose =
 
         app |> contribute register
     // ─── The options record, composed once ───────────────────────────
+
+    /// **Adds** a composed withholding surface for the startup disclosure
+    /// finding (`DisclosureReachFinding`): `name` is what the finding calls it
+    /// and `surface` the egress door it asks the gate at. The seam a builder
+    /// that arms a surface calls; it composes no store, and a deployment
+    /// composing none is never told anything. A root states its own as
+    /// `FactsComposeOptions.WithholdingSurfaces`. Idempotent per name; a
+    /// `FeatureMode.Disabled` deployment is unchanged.
+    let addWithholdingSurface (name: string) (surface: FactEgressSurface) (app: ServerApp) : ServerApp =
+        WithholdingSurfaces.contribute name surface app
 
     /// The tool names an app declares, with the fact tools the store declares.
     let private declaredToolNames (app: ServerApp) : Set<string> =
@@ -1908,27 +1918,27 @@ module FactsCompose =
                 |> applyIf options.FactTables applyFactTables
                 |> fun app ->
                     options.WithholdingSurfaces
-                    |> List.fold (fun app (name, surface) -> WithholdingSurfaces.contribute name surface app) app
+                    |> List.fold (fun app (name, surface) -> addWithholdingSurface name surface app) app
                 |> applyIf options.GroundingEnvelopeSeal applyGroundingEnvelopeSeal
 
     // ─── The setters the options record replaced ─────────────────────
     //
-    // Each composes the one field it names through `withOptions`, and keeps
-    // compiling for the deprecation window (docs/platform/deprecation-policy.md).
+    // Each composes the one field it names through `withOptions` (the
+    // withholding surface, which only renamed, through `addWithholdingSurface`),
+    // and keeps compiling for the deprecation window
+    // (docs/platform/deprecation-policy.md).
 
+    /// Composes the fact store alone: `withOptions FactsComposeOptions.defaults`.
     [<Obsolete("Use FactsCompose.withOptions FactsComposeOptions.defaults. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withFactStore (app: ServerApp) : ServerApp =
         withOptions FactsComposeOptions.defaults app
 
-    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.WithholdingSurfaces. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    /// Adds a withholding surface: `addWithholdingSurface`.
+    [<Obsolete("Use FactsCompose.addWithholdingSurface from a builder, or FactsComposeOptions.WithholdingSurfaces in a root's withOptions. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withWithholdingSurface (name: string) (surface: FactEgressSurface) (app: ServerApp) : ServerApp =
-        withOptions
-            {
-                FactsComposeOptions.defaults with
-                    WithholdingSurfaces = [ name, surface ]
-            }
-            app
+        addWithholdingSurface name surface app
 
+    /// Composes the one field it sets, `FactsComposeOptions.NarrativeCalculations`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.NarrativeCalculations. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withNarrativeCalculations (calculations: NarrativeCalculations) (app: ServerApp) : ServerApp =
         withOptions
@@ -1938,6 +1948,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.PipelineProfile`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.PipelineProfile. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withPipelineProfile (profile: RegisteredPipelineProfile) (app: ServerApp) : ServerApp =
         withOptions
@@ -1947,6 +1958,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.SpecTools`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.SpecTools (FactsComposeOptions.specTool). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withSpecTool (tool: SpecTool<'Spec, 'Refusal, 'Result>) (app: ServerApp) : ServerApp =
         withOptions
@@ -1956,6 +1968,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.Methods`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.Methods. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withMethods (profile: MethodProfile) (app: ServerApp) : ServerApp =
         withOptions
@@ -1965,6 +1978,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.DatasetModels`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.DatasetModels (DatasetModelsDeclaration.create). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withDatasetModels
         (resolver: DisclosurePolicyResolver)
@@ -1978,6 +1992,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.FactTables`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.FactTables. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withFactTablesOptions (options: FactTablesOptions) (app: ServerApp) : ServerApp =
         withOptions
@@ -1987,6 +2002,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.DisclosurePurposes`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.DisclosurePurposes. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withDisclosurePurposes (config: DisclosurePurposeConfig) (app: ServerApp) : ServerApp =
         withOptions
@@ -1996,6 +2012,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.DeclassificationBudgets`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.DeclassificationBudgets. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withDeclassificationBudgetConfig (config: DeclassificationBudgetConfig) (app: ServerApp) : ServerApp =
         withOptions
@@ -2005,6 +2022,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.DeclassificationBudgets`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.DeclassificationBudgets (DeclassificationBudgetConfig.create). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withDeclassificationBudgets
         (ledger: IPrivacyBudgetLedger)
@@ -2018,6 +2036,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.DisclosureFanOut`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.DisclosureFanOut. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withDisclosureFanOut (maxConcurrentReads: int) (app: ServerApp) : ServerApp =
         withOptions
@@ -2027,6 +2046,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.FactImport`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.FactImport. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withFactImport (anchors: PeerTrustAnchor list) (app: ServerApp) : ServerApp =
         withOptions
@@ -2036,6 +2056,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.GroundingEnvelopeSeal`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.GroundingEnvelopeSeal (GroundingEnvelopeSealDeclaration.create). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withGroundingEnvelopeSeal
         (profile: CompositionProfile)
@@ -2049,6 +2070,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.CoverageNarratives`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.CoverageNarratives. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withCoverageNarratives (options: CoverageNarrative.CoverageNarrativeOptions) (app: ServerApp) : ServerApp =
         withOptions
@@ -2058,6 +2080,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.CoherenceChecks`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.CoherenceChecks (CoherenceCheckSchedule.create). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withCoherenceChecksConfig
         (config: CoherenceConfig)
@@ -2072,6 +2095,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.CoherenceChecks`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.CoherenceChecks (CoherenceCheckSchedule.forPrincipal). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withCoherenceChecks (cadence: Trigger) (principal: DeclaredPrincipal) (app: ServerApp) : ServerApp =
         withOptions
@@ -2081,6 +2105,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.FactTableWriter`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.FactTableWriter. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withFactTableWriter (app: ServerApp) : ServerApp =
         withOptions
@@ -2090,6 +2115,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.DeliveryTrigger`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.DeliveryTrigger. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withDeliveryTrigger (runsFor: string -> string list) (app: ServerApp) : ServerApp =
         withOptions
@@ -2099,6 +2125,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.ToleranceTriggers`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.ToleranceTriggers. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withToleranceTriggers (triggers: ToleranceTrigger list) (app: ServerApp) : ServerApp =
         withOptions
@@ -2108,6 +2135,7 @@ module FactsCompose =
             }
             app
 
+    /// Turns the fact store on and composes it with the default writer: `EnableStore` and `FactTableWriter`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.EnableStore and FactTableWriter. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withFactTier (app: ServerApp) : ServerApp =
         withOptions
@@ -2118,6 +2146,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.QuestionCompiler`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.QuestionCompiler. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withQuestionCompiler (compiler: QuestionCompiler) (app: ServerApp) : ServerApp =
         withOptions
@@ -2127,6 +2156,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.StoreImplementation`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.StoreImplementation (FactStoreReplacement.create). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withFactStoreImplementation
         (backend: string)
@@ -2140,6 +2170,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.DelegateFacts`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.DelegateFacts. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withDelegateFacts (tableIds: string list) (app: ServerApp) : ServerApp =
         withOptions
@@ -2149,6 +2180,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.TeamOutputVisibility`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.TeamOutputVisibility (TeamOutputVisibilityDeclaration.create). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withTeamOutputVisibility
         (defaultLevel: TeamVisibilityLevel)
@@ -2162,6 +2194,7 @@ module FactsCompose =
             }
             app
 
+    /// Composes the one field it sets, `FactsComposeOptions.FactPublication`.
     [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.FactPublication. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
     let withFactPublication (config: FactPublicationConfig) (app: ServerApp) : ServerApp =
         withOptions
