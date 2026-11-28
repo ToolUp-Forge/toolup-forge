@@ -14,6 +14,8 @@ open HelloWorld.Module.Server
 open ToolUp.Platform.Infra.Metrics
 open ToolUp.Platform.Config
 open ToolUp.Platform.Compose
+open ToolUp.Platform.FileProcessor
+open ToolUp.Platform.Jobs
 
 // HelloWorld composition root.
 // An authenticated deployment of the canonical `Surfaces.individual` shape:
@@ -132,6 +134,10 @@ type ConsoleMetricsSink() =
             printfn "[metrics/gauge] %s=%g %A" name value tags
 
 #if DEBUG
+/// The bootstrap team the development identity owns.
+[<Literal>]
+let private devIdentityTeam = "helloworld"
+
 /// The development identity: the team surface, with the header identity
 /// `dev-admin` made the platform admin and the owner of a bootstrap team.
 /// The header-trust provider is the SDK's dev default (TOOLUP_AUTH_MODE
@@ -150,7 +156,7 @@ let private devIdentityProfile: ConfigKeys.ConfigProfile = {
         ConfigKeys.Names.acceptHeaderAuthInAuthMode, "true"
         ConfigKeys.Names.initialPlatformAdmin, "dev-admin"
         ConfigKeys.Names.initialTeamName, "Hello World team"
-        ConfigKeys.Names.initialTeamId, "helloworld"
+        ConfigKeys.Names.initialTeamId, devIdentityTeam
         // A loopback developer machine: no proxy in front, no secret worth
         // keeping, and a notification stream with no JWT to carry. Each is
         // the acknowledgement the preflight names, stated here rather than
@@ -167,6 +173,44 @@ let private devIdentitySelected () =
     |> Option.exists (fun selected -> selected.Name = devIdentityProfile.Name)
 #endif
 
+#if DEBUG
+/// Under the development identity, one row on each of the jobs and
+/// data-migration admin pages: a scheduled job in the bootstrap team's scope
+/// (it succeeds, once a day, so a check sees it run only when asked) and a
+/// data type at its initial schema version (a pass over it finds nothing to
+/// upgrade). The data type claims no file, so no upload ever reaches it.
+let private withAdminFixtures (m: ServerModule) : ServerModule =
+    if devIdentitySelected () then
+        let greeting: DataType = {
+            Info = {
+                Id = "HelloWorldGreeting"
+                DisplayName = "Hello World greeting"
+                Schema = None
+            }
+            Id = "HelloWorldGreeting"
+            SchemaVersion = DataTypes.initialSchemaVersion
+            Migrations = []
+            Detect = fun _ -> async { return false }
+            Process = fun _ -> async { return failwith "the greeting data type claims no file" }
+        }
+
+        let greet =
+            { new IJobHandler with
+                member _.Execute _ = async { return JobResult.Success }
+            }
+
+        m
+        |> ServerModule.withDataTypes [ greeting ]
+        |> ServerModule.withScheduledJob (
+            ScheduledJobDeclaration.create "helloworld-greeting" greet (CronTrigger "0 3 * * *")
+            |> ScheduledJobDeclaration.withScopes [ devIdentityTeam ]
+        )
+    else
+        m
+#else
+let private withAdminFixtures (m: ServerModule) : ServerModule = m
+#endif
+
 [<EntryPoint>]
 let main _ =
 #if DEBUG
@@ -180,7 +224,10 @@ let main _ =
     // server composes what each calls: a session registry over the blob store,
     // the tenant lifecycle the offboard flow drives, data subject requests and
     // the contact store over the entity store it is kept in. The audit log is
-    // kept, so the audit trail has rows.
+    // kept, so the audit trail has rows. It opens the background-jobs and
+    // data-migration admins too, so the server composes the in-process job
+    // scheduler and the data-migration routes (the trigger only: no startup
+    // sweep).
     let config =
         let fromEnv = ServerConfig.fromEnv logger ServerConfigOverrides.referenceApp
 
@@ -190,6 +237,8 @@ let main _ =
                 Notifications = InMemoryNotifications
                 TenantLifecycle = FeatureMode.Enabled
                 AuditLog = FeatureMode.Enabled
+                JobScheduler = InProcessJobScheduler
+                DataMigrations = ManualDataMigrations
                 DataSubjectRequests =
                     DataSubjectRequestMode.Enabled(DataSubjectRequestConfig.sync ErasurePolicy.Tombstone)
                 Stores = {
@@ -209,6 +258,7 @@ let main _ =
     let helloWorldModule =
         ServerModule.create "HelloWorld"
         |> ServerModule.withHandlers [ HelloWorldRoutes.routes ]
+        |> withAdminFixtures
 
     // The team surface refuses to start on the compose default's implicit
     // header-trust provider; under the development identity it is named

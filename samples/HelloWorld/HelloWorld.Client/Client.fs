@@ -52,6 +52,8 @@ let private config =
                     SessionSecurity = SlotFill.Default
                     DataSubjectRequestAdmin = SlotFill.Default
                     ExternalContactManager = SlotFill.Default
+                    JobsAdmin = SlotFill.Default
+                    MigrationAdmin = SlotFill.Default
             }
             Chrome = {
                 fromBundle.Chrome with

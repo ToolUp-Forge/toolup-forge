@@ -112,6 +112,10 @@ let private attemptItem (id: string) (msgs: JobsAdminMessages) (job: JobDefiniti
         Nodes.Layout.row (Nodes.Ids.child id "line") [
             Nodes.text (Nodes.Ids.child id "number") (msgs.AttemptNumber run.Attempt)
             attemptBadge (Nodes.Ids.child id "reading") msgs (attemptReading job run)
+        ]
+        // When it started and how long it took, on a line of their own: the
+        // job cell is a quarter of the table, too narrow for one line of all four.
+        Nodes.Layout.row (Nodes.Ids.child id "timing") [
             Nodes.text (Nodes.Ids.child id "started") (msgs.AttemptStarted(formatTime run.StartedAt))
             match attemptDuration run with
             | Some span -> Nodes.text (Nodes.Ids.child id "took") (msgs.AttemptTook(formatDuration span))

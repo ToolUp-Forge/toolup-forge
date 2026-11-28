@@ -163,7 +163,7 @@ let private degradedCard =
                                         (Nodes.text (Nodes.Ids.child id "name") d.Capability)
                                         (Nodes.text
                                             (Nodes.Ids.child id "since")
-                                            (msgs.DegradedSince(string d.DegradedSince)))
+                                            (msgs.DegradedSince(universal d.DegradedSince.UtcDateTime)))
                                     definitions (Nodes.Ids.child id "detail") [
                                         msgs.DegradedReason, d.Reason
                                         msgs.DegradedImpact, d.Impact
@@ -242,7 +242,7 @@ let private denialCard =
                                                     (Nodes.text
                                                         (Nodes.Ids.child id "where")
                                                         $"{d.ToolName} · {d.ActiveModule}")
-                                                    (Nodes.text (Nodes.Ids.child id "at") (string d.OccurredAt))
+                                                    (Nodes.text (Nodes.Ids.child id "at") (universal d.OccurredAt))
                                                 Nodes.text (Nodes.Ids.child id "reason") d.Reason
                                             ]
                                     }
@@ -359,7 +359,9 @@ let private liveTab (msgs: HealthMonitorMessages) (model: Model) : Node<Msg> =
         | Remote.Reloading _ -> Nodes.text "health-live-loading" msgs.Loading
         | Remote.Failed error -> failed "health-live-failed" error
         | Remote.Loaded snapshot ->
-            Nodes.text "health-live-generated" (msgs.GeneratedAt (string snapshot.GeneratedAt) snapshot.Probes.Length)
+            Nodes.text
+                "health-live-generated"
+                (msgs.GeneratedAt (universal snapshot.GeneratedAt) snapshot.Probes.Length)
 
             if snapshot.Probes.IsEmpty then
                 Nodes.text "health-probes-none" msgs.NoProbes

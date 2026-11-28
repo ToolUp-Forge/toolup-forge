@@ -91,37 +91,37 @@ let private panel (context: PanelContext) : Node<Msg> =
             Children = [
                 split
                     (Nodes.Ids.child id "head")
-                    (Nodes.Layout.row (Nodes.Ids.child id "title") [
-                        Nodes.Actions.button
-                            (Nodes.Ids.child id "toggle")
-                            ButtonVariant.Tertiary
-                            context.Section
-                            false
-                            (ToggleCollapsed context.Section)
-                        |> Node.withExtraAttribute "aria-expanded" (if context.Collapsed then "false" else "true")
-                        severity
-                    ])
+                    (Nodes.Actions.button
+                        (Nodes.Ids.child id "toggle")
+                        ButtonVariant.Tertiary
+                        context.Section
+                        false
+                        (ToggleCollapsed context.Section)
+                     |> Node.withExtraAttribute "aria-expanded" (if context.Collapsed then "false" else "true"))
                     (Nodes.Actions.button
                         (Nodes.Ids.child id "refresh")
                         ButtonVariant.Secondary
                         (if context.Refreshing then msgs.Refreshing else msgs.Refresh)
                         context.Refreshing
                         (RefreshSection context.Section))
-                if not context.Collapsed then
-                    Nodes.Layout.column (Nodes.Ids.child id "body") [
+                // The severity stays in view while the section is collapsed;
+                // the headline and the details are what collapsing hides.
+                Nodes.Layout.row (Nodes.Ids.child id "status") [
+                    severity
+                    if not context.Collapsed then
                         Nodes.text
                             (Nodes.Ids.child id "headline")
                             (if summary.Disabled then
                                  summary.DisabledReason
                              else
                                  summary.Headline)
-                        if not summary.Details.IsEmpty then
-                            Nodes.Layout.column (Nodes.Ids.child id "details") [
-                                // A summary arrives whole and its details are strings: a
-                                // detail's place in it names it.
-                                for i, detail in List.indexed summary.Details do
-                                    Nodes.text (Nodes.Ids.keyed (Nodes.Ids.child id "detail") (string i)) detail
-                            ]
+                ]
+                if not context.Collapsed && not summary.Details.IsEmpty then
+                    Nodes.Layout.column (Nodes.Ids.child id "details") [
+                        // A summary arrives whole and its details are strings: a
+                        // detail's place in it names it.
+                        for i, detail in List.indexed summary.Details do
+                            Nodes.text (Nodes.Ids.keyed (Nodes.Ids.child id "detail") (string i)) detail
                     ]
             ]
     }
