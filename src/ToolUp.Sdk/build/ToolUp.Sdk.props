@@ -149,7 +149,7 @@
     <ToolUpExperimentsVersion Condition="'$(ToolUpExperimentsVersion)' == ''">0.1.0-alpha</ToolUpExperimentsVersion>
     <ToolUpFactStoresVersion Condition="'$(ToolUpFactStoresVersion)' == ''">0.40.0</ToolUpFactStoresVersion>
     <ToolUpFeatureFlagProvidersVersion Condition="'$(ToolUpFeatureFlagProvidersVersion)' == ''">0.1.5-alpha</ToolUpFeatureFlagProvidersVersion>
-    <ToolUpHostsVersion Condition="'$(ToolUpHostsVersion)' == ''">0.39.4</ToolUpHostsVersion>
+    <ToolUpHostsVersion Condition="'$(ToolUpHostsVersion)' == ''">0.39.5</ToolUpHostsVersion>
     <ToolUpIngestionQueuesVersion Condition="'$(ToolUpIngestionQueuesVersion)' == ''">0.39.4</ToolUpIngestionQueuesVersion>
     <ToolUpJobSchedulersVersion Condition="'$(ToolUpJobSchedulersVersion)' == ''">0.39.4</ToolUpJobSchedulersVersion>
     <ToolUpMediaVersion Condition="'$(ToolUpMediaVersion)' == ''">0.39.4</ToolUpMediaVersion>

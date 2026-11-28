@@ -1066,7 +1066,7 @@
     <ToolUpEntityStoresVersion>0.39.4</ToolUpEntityStoresVersion>
     <ToolUpFactStoresVersion>0.40.0</ToolUpFactStoresVersion>
     <ToolUpFeatureFlagProvidersVersion>0.1.5-alpha</ToolUpFeatureFlagProvidersVersion>
-    <ToolUpHostsVersion>0.39.4</ToolUpHostsVersion>
+    <ToolUpHostsVersion>0.39.5</ToolUpHostsVersion>
     <ToolUpIngestionQueuesVersion>0.39.4</ToolUpIngestionQueuesVersion>
     <ToolUpJobSchedulersVersion>0.39.4</ToolUpJobSchedulersVersion>
     <ToolUpMediaVersion>0.39.4</ToolUpMediaVersion>
