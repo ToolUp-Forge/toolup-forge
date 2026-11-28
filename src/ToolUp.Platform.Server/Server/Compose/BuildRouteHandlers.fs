@@ -666,98 +666,107 @@ let buildRouteHandlers
     let dataSubjectRequestApiHandler: HttpHandler list =
         match config.DataSubjectRequests with
         | DataSubjectRequestMode.Disabled -> []
-        | DataSubjectRequestMode.Enabled dsrConfig -> [
-            makeApi (fun (ctx: HttpContext) ->
-                // `IEnumerable<T>` resolution is built into MS DI — zero
-                // registered impls yields an empty enumerable, not null.
-                let exporters =
-                    ctx.RequestServices.GetService(typeof<seq<IDataExporter>>) :?> seq<IDataExporter>
-                    |> List.ofSeq
+        | DataSubjectRequestMode.Enabled dsrConfig ->
+            // The pending erasure previews outlive the request: one holder
+            // per composed server, shared by every per-request handler, so
+            // a `ConfirmErasure` finds the `PreviewErasure` an earlier
+            // request made (in the same scope, within its lifetime).
+            let previews = DataSubjectRequestApiHandler.PendingErasurePreviews()
 
-                let handlers =
-                    ctx.RequestServices.GetService(typeof<seq<IErasureHandler>>) :?> seq<IErasureHandler>
-                    |> List.ofSeq
+            [
+                makeApi (fun (ctx: HttpContext) ->
+                    // `IEnumerable<T>` resolution is built into MS DI — zero
+                    // registered impls yields an empty enumerable, not null.
+                    let exporters =
+                        ctx.RequestServices.GetService(typeof<seq<IDataExporter>>) :?> seq<IDataExporter>
+                        |> List.ofSeq
 
-                let accessContext =
-                    AccessContext.tryResolve ctx.RequestServices
-                    |> Option.defaultWith (fun () -> AccessContext.unresolved "BuildRouteHandlers")
+                    let handlers =
+                        ctx.RequestServices.GetService(typeof<seq<IErasureHandler>>) :?> seq<IErasureHandler>
+                        |> List.ofSeq
 
-                let scopeId =
-                    accessContext
-                    |> AccessContext.configScope
-                    |> Option.map _.ScopeId
-                    |> Option.defaultValue accessContext.UserId
+                    let accessContext =
+                        AccessContext.tryResolve ctx.RequestServices
+                        |> Option.defaultWith (fun () -> AccessContext.unresolved "BuildRouteHandlers")
 
-                let auditLog = ctx.RequestServices.GetService(typeof<IAuditLog>) :?> IAuditLog
-                let audit = DataSubjectRequestApiHandler.auditToLog auditLog
+                    let scopeId =
+                        accessContext
+                        |> AccessContext.configScope
+                        |> Option.map _.ScopeId
+                        |> Option.defaultValue accessContext.UserId
 
-                // Phase 9h.A — async export deps. Wired only when the
-                // deployment opted into `Async` AND both an
-                // `IBackgroundExportStore` (registered by
-                // `ComposeJobs.registerDataSubjectRequestJobs`) and an
-                // `IJobScheduler` are composed. Absent either, the async
-                // methods return `Error`; the synchronous `RequestExport`
-                // is unaffected.
-                let asyncDeps =
-                    if dsrConfig.Async then
-                        match
-                            ctx.RequestServices.GetService(typeof<IBackgroundExportStore>),
-                            ctx.RequestServices.GetService(typeof<IJobScheduler>)
-                        with
-                        | (:? IBackgroundExportStore as store), (:? IJobScheduler as scheduler) ->
-                            let channel =
-                                match ctx.RequestServices.GetService(typeof<INotificationChannel>) with
-                                | :? INotificationChannel as ch -> Some ch
-                                | _ -> None
+                    let auditLog = ctx.RequestServices.GetService(typeof<IAuditLog>) :?> IAuditLog
+                    let audit = DataSubjectRequestApiHandler.auditToLog auditLog
 
-                            let notify (ticket: ExportTicket) (status: ExportStatus) : Async<unit> = async {
-                                match channel with
-                                | None -> return ()
-                                | Some ch ->
-                                    let json = $"{{\"ticket\":\"{ticket}\",\"status\":\"{ExportStatus.name status}\"}}"
+                    // Phase 9h.A — async export deps. Wired only when the
+                    // deployment opted into `Async` AND both an
+                    // `IBackgroundExportStore` (registered by
+                    // `ComposeJobs.registerDataSubjectRequestJobs`) and an
+                    // `IJobScheduler` are composed. Absent either, the async
+                    // methods return `Error`; the synchronous `RequestExport`
+                    // is unaffected.
+                    let asyncDeps =
+                        if dsrConfig.Async then
+                            match
+                                ctx.RequestServices.GetService(typeof<IBackgroundExportStore>),
+                                ctx.RequestServices.GetService(typeof<IJobScheduler>)
+                            with
+                            | (:? IBackgroundExportStore as store), (:? IJobScheduler as scheduler) ->
+                                let channel =
+                                    match ctx.RequestServices.GetService(typeof<INotificationChannel>) with
+                                    | :? INotificationChannel as ch -> Some ch
+                                    | _ -> None
 
-                                    try
-                                        do!
-                                            ch.Publish(
-                                                scopeId,
-                                                CustomNotification(DsrNotifications.ExportProgressKey, json)
-                                            )
-                                    with _ ->
-                                        return ()
-                            }
+                                let notify (ticket: ExportTicket) (status: ExportStatus) : Async<unit> = async {
+                                    match channel with
+                                    | None -> return ()
+                                    | Some ch ->
+                                        let json =
+                                            $"{{\"ticket\":\"{ticket}\",\"status\":\"{ExportStatus.name status}\"}}"
 
-                            // Phase 162 — optional export-envelope signer.
-                            // Present when the deployment composed a
-                            // `SignedExportBundle` adapter (over an
-                            // `IArtefactSigner`). Absent leaves
-                            // `DownloadSignedExport` returning "not enabled";
-                            // the compose-time validator refuses startup on
-                            // the `SignExports = true` + no-signer mismatch.
-                            let signer =
-                                match ctx.RequestServices.GetService(typeof<IExportEnvelopeSigner>) with
-                                | :? IExportEnvelopeSigner as s -> Some s
-                                | _ -> None
+                                        try
+                                            do!
+                                                ch.Publish(
+                                                    scopeId,
+                                                    CustomNotification(DsrNotifications.ExportProgressKey, json)
+                                                )
+                                        with _ ->
+                                            return ()
+                                }
 
-                            Some {
-                                DataSubjectRequestApiHandler.DsrAsyncDeps.Store = store
-                                Scheduler = scheduler
-                                Notify = notify
-                                Signer = signer
-                            }
-                        | _ -> None
-                    else
-                        None
+                                // Phase 162 — optional export-envelope signer.
+                                // Present when the deployment composed a
+                                // `SignedExportBundle` adapter (over an
+                                // `IArtefactSigner`). Absent leaves
+                                // `DownloadSignedExport` returning "not enabled";
+                                // the compose-time validator refuses startup on
+                                // the `SignExports = true` + no-signer mismatch.
+                                let signer =
+                                    match ctx.RequestServices.GetService(typeof<IExportEnvelopeSigner>) with
+                                    | :? IExportEnvelopeSigner as s -> Some s
+                                    | _ -> None
 
-                DataSubjectRequestApiHandler.create
-                    exporters
-                    handlers
-                    dsrConfig.Policy
-                    scopeId
-                    accessContext.UserId
-                    accessContext
-                    audit
-                    asyncDeps)
-          ]
+                                Some {
+                                    DataSubjectRequestApiHandler.DsrAsyncDeps.Store = store
+                                    Scheduler = scheduler
+                                    Notify = notify
+                                    Signer = signer
+                                }
+                            | _ -> None
+                        else
+                            None
+
+                    DataSubjectRequestApiHandler.createWithPreviews
+                        previews
+                        exporters
+                        handlers
+                        dsrConfig.Policy
+                        scopeId
+                        accessContext.UserId
+                        accessContext
+                        audit
+                        asyncDeps)
+            ]
 
     // Phase 54 — IPlatformTenantApi mount. Gated on
     // `ServerConfig.TenantLifecycle = FeatureMode.Enabled`; the
