@@ -164,6 +164,10 @@ let private devIdentityProfile: ConfigKeys.ConfigProfile = {
         ConfigKeys.Names.trustForwardedHeaders, "false"
         ConfigKeys.Names.acceptPlaintextSecrets, "true"
         ConfigKeys.Names.acceptQueryParamSseAuthInAuthMode, "true"
+        // Data ingestion's OAuth flows pin their redirect to the sample's
+        // own origin (the first port of its claim, `ports.json`) rather than
+        // deriving it from each request's Host.
+        ConfigKeys.Names.oauthRedirectBase, "http://127.0.0.1:5140"
     ]
 }
 
@@ -207,8 +211,20 @@ let private withAdminFixtures (m: ServerModule) : ServerModule =
         )
     else
         m
+
+/// Under the development identity, data ingestion is enabled, so the
+/// data-source admin the client opens lists the sources (none is declared).
+/// Its OAuth flows need the redirect base that profile pins, so it stays off
+/// elsewhere.
+let private dataIngestion () =
+    if devIdentitySelected () then
+        FeatureMode.Enabled
+    else
+        FeatureMode.Disabled
 #else
 let private withAdminFixtures (m: ServerModule) : ServerModule = m
+
+let private dataIngestion () = FeatureMode.Disabled
 #endif
 
 [<EntryPoint>]
@@ -227,7 +243,9 @@ let main _ =
     // kept, so the audit trail has rows. It opens the background-jobs and
     // data-migration admins too, so the server composes the in-process job
     // scheduler and the data-migration routes (the trigger only: no startup
-    // sweep).
+    // sweep). Under the development identity it enables data ingestion too,
+    // for the data-source admin, which keeps the source configs in the blob
+    // store.
     let config =
         let fromEnv = ServerConfig.fromEnv logger ServerConfigOverrides.referenceApp
 
@@ -239,6 +257,7 @@ let main _ =
                 AuditLog = FeatureMode.Enabled
                 JobScheduler = InProcessJobScheduler
                 DataMigrations = ManualDataMigrations
+                DataIngestion = dataIngestion ()
                 DataSubjectRequests =
                     DataSubjectRequestMode.Enabled(DataSubjectRequestConfig.sync ErasurePolicy.Tombstone)
                 Stores = {

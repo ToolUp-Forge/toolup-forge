@@ -22,11 +22,13 @@ open ToolUp.Platform
 // session-security page (the server composes a session registry), the
 // platform-users admin (the server enables the tenant lifecycle), the
 // data-subject-request admin (the server enables data subject requests) and
-// the external-contact admin (the server composes the contact store), and the
-// data manager is off (no module declares a data type, so the server mounts
-// no file API). The Ctrl+K / Cmd+K command palette is client-only, over the
-// caller's visible pages. The sample names itself, and takes the SDK's own
-// mark as its logo, which the shell also uses as the favicon.
+// the external-contact admin (the server composes the contact store), the
+// data-source admin is on by default (the server enables data ingestion under
+// the development identity), and the data manager is off (no module declares
+// a file data type, so the server mounts no file API). The Ctrl+K / Cmd+K
+// command palette is client-only, over the caller's visible pages. The sample
+// names itself, and takes the SDK's own mark as its logo, which the shell also
+// uses as the favicon.
 
 importSideEffects "./index.css"
 

@@ -727,6 +727,103 @@ let private scenarios = [
             })
     })
 
+    shellScenario "the usage dashboard opens from the rail and exports its CSV" (fun page -> async {
+        do! openFromRail page "Team Management" "_sdk.UsageDashboard"
+
+        // The sample meters nothing, so the aggregate is the empty answer.
+        do!
+            wait "the usage tree, with the server's empty aggregate" (fun () -> async {
+                let! none = count page (node "usage-none")
+                return none = 1
+            })
+
+        let! download =
+            page.RunAndWaitForDownloadAsync(fun () -> page.Locator(node "usage-export" + " button").ClickAsync())
+            |> Async.AwaitTask
+
+        Expect.stringStarts download.SuggestedFilename "usage-" "the server's CSV, downloaded"
+        Expect.stringEnds download.SuggestedFilename ".csv" "the server's CSV, downloaded"
+    })
+
+    shellScenario "the data-source admin opens from the rail and lists a saved source on refresh" (fun page -> async {
+        do! openFromRail page "Data Management" "_sdk.DataIngestion"
+
+        do!
+            wait "the data-source tree, with no source yet" (fun () -> async {
+                let! none = count page (node "ingestion-none")
+                return none = 1
+            })
+
+        // The sample declares no source: one is saved through the module's
+        // own API, as a connector's credential form saves one.
+        let! saved =
+            page.EvaluateAsync<int>(
+                """async () => {
+                    const body = JSON.stringify([{ Id: "smoke-source", Name: "Smoke source", Kind: "GoogleAnalytics",
+                        ConnectionScope: {}, CredentialKey: "", Tables: null, Tags: {} }]);
+                    const r = await fetch("/api/IDataIngestionApi/SaveDataSource",
+                        { method: "POST", headers: { "Content-Type": "application/json" }, body });
+                    return r.status;
+                }"""
+            )
+            |> Async.AwaitTask
+
+        Expect.equal saved 200 "the source is saved"
+
+        do!
+            page.Locator(node "ingestion-refresh" + " button").ClickAsync()
+            |> Async.AwaitTask
+
+        do!
+            wait "the server's list, with the saved source and its status" (fun () -> async {
+                let! text = innerTextOf page (node "ingestion-table")
+                return text.Contains "Smoke source" && text.Contains "Needs authorization"
+            })
+    })
+
+    shellScenario "the composition inspector's Rules page opens from the rail and exports its JSON" (fun page -> async {
+        let parent =
+            "[data-toolup-rail-stop='row:Platform Management:_sdk.CompositionInspector']"
+
+        let rules =
+            "[data-toolup-rail-stop='row:Platform Management:_sdk.CompositionInspector/rules']"
+
+        // A module of several pages lists them under its row once the row is
+        // opened, so the pointer holds the rail open over both clicks.
+        do! page.Mouse.MoveAsync(40.0f, 268.0f) |> Async.AwaitTask
+
+        let! parents = page.Locator(parent).Locator("visible=true").CountAsync() |> Async.AwaitTask
+
+        if parents = 0 then
+            do!
+                page.Locator(groupStop "Platform Management").Locator("visible=true").First.ClickAsync()
+                |> Async.AwaitTask
+
+        do!
+            page.Locator(parent).Locator("visible=true").First.ClickAsync()
+            |> Async.AwaitTask
+
+        do!
+            page.Locator(rules).Locator("visible=true").First.ClickAsync()
+            |> Async.AwaitTask
+
+        do! offRail page
+
+        do!
+            wait "the Rules page's tree, with the captured rule manifest" (fun () -> async {
+                let! table = count page (node "inspector-rules-table")
+                let! captured = innerTextOf page (node "inspector-captured")
+                return table = 1 && captured.Contains "Z"
+            })
+
+        let! download =
+            page.RunAndWaitForDownloadAsync(fun () -> page.Locator(node "inspector-export" + " button").ClickAsync())
+            |> Async.AwaitTask
+
+        Expect.stringStarts download.SuggestedFilename "composition-" "the server's panel JSON, downloaded"
+        Expect.stringEnds download.SuggestedFilename "rules.json" "the Rules panel's JSON, downloaded"
+    })
+
     shellScenario "the command palette opens on Ctrl+K, narrows on a query and navigates" (fun page -> async {
         let input = "[data-toolup-palette='input']"
         let rows = "[data-toolup-palette='results'] [data-toolup-palette-index]"
