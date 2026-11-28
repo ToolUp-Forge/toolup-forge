@@ -882,45 +882,36 @@ module FactsCompose =
 
         services
 
-    /// Compose the grounding fact store per `ServerConfig.Stores.FactStore`.
-    /// `FeatureMode.Enabled` registers `IFactStore` (`BlobFactStore`) +
-    /// `IFactEvidenceSource` + `IFactDisclosureGate` + `IFactResolver`
-    /// into DI, and (Phase 623) activates reactive recomputation over it:
-    /// the default `IFactRecomputer`, the recompute job handler on the
-    /// composed scheduler, and the data-arrival hook that drives fact
-    /// invalidation when a data-object version lands. `FeatureMode.Disabled`
-    /// returns the app unchanged — no registration, no hosted service, no
-    /// decorator, no allocation (GP 13). Insert once in the compose
-    /// pipeline before `ServerApp.run` (and before a RAG compose, so the
-    /// retrieval pipeline's DI pickup sees the fact tier):
-    ///
-    /// ```fsharp
-    /// ServerApp.empty
-    /// |> ServerApp.withStorage blob
-    /// |> FactsCompose.withFactStore
-    /// |> ServerApp.run
-    /// ```
-    ///
-    /// Reactive recomputation stays dormant until a module's grounding
-    /// declarations ask for it: a metric declaring
-    /// `Fuaran.Facts.RecomputePolicy.Eager` recomputes off a scheduled job when its
-    /// inputs change, `OnQuery` recomputes at the next read, and the
-    /// default `Manual` surfaces the changed state only. Wire a real
-    /// `IFactRecomputer` into DI to give any of them a value to compute.
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withFactStore (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            // Phase 623 — the fact tier and its reactive activation are
-            // one registration pass: the store first, then the recompute
-            // engine + handler + data-arrival hook over it.
+    /// Whether the fact store is already composed onto `app`: its tools are
+    /// declared with it, so a second composition finds them.
+    let private storeComposed (app: ServerApp) : bool =
+        let declared =
+            app.AITools |> List.map (fun (definition, _) -> definition.Name) |> Set.ofList
+
+        NarrativeGrounding.factTools
+        |> List.forall (fun (definition, _) -> declared.Contains definition.Name)
+
+    /// The fact store, its gate, resolver and planner, and reactive
+    /// recomputation over it: `IFactStore` (`BlobFactStore`),
+    /// `IFactEvidenceSource`, `IFactDisclosureGate`, `IFactResolver`, the
+    /// default `IFactRecomputer`, the recompute job handler and the
+    /// data-arrival hook that drives fact invalidation when a data-object
+    /// version lands. Reactive recomputation stays dormant until a metric
+    /// declares `RecomputePolicy.Eager` or `OnQuery`. Composed once: an app
+    /// that already composes it is returned unchanged.
+    let private composeStore (app: ServerApp) : ServerApp =
+        if storeComposed app then
+            app
+        else
+            // The fact tier and its reactive activation are one registration
+            // pass: the store first, then the recompute engine, handler and
+            // data-arrival hook over it.
             let register (s: IServiceCollection) =
                 registerReactiveRecomputation app.Config (registerTableChangeSignal (registerFactStore s))
-                // Phase 888 — the backend marker and, for a multi-replica
-                // deployment only, the blob store's scale guard.
+                // The backend marker and, for a multi-replica deployment
+                // only, the blob store's scale guard.
                 |> registerBlobScaleGuard app.Config.MultiInstance.ReplicaCount
-                // Phase 986 — the dormant-push-door warning.
+                // The dormant-push-door warning.
                 |> registerQuestionCompilerGuard
                 // The withholding-surfaces-over-a-plain-configuration finding.
                 |> registerDisclosureReachGuard (DeploymentConfig.requiresAnyAuth app.Config)
@@ -961,218 +952,96 @@ module FactsCompose =
             |> contribute register
             |> ServerApp.withAuditEvents (AuditEventFamily.registration FactsAuditEvents.FactsAuditEvent.family)
 
-    /// **Adds** a composed withholding surface for the startup disclosure
-    /// finding (`DisclosureReachFinding`): `name` is what the finding calls it
-    /// and `surface` the egress door it asks the gate at. Call it from the
-    /// builder that arms the surface; a deployment composing none is never
-    /// told anything. Idempotent per name; a `FeatureMode.Disabled`
-    /// deployment is unchanged.
-    let withWithholdingSurface (name: string) (surface: FactEgressSurface) (app: ServerApp) : ServerApp =
-        WithholdingSurfaces.contribute name surface app
+    /// Registers `value` as the one `'T` of the composition; a second
+    /// registration, from a second `withOptions` setting the same field, is
+    /// refused naming the field.
+    let private registerOnce<'T when 'T: not struct> (field: string) (reason: string) (value: 'T) (app: ServerApp) =
+        app
+        |> contribute (fun s ->
+            if s |> Seq.exists (fun d -> d.ServiceType = typeof<'T>) then
+                ServiceComposition.refuse (
+                    CompositionRefusal.InvalidDeclaration("FactsComposeOptions." + field, reason)
+                )
+            else
+                s.AddSingleton<'T>(value))
 
-    /// **Adds** the deployment's authorised narrative calculations: the
-    /// grounding gate then derives every `calc:` reference a narrative cites
-    /// again against them, and admits it only when it holds. Give a grounded
-    /// run the `calculate` tool from the same value
-    /// (`NarrativeCalculations.tools`). Empty calculations change nothing, as
-    /// does a deployment with no fact store; registering calculations twice
-    /// is refused.
-    let withNarrativeCalculations (calculations: NarrativeCalculations) (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled when NarrativeCalculations.isEmpty calculations -> app
-        | FeatureMode.Enabled ->
+    /// The authorised narrative calculations: the grounding gate derives every
+    /// `calc:` reference a narrative cites against them. Empty ones change nothing.
+    let private applyNarrativeCalculations (calculations: NarrativeCalculations) (app: ServerApp) =
+        if NarrativeCalculations.isEmpty calculations then
             app
-            |> contribute (fun s ->
-                if s |> Seq.exists (fun d -> d.ServiceType = typeof<NarrativeCalculations>) then
-                    ServiceComposition.refuse (
-                        CompositionRefusal.InvalidDeclaration(
-                            "FactsCompose.withNarrativeCalculations",
-                            "narrative calculations are already registered; declare them all in one NarrativeCalculations value"
-                        )
-                    )
-                else
-                    s.AddSingleton<NarrativeCalculations>(calculations))
+        else
+            registerOnce
+                "NarrativeCalculations"
+                "narrative calculations are already registered; declare them all in one NarrativeCalculations value"
+                calculations
+                app
 
-    /// **Adds** the deployment's pipeline profile: `evaluate_pipeline` then
-    /// reads every pipeline the assistant writes against it, and refuses one
-    /// outside it by name, before any fact is read. Serve its fragment
-    /// (`RegisteredPipelineProfile.Fragment`) in the system prompt beside the
-    /// tool. A deployment that registers none keeps the full algebra; one with
-    /// no fact store is unchanged; registering a profile twice is refused.
-    let withPipelineProfile (profile: RegisteredPipelineProfile) (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
+    /// The pipeline profile `evaluate_pipeline` reads every pipeline against.
+    let private applyPipelineProfile (profile: RegisteredPipelineProfile) (app: ServerApp) =
+        registerOnce
+            "PipelineProfile"
+            "a pipeline profile is already registered; a deployment registers one"
+            profile
             app
-            |> contribute (fun s ->
-                if s |> Seq.exists (fun d -> d.ServiceType = typeof<RegisteredPipelineProfile>) then
-                    ServiceComposition.refuse (
-                        CompositionRefusal.InvalidDeclaration(
-                            "FactsCompose.withPipelineProfile",
-                            "a pipeline profile is already registered; a deployment registers one"
-                        )
-                    )
-                else
-                    s.AddSingleton<RegisteredPipelineProfile>(profile))
 
-    /// **Adds** a "spec in, Facts out" tool (`SpecTool`): its declaration
-    /// and the door's executor ride `ServerApp.AITools` beside the fact tools,
-    /// so the tool arms where the AI companion is composed. With no fact store
-    /// composed it changes nothing; a tool named like one already declared is
-    /// refused.
-    let withSpecTool (tool: SpecTool<'Spec, 'Refusal, 'Result>) (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            if
+    /// The declared tools ride `ServerApp.AITools` beside the fact tools, so
+    /// they arm where the AI companion is composed. The names were checked
+    /// against the app's when the options were refused or admitted.
+    let private declareTools tools (app: ServerApp) =
+        match tools with
+        | [] -> app
+        | tools -> {
+            app with
+                AITools = app.AITools @ tools
+          }
+
+    /// The registered methods: one tool per card and `describe_method`, and the
+    /// profile whose fragment (`MethodProfile.Fragment`) the system prompt serves.
+    let private applyMethods (profile: MethodProfile) (app: ServerApp) =
+        if profile.Methods.IsEmpty then
+            app
+        else
+            app
+            |> declareTools (profile.Tools |> List.map (fun t -> t.Definition, t.Executor))
+            |> registerOnce
+                "Methods"
+                "a method profile is already registered; register every method in one MethodRegistry.register call"
+                profile
+
+    /// The dataset models and `describe_dataset_model`, answering each caller
+    /// from its projection of each model under the declared resolver.
+    let private applyDatasetModels (declared: DatasetModelsDeclaration) (app: ServerApp) =
+        if declared.Registry.Models.IsEmpty then
+            app
+        else
+            app
+            |> declareTools [
+                DatasetModelTools.definition, DatasetModelTools.executor declared.Registry declared.Resolver
+            ]
+            |> registerOnce
+                "DatasetModels"
+                "a dataset model registry is already registered; register every model in one DatasetModelRegistry.register call"
+                declared.Registry
+
+    /// What `list_fact_tables` lists, captured as a value: the executor reads
+    /// the container for nothing.
+    let private applyFactTables (options: FactTablesOptions) (app: ServerApp) = {
+        app with
+            AITools =
                 app.AITools
-                |> List.exists (fun (definition, _) -> definition.Name = tool.Definition.Name)
-            then
-                ServiceComposition.refuse (
-                    CompositionRefusal.InvalidDeclaration(
-                        "FactsCompose.withSpecTool",
-                        sprintf "a tool named '%s' is already declared" tool.Definition.Name
-                    )
-                )
-            else
-                {
-                    app with
-                        AITools = app.AITools @ [ tool.Definition, SpecTool.executor tool ]
-                }
-
-    /// **Adds** the deployment's registered methods (`MethodRegistry.register`):
-    /// one tool per method card and `describe_method` ride `ServerApp.AITools`
-    /// beside the fact tools, and the profile is registered so its fragment
-    /// (`MethodProfile.Fragment`) can be served in the system prompt. A
-    /// profile with no method changes nothing, as does a deployment with no
-    /// fact store; a tool named like one already declared, or a second
-    /// profile, is refused.
-    let withMethods (profile: MethodProfile) (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled when profile.Methods.IsEmpty -> app
-        | FeatureMode.Enabled ->
-            let declared =
-                app.AITools |> List.map (fun (definition, _) -> definition.Name) |> Set.ofList
-
-            match profile.Tools |> List.tryFind (fun t -> declared.Contains t.Definition.Name) with
-            | Some taken ->
-                ServiceComposition.refuse (
-                    CompositionRefusal.InvalidDeclaration(
-                        "FactsCompose.withMethods",
-                        sprintf "a tool named '%s' is already declared" taken.Definition.Name
-                    )
-                )
-            | None ->
-                {
-                    app with
-                        AITools = app.AITools @ (profile.Tools |> List.map (fun t -> t.Definition, t.Executor))
-                }
-                |> contribute (fun s ->
-                    if s |> Seq.exists (fun d -> d.ServiceType = typeof<MethodProfile>) then
-                        ServiceComposition.refuse (
-                            CompositionRefusal.InvalidDeclaration(
-                                "FactsCompose.withMethods",
-                                "a method profile is already registered; register every method in one MethodRegistry.register call"
-                            )
-                        )
+                |> List.map (fun (definition, executor) ->
+                    if definition.Name = FactTablesTool.Name then
+                        definition, FactTablesTool.executeFor options
                     else
-                        s.AddSingleton<MethodProfile>(profile))
+                        definition, executor)
+    }
 
-    /// **Adds** the deployment's dataset models (`DatasetModelRegistry.register`,
-    /// or `ViewRegistry.register` for the models and views together): the
-    /// registry is registered, and `describe_dataset_model` rides
-    /// `ServerApp.AITools` beside the fact tools, answering each caller from
-    /// its projection of each model under `resolver`, the policy resolver the
-    /// deployment composes its gate with. Give `evaluate_pipeline` the joins
-    /// the models declare through the profile
-    /// (`PipelineProfile.withRelationCheck (DatasetModelRegistry.relationCheck
-    /// resolver registry)`), and the views through the one
-    /// `MethodRegistry.register` call (`ViewRegistry.bindings`). A registry
-    /// with no model changes nothing, as does a deployment with no fact store;
-    /// a second registry, or a tool named like one already declared, is
-    /// refused.
-    let withDatasetModels
-        (resolver: DisclosurePolicyResolver)
-        (registry: DatasetModelRegistry)
-        (app: ServerApp)
-        : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled when registry.Models.IsEmpty -> app
-        | FeatureMode.Enabled ->
-            if
-                app.AITools
-                |> List.exists (fun (definition, _) -> definition.Name = DatasetModelTools.Name)
-            then
-                ServiceComposition.refuse (
-                    CompositionRefusal.InvalidDeclaration(
-                        "FactsCompose.withDatasetModels",
-                        sprintf "a tool named '%s' is already declared" DatasetModelTools.Name
-                    )
-                )
-            else
-                {
-                    app with
-                        AITools =
-                            app.AITools
-                            @ [ DatasetModelTools.definition, DatasetModelTools.executor registry resolver ]
-                }
-                |> contribute (fun s ->
-                    if s |> Seq.exists (fun d -> d.ServiceType = typeof<DatasetModelRegistry>) then
-                        ServiceComposition.refuse (
-                            CompositionRefusal.InvalidDeclaration(
-                                "FactsCompose.withDatasetModels",
-                                "a dataset model registry is already registered; register every model in one DatasetModelRegistry.register call"
-                            )
-                        )
-                    else
-                        s.AddSingleton<DatasetModelRegistry>(registry))
-
-    /// Declare what `list_fact_tables` lists: the cap on the distinct members
-    /// a level may hold and still be named (`FactTablesOptions.MemberCap`, `0`
-    /// turns member listing off). Call it after `withFactStore`, which declares
-    /// the tool; the options are captured here as a value and the executor
-    /// reads the container for nothing. With no fact store composed it changes
-    /// nothing, and calling it before `withFactStore` is refused.
-    let withFactTablesOptions (options: FactTablesOptions) (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            let declared (definition: AIToolDefinition, _) = definition.Name = FactTablesTool.Name
-
-            if not (List.exists declared app.AITools) then
-                ServiceComposition.refuse (
-                    CompositionRefusal.MissingDependency(
-                        "FactsCompose.withFactTablesOptions",
-                        FactTablesTool.Name,
-                        "call FactsCompose.withFactStore first, which declares it"
-                    )
-                )
-            else
-                {
-                    app with
-                        AITools =
-                            app.AITools
-                            |> List.map (fun (definition, executor) ->
-                                if declared (definition, executor) then
-                                    definition, FactTablesTool.executeFor options
-                                else
-                                    definition, executor)
-                }
-
-    // ─── Phase 592 — purpose-bound disclosure (opt-in) ────────────────
+    // ─── The gate's facets ────────────────────────────────────────────
     //
-    // The "declared why" facet: a composition declares its purpose
-    // taxonomy + per-surface allowed sets, and the Phase 525 gate then
-    // requires every check's ambient `FactPurposeContext` claim to be in
-    // the surface's allowed set — out-of-set or missing claims refuse
-    // with the allowed set enumerated, and grants and denials both stamp
-    // the claimed purpose + taxonomy version into the audit trail. A
-    // separate, explicit opt-in on top of the fact store (the Phase 563
-    // shape): a deployment that only wants the store is byte-for-byte
-    // unchanged (GP 11 / GP 13).
+    // Purpose binding, declassification budgets and the read fan-out are
+    // each an optional registration the gate factory above reads, so a
+    // deployment that sets none composes the plain gate (GP 11 / GP 13).
 
     /// The per-purpose manifest projection: the generic, readable
     /// declaration the platform manifest carries (GP 1 — the typed
@@ -1190,393 +1059,135 @@ module FactsCompose =
                 |> List.map (fst >> FactEgressSurface.toString)
         })
 
-    /// Compose purpose-bound disclosure (Phase 592): register the
-    /// declared `DisclosurePurposeConfig` so the gate factory above arms
-    /// the purpose facet, and project the taxonomy + per-surface allowed
-    /// sets into the composition manifest beside the Phase 526 grounding
-    /// declarations — the whole purpose regime is readable before any
-    /// data flows. A `FeatureMode.Disabled` deployment (or one that never calls
-    /// this) is byte-for-byte unchanged (GP 11 / GP 13). Insert after
-    /// `withFactStore`:
-    ///
-    /// ```fsharp
-    /// ServerApp.empty
-    /// |> ServerApp.withStorage blob
-    /// |> FactsCompose.withFactStore
-    /// |> FactsCompose.withDisclosurePurposes purposeConfig
-    /// |> ServerApp.run
-    /// ```
-    ///
-    /// Request handlers state the claim with `FactPurposeContext.claim`;
-    /// with a declared taxonomy an unclaimed check refuses at every
-    /// purpose-bound surface (default-deny-by-shape).
-    let withDisclosurePurposes (config: DisclosurePurposeConfig) (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            let register (s: IServiceCollection) =
-                s.AddSingleton<DisclosurePurposeConfig>(config)
+    /// Purpose-bound disclosure: the gate requires every check's ambient
+    /// `FactPurposeContext` claim to be in the surface's allowed set, and the
+    /// taxonomy and allowed sets are projected into the composition manifest,
+    /// readable before any data flows. Request handlers state the claim with
+    /// `FactPurposeContext.claim`; an unclaimed check refuses at every
+    /// purpose-bound surface.
+    let private applyDisclosurePurposes (config: DisclosurePurposeConfig) (app: ServerApp) =
+        app
+        |> contribute (fun s -> s.AddSingleton<DisclosurePurposeConfig>(config))
+        |> ServerApp.withRegisteredPurposes (registeredPurposes config)
 
-            app
-            |> contribute register
-            |> ServerApp.withRegisteredPurposes (registeredPurposes config)
+    /// Declassification budgets: a crossing of a budgeted routine reserves its
+    /// charge before the disclosure verdict and settles it after, per
+    /// contributing party, and an exhausted ceiling denies with the typed,
+    /// audited refusal a policy denial takes.
+    ///
+    /// **An accounting control, not a differential-privacy guarantee.** It
+    /// bounds questions asked, not information disclosed; only a routine that
+    /// draws calibrated noise from an `INoiseMechanism` may declare a chargeable
+    /// epsilon, and `DeclassificationBudgetConfig.create` refuses the
+    /// combination otherwise. Charges compose sequentially (Dwork & Roth,
+    /// Theorem 3.16), and collusion between contributing parties is out of
+    /// scope: two parties that share answers are one adversary with two budgets.
+    let private applyDeclassificationBudgets (config: DeclassificationBudgetConfig) (app: ServerApp) =
+        app
+        |> contribute (fun s -> s.AddSingleton<DeclassificationBudgetConfig>(config))
 
-    // ─── Phase 675 — declassification budgets (opt-in) ────────────────
+    /// The bound on the fact reads one disclosure check holds in flight.
+    let private applyDisclosureFanOut (maxConcurrentReads: int) (app: ServerApp) =
+        let bound: DisclosureFanOut = {
+            MaxConcurrentReads = max 1 maxConcurrentReads
+        }
+
+        app |> contribute (fun s -> s.AddSingleton<DisclosureFanOut>(bound))
+
+    /// The certificate-verified fact import door over the composed `IFactStore`
+    /// and `IAuditLog`, accepting facts from the anchored peers. Each anchor
+    /// carries one peer's public key, the whole of what offline verification
+    /// needs; no key is discovered, so none is implicitly trusted. An empty list
+    /// composes a door that refuses every import with `ImportUntrustedPeer`.
+    let private applyFactImport (anchors: PeerTrustAnchor list) (app: ServerApp) =
+        app
+        |> contribute (fun s ->
+            s.AddSingleton<IFactImportDoor>(
+                Func<IServiceProvider, IFactImportDoor>(fun sp ->
+                    FactImport.create
+                        (sp.GetRequiredService<IFactStore>())
+                        anchors
+                        (sp.GetRequiredService<IAuditLog>()))
+            ))
+
+    // ─── The grounding envelope sealed past boot ──────────────────────
     //
-    // A separate, explicit opt-in on top of the fact store — the shape
-    // every opt-in around it takes, and here because it needs a LEDGER.
-    // Folding it into `withFactStore` would compose durable, stateful
-    // accounting into every deployment that wanted a fact base.
+    // The boot seal proves nothing about what happens afterwards, and for the
+    // grounding tier that gap is the live one: the declarations a later
+    // answer's provenance is judged against are free to move the instant the
+    // preflight verdict lands. This composes the door through which such a
+    // mutation becomes a typed, audited operation carrying the before/after
+    // envelope digest, so `boot seal + recorded chain ⇒ live envelope` is a
+    // computation an auditor runs from the trail. Under
+    // `CompositionProfile.Verified` a mutation arriving out of path is
+    // refused; under `Standard` it is recorded and lands.
+
+    /// The audited grounding-envelope mutation door, sealed to the envelope
+    /// the app declares AS IT STANDS: `withOptions` applies it after every
+    /// other field, so the seal covers what the options compose. `Observe`
+    /// is the honest bound on the mechanism: `None` is right for a
+    /// composition whose grounding declarations are immutable once composed,
+    /// which is every composition this SDK ships, and then continuity holds by
+    /// construction rather than by a passed check.
+    let private applyGroundingEnvelopeSeal (declared: GroundingEnvelopeSealDeclaration) (app: ServerApp) =
+        let sealedEnvelope =
+            GroundingEnvelope.ofComposition (ServerApp.compositionManifest app) app.RegisteredMetrics
+
+        app
+        |> contribute (fun s ->
+            s.AddSingleton<IGroundingEnvelopeMutator>(
+                Func<IServiceProvider, IGroundingEnvelopeMutator>(fun sp ->
+                    let auditLog = sp.GetRequiredService<IAuditLog>()
+
+                    match declared.Observe with
+                    | None ->
+                        GroundingEnvelopeMutator.forImmutableComposition
+                            declared.Profile
+                            auditLog
+                            GroundingEnvelopeMutator.PlatformScopeId
+                            sealedEnvelope
+                    | Some observeLive ->
+                        GroundingEnvelopeMutator.create
+                            declared.Profile
+                            auditLog
+                            GroundingEnvelopeMutator.PlatformScopeId
+                            sealedEnvelope
+                            observeLive)
+            ))
+
+    // ─── Coverage narratives ──────────────────────────────────────────
     //
-    // The honesty framing this mechanism is sold under lives in full in
-    // `DeclassificationBudget.fs` and is restated on the helper below,
-    // because a compose helper is where a deployment decides what to
-    // believe about it. Its four points, since they decide whether this
-    // knob is the control a reader thinks it is:
-    //
-    //   * The accounting bounds **questions asked**, not information
-    //     disclosed. A declassification routine is a DETERMINISTIC
-    //     transform, and summing charges over deterministic answers
-    //     bounds nothing formally.
-    //   * Only a routine that draws calibrated noise from an
-    //     `INoiseMechanism` (Phase 481) earns a differential-privacy
-    //     claim, and only such a routine may declare a chargeable
-    //     epsilon — refused here, at registration, not in prose.
-    //   * Composition is **basic (sequential)**: charges add (Dwork &
-    //     Roth, Theorem 3.16). No advanced composition is offered.
-    //   * **Collusion is out of scope.** Two contributing parties that
-    //     share answers are one adversary with two budgets.
+    // Separate from the store for two reasons. It WRITES to the deployment's
+    // knowledge base, which a storage knob may not decide. And a coverage
+    // narrative is a STANDING document, judged by the disclosure gate once,
+    // against the principal its options name, at commit time, rather than per
+    // reader at read time: that principal must be a floor on what the scope
+    // may see, so there is no default for it.
 
-    /// Register a declassification-budget config the deployment built
-    /// itself, arming the gate's budget facet. The general form of the
-    /// helper below, and — since Phase 679 — the one entry point that
-    /// can carry the AMENDMENT facet, because a countersigned amendment
-    /// needs a registry and a roster the two-argument helper has no way
-    /// to receive:
-    ///
-    /// ```fsharp
-    /// ServerApp.empty
-    /// |> ServerApp.withStorage blob
-    /// |> FactsCompose.withFactStore
-    /// |> FactsCompose.withDeclassificationBudgetConfig (
-    ///        DeclassificationBudgetConfig.create
-    ///            (BlobPrivacyBudgetLedger blob)
-    ///            [ DeclassificationBudget.countedCrossings "aggregate-over-k" 500 ]
-    ///        |> DeclassificationBudgetConfig.withAmendments amendments)
-    /// |> ServerApp.run
-    /// ```
-    ///
-    /// A separate entry point rather than a widened
-    /// `withDeclassificationBudgets`: that signature is public surface a
-    /// consumer binds against, and adding a parameter to it would delete
-    /// the existing token for every deployment already composing
-    /// budgets. The two share one body, so there is no second
-    /// registration path to drift.
-    ///
-    /// A `FeatureMode.Disabled` deployment is byte-for-byte unchanged (GP 11 /
-    /// GP 13).
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withDeclassificationBudgetConfig (config: DeclassificationBudgetConfig) (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            let register (s: IServiceCollection) =
-                s.AddSingleton<DeclassificationBudgetConfig>(config)
-
-            app |> contribute register
-
-    /// Compose declassification budgets (Phase 675): register the
-    /// declared budgets + the ledger they account through, so the gate
-    /// factory above arms the budget facet. Each declaration names a
-    /// Phase 562 declassification routine by operation id; a crossing of
-    /// that routine reserves its charge before the disclosure verdict and
-    /// settles it after, **per contributing party** (Phase 674). An
-    /// exhausted ceiling denies with the same typed, audited refusal
-    /// shape a policy denial takes (GP 6) — never a silent allow.
-    ///
-    /// A `FeatureMode.Disabled` deployment (or one that never calls this) is
-    /// byte-for-byte unchanged (GP 11 / GP 13). Insert after
-    /// `withFactStore`:
-    ///
-    /// ```fsharp
-    /// ServerApp.empty
-    /// |> ServerApp.withStorage blob
-    /// |> FactsCompose.withFactStore
-    /// |> FactsCompose.withDeclassificationBudgets
-    ///        (BlobPrivacyBudgetLedger blob)
-    ///        [ DeclassificationBudget.countedCrossings "aggregate-over-k" 500 ]
-    /// |> ServerApp.run
-    /// ```
-    ///
-    /// **This is an accounting control, not a differential-privacy
-    /// guarantee.** `countedCrossings` bounds how many times a routine
-    /// may be crossed — a count of questions asked, which is exactly what
-    /// the number is for a deterministic transform. `chargedEpsilon` is
-    /// available only to a routine that names the `INoiseMechanism` it
-    /// draws calibrated noise from, and the registration below REFUSES
-    /// the combination otherwise rather than documenting against it.
-    /// Charges compose sequentially (Σεᵢ, Dwork & Roth Theorem 3.16); no
-    /// advanced composition is offered, and collusion between
-    /// contributing parties is out of scope — two parties that share
-    /// answers are one adversary with two budgets.
-    ///
-    /// Raises at compose time on an unenforceable declaration (an
-    /// epsilon charge with no noise mechanism, a ceiling at or below
-    /// zero, two budgets for one routine). Loud and early rather than at
-    /// the first disclosure: a privacy control that fails late fails
-    /// after something has already been disclosed.
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withDeclassificationBudgets
-        (ledger: IPrivacyBudgetLedger)
-        (budgets: DeclassificationBudget list)
-        (app: ServerApp)
-        : ServerApp =
-        // Validated HERE, at compose, not inside the DI factory: a
-        // factory throws at first resolve, which is after the deployment
-        // believes it booted clean.
-        withDeclassificationBudgetConfig (DeclassificationBudgetConfig.create ledger budgets) app
-
-    /// Bound how many fact reads one disclosure check holds in flight. A
-    /// deployment that does not compose this runs the gate at
-    /// `DisclosureFanOut.DefaultMaxConcurrentReads`; a bound below 1 is
-    /// raised to 1. A `FeatureMode.Disabled` deployment is unchanged.
-    ///
-    /// ```fsharp skip=fragment
-    /// ServerApp.create config
-    /// |> FactsCompose.withFactStore
-    /// |> FactsCompose.withDisclosureFanOut 8
-    /// ```
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withDisclosureFanOut (maxConcurrentReads: int) (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            let bound: DisclosureFanOut = {
-                MaxConcurrentReads = max 1 maxConcurrentReads
-            }
-
-            let register (s: IServiceCollection) = s.AddSingleton<DisclosureFanOut>(bound)
-
-            app |> contribute register
-
-    // ─── Phase 683 — certificate-verified fact import (opt-in) ────────
-    //
-    // A separate, explicit opt-in on top of the fact store, and separate
-    // for a sharper reason than symmetry with the two opt-ins around it:
-    // the door needs KEY MATERIAL, and folding it into `withFactStore`
-    // would compose a trust decision into every deployment that wanted a
-    // fact base. The set of peers a deployment accepts facts from is
-    // exactly the kind of thing that must be written down in one place and
-    // read off the page (GP 13) — never acquired by default.
-    //
-    // An empty anchor list is legal and inert: the door composes and
-    // refuses every import with `ImportUntrustedPeer`. That is a
-    // deployment that has declared it trusts nobody, which is a different
-    // statement from one that never composed a door at all — and the audit
-    // trail tells them apart.
-
-    /// Compose the certificate-verified fact import door with the peer
-    /// anchors this deployment accepts facts from. Registers
-    /// `IFactImportDoor` over the composed `IFactStore` + `IAuditLog`; a
-    /// `FeatureMode.Disabled` deployment (or one that never calls this) is
-    /// byte-for-byte unchanged (GP 11 / GP 13). Insert after
-    /// `withFactStore`:
-    ///
-    /// ```fsharp
-    /// ServerApp.empty
-    /// |> ServerApp.withStorage blob
-    /// |> FactsCompose.withFactStore
-    /// |> FactsCompose.withFactImport [ PeerTrustAnchor.create "partner-a" partnerKey ]
-    /// |> ServerApp.run
-    /// ```
-    ///
-    /// Each anchor carries one peer's public key — the whole of what
-    /// offline verification needs — and, optionally, a ceiling narrowing
-    /// what an import from that peer may disclose
-    /// (`PeerTrustAnchor.withCeiling`) and the set of attestation levels it
-    /// admits (`PeerTrustAnchor.withAdmissibleLevels`). No key is
-    /// discovered, so no key is implicitly trusted.
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withFactImport (anchors: PeerTrustAnchor list) (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            let register (s: IServiceCollection) =
-                s.AddSingleton<IFactImportDoor>(
-                    Func<IServiceProvider, IFactImportDoor>(fun sp ->
-                        FactImport.create
-                            (sp.GetRequiredService<IFactStore>())
-                            anchors
-                            (sp.GetRequiredService<IAuditLog>()))
-                )
-
-            app |> contribute register
-
-    // ─── Phase 684 — the grounding envelope sealed past boot (opt-in) ─
-    //
-    // Phase 657 seals the composition AT boot and says plainly that it
-    // proves nothing about what happens afterwards. For the grounding tier
-    // that gap is the live one: the declarations a later answer's
-    // provenance is judged against — which metrics are registered, which
-    // method a method-less query canonically resolves to, which purposes
-    // may disclose at which surface — are free to move the instant the
-    // preflight verdict lands, and nothing in the trail says they did.
-    //
-    // This composes the door. Grounding-relevant mutation stays possible
-    // and stops being invisible: each becomes a typed, audited operation
-    // carrying the before/after envelope digest, and `boot seal +
-    // recorded chain ⇒ live envelope` is a computation an auditor runs
-    // from the trail. Under `CompositionProfile.Verified` a mutation
-    // arriving out of path is refused; under `Standard` the same findings
-    // are recorded and the mutation lands.
-    //
-    // A separate, explicit opt-in on top of the fact store — the shape
-    // every opt-in above it takes, and for the same reason: a deployment
-    // that only wants the store is byte-for-byte unchanged (GP 11 /
-    // GP 13).
-
-    /// Compose the audited grounding-envelope mutation door and its
-    /// continuity proof (Phase 684). Registers `IGroundingEnvelopeMutator`
-    /// over the composed `IAuditLog`, sealed to the grounding envelope
-    /// this app declares. A `FeatureMode.Disabled` deployment (or one that never
-    /// calls this) is byte-for-byte unchanged (GP 11 / GP 13).
-    ///
-    /// **Insert LAST among the grounding compose steps.** The envelope is
-    /// sealed from the app AS IT STANDS at this call, so a metric,
-    /// purpose, or disclosure declaration composed after it is outside
-    /// the seal:
-    ///
-    /// ```fsharp
-    /// ServerApp.empty
-    /// |> ServerApp.withStorage blob
-    /// |> FactsCompose.withFactStore
-    /// |> FactsCompose.withDisclosurePurposes purposeConfig
-    /// |> FactsCompose.withGroundingEnvelopeSeal CompositionProfile.Verified None
-    /// |> ServerApp.run
-    /// ```
-    ///
-    /// `observe` re-derives the envelope from whatever LIVE grounding
-    /// state the deployment holds, and is the honest bound on the whole
-    /// mechanism. `None` is the right answer for a composition whose
-    /// grounding declarations are compose-time immutable — which is every
-    /// composition this SDK ships: continuity is then continuous by
-    /// construction, and what that proves is that the deployment has
-    /// nothing that could drift, not that a drift check passed. A
-    /// deployment holding mutable grounding state passes `Some` a
-    /// function that reads it, and only then can the check catch
-    /// anything.
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withGroundingEnvelopeSeal
-        (profile: CompositionProfile)
-        (observe: (unit -> GroundingEnvelope) option)
-        (app: ServerApp)
-        : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            let sealedEnvelope =
-                GroundingEnvelope.ofComposition (ServerApp.compositionManifest app) app.RegisteredMetrics
-
-            let register (s: IServiceCollection) =
-                s.AddSingleton<IGroundingEnvelopeMutator>(
-                    Func<IServiceProvider, IGroundingEnvelopeMutator>(fun sp ->
-                        let auditLog = sp.GetRequiredService<IAuditLog>()
-
-                        match observe with
-                        | None ->
-                            GroundingEnvelopeMutator.forImmutableComposition
-                                profile
-                                auditLog
-                                GroundingEnvelopeMutator.PlatformScopeId
-                                sealedEnvelope
-                        | Some observeLive ->
-                            GroundingEnvelopeMutator.create
-                                profile
-                                auditLog
-                                GroundingEnvelopeMutator.PlatformScopeId
-                                sealedEnvelope
-                                observeLive)
-                )
-
-            app |> contribute register
-
-    // ─── Phase 707 — coverage narratives (opt-in) ─────────────────────
-    //
-    // A separate, explicit opt-in on top of the fact store — the shape
-    // every opt-in above takes, and here for two reasons rather than one.
-    //
-    // The ordinary reason first: this WRITES to the deployment's knowledge
-    // base. Folding it into `withFactStore` would mean that composing a
-    // fact base silently started publishing documents into a retrieval
-    // corpus, which is not a thing a storage knob may decide.
-    //
-    // The sharper reason is the second argument `withCoverageNarratives`
-    // takes. A coverage narrative is a STANDING document, readable by
-    // everyone who can retrieve from the scope it lands in, and the
-    // disclosure gate judges it once — against the principal named here,
-    // at commit time — rather than per reader at read time. That is a
-    // deliberate and load-bearing narrowing: it means the named principal
-    // must be a FLOOR on what the scope may see, not a service identity
-    // that can see everything. There is no defensible default for that,
-    // so there is no default.
-
-    let private registerCoverageNarratives
-        (options: CoverageNarrative.CoverageNarrativeOptions)
-        (services: IServiceCollection)
-        : IServiceCollection =
-        // The inner store is taken from the descriptor already in the
-        // collection, never from the built provider — by then `IFactStore`
-        // resolves to this decorator and the factory would recurse. Same
-        // shape (and same reason) as the Phase 623.C data-object
-        // decoration above.
-        match
-            ServiceComposition.captureDescriptor<IFactStore> services
-            |> Option.map _.Resolve
-        with
-        // No fact store descriptor at all. Left untouched rather than
-        // registering a decorator with nothing to decorate — a deployment
-        // in that state has a composition defect the fact tier's own
-        // registrations will surface far more clearly.
-        | None -> services
-        | Some resolveInner ->
-            services.AddSingleton<IFactStore>(
-                Func<IServiceProvider, IFactStore>(fun sp ->
-                    CoverageNarrative.decorate (resolveInner sp) sp options (sp.GetRequiredService<ILogger>()))
-            )
-
-    /// Compose the coverage-narrative trigger (Phase 707): decorate the
-    /// composed `IFactStore` so that assertion activity recomputes a
-    /// metric's coverage and, when it has moved MATERIALLY (a cardinality
-    /// band, the period reach, the method mix — not every assertion),
-    /// commits one narrative per populated metric into the deployment's
-    /// knowledge base through the ordinary ingestion path.
-    ///
-    /// A `FeatureMode.Disabled` deployment (or one that never calls this) is
-    /// byte-for-byte unchanged (GP 11 / GP 13), and a deployment that
-    /// calls it without composing a knowledge base is inert: the trigger
-    /// probes for `INarrativeIngestor` before it reads anything, so
-    /// arming the knob with nowhere to commit costs one DI lookup per
-    /// coalesced regeneration and no store work.
-    ///
-    /// ```fsharp
-    /// ServerApp.empty
-    /// |> ServerApp.withStorage blob
-    /// |> FactsCompose.withFactStore
-    /// |> FactsCompose.withCoverageNarratives
-    ///        (CoverageNarrative.CoverageNarrativeOptions.forScopes "coverage-reader" [ tenantScopeId ])
-    /// |> ServerApp.run
-    /// ```
-    ///
-    /// Insert AFTER `withFactStore` — it decorates what that registered,
-    /// and finds nothing to decorate if it runs first.
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withCoverageNarratives (options: CoverageNarrative.CoverageNarrativeOptions) (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            let register = registerCoverageNarratives options
-
-            app |> contribute register
+    /// Decorates the composed `IFactStore` so that assertion activity
+    /// recomputes a metric's coverage and, when it has moved materially (a
+    /// cardinality band, the period reach, the method mix), commits one
+    /// narrative per populated metric into the knowledge base. Inert where no
+    /// knowledge base is composed: the trigger probes for `INarrativeIngestor`
+    /// before it reads anything.
+    let private applyCoverageNarratives (options: CoverageNarrative.CoverageNarrativeOptions) (app: ServerApp) =
+        app
+        |> contribute (fun services ->
+            // The inner store is taken from the descriptor already in the
+            // collection, never from the built provider, where `IFactStore`
+            // resolves to this decorator and the factory would recurse.
+            match
+                ServiceComposition.captureDescriptor<IFactStore> services
+                |> Option.map _.Resolve
+            with
+            // No fact store descriptor at all: left untouched rather than
+            // registering a decorator with nothing to decorate.
+            | None -> services
+            | Some resolveInner ->
+                services.AddSingleton<IFactStore>(
+                    Func<IServiceProvider, IFactStore>(fun sp ->
+                        CoverageNarrative.decorate (resolveInner sp) sp options (sp.GetRequiredService<ILogger>()))
+                ))
 
     // ─── Phase 563 — fact-base coherence checking (opt-in) ────────────
     //
@@ -1737,288 +1348,146 @@ module FactsCompose =
 
         services
 
-    /// Compose the standing fact-base coherence check with an explicit
-    /// `config` + `cadence` (a cron `Trigger`) + the declared `principals`
-    /// whose scopes to sweep — each resolved through the platform's
-    /// `DeclaredPrincipalResolver` when the sweep is scheduled, and the job
-    /// runs under the scope it resolved to (empty ⇒ no sweep is scheduled: a
-    /// sweep never reads a shard nobody resolved). Registers the coherence
-    /// `IHealthCheck` when `config.HealthPrincipal` names one, and the
-    /// scheduled sweep, on top of an already-enabled fact store. A
-    /// `FeatureMode.Disabled` deployment (or one that never calls this) is
-    /// byte-for-byte unchanged (GP 11 / GP 13). Insert after
-    /// `withFactStore`:
-    ///
-    /// ```fsharp
-    /// ServerApp.empty
-    /// |> ServerApp.withStorage blob
-    /// |> FactsCompose.withFactStore
-    /// |> FactsCompose.withCoherenceChecksConfig cfg cadence [ sweepPrincipal ]
-    /// |> ServerApp.run
-    /// ```
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withCoherenceChecksConfig
-        (config: CoherenceConfig)
-        (cadence: Trigger)
-        (principals: DeclaredPrincipal list)
-        (app: ServerApp)
-        : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            let register = registerCoherenceChecks app.Config config cadence principals
+    /// The standing coherence check: the health probe when the config names a
+    /// health principal, and the sweep on the schedule's cadence under each
+    /// declared principal's scope (none schedules no sweep).
+    let private applyCoherenceChecks (schedule: CoherenceCheckSchedule) (app: ServerApp) =
+        app
+        |> contribute (registerCoherenceChecks app.Config schedule.Config schedule.Cadence schedule.Principals)
 
-            app |> contribute register
+    // ─── The default fact-table writer ────────────────────────────────
 
-    /// `withCoherenceChecksConfig` with `CoherenceConfig.defaults`, sweeping
-    /// and health-probing the scope `principal` resolves to — the one-liner
-    /// opt-in. `cadence` is the recurring `Trigger` the standing check runs on
-    /// (e.g. a daily `CronTrigger`); the check is also fireable on demand and
-    /// re-scanned by the `/ready` health probe.
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withCoherenceChecks (cadence: Trigger) (principal: DeclaredPrincipal) (app: ServerApp) : ServerApp =
-        withCoherenceChecksConfig
-            {
-                CoherenceConfig.defaults with
-                    HealthPrincipal = Some principal
-            }
-            cadence
-            [ principal ]
-            app
-
-    // ─── Phase 887 — the default fact-table writer (opt-in) ───────────
-    //
-    // Declared fact tables (`ServerModule.declareFactTables`) are written
-    // through `IFactTableWriter`. This registers the default writer — over
-    // the composed `IFactStore`, so a declared table is usable before any
-    // dedicated table store is composed — and binds every declared table to
-    // it. A separate opt-in on top of the fact store: a deployment that only
-    // wants the store is byte-for-byte unchanged (GP 11 / GP 13).
-
-    /// Compose the default `IFactTableWriter` and bind every declared fact
-    /// table to it (`BindAllFactTables DefaultFactTableWriter.Destination`).
-    ///
-    /// Requires the fact store (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`,
-    /// composed with `withFactStore`). Under `FeatureMode.Disabled` this returns the
-    /// app unchanged and binds nothing, exactly as `withFactStore` does — so
-    /// a composition declaring a `Required` table then refuses to start at
-    /// the fact-table preflight, naming the table, rather than failing here.
-    ///
-    /// The writer resolves the table registry and the metric registry from
-    /// DI when first used, so modules may be added before or after this call.
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withFactTableWriter (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            let register (s: IServiceCollection) =
-                s.AddSingleton<IFactTableWriter>(
-                    Func<IServiceProvider, IFactTableWriter>(fun sp ->
-                        let writer =
-                            DefaultFactTableWriter.create
-                                (sp.GetRequiredService<IFactStore>())
-                                (sp.GetRequiredService<IBlobStorage>())
-                                (sp.GetRequiredService<IEventStore>())
-                                (tryService<Grounding.IFactTableRegistry> sp
-                                 |> Option.defaultValue Grounding.FactTableRegistry.empty)
-                                (tryService<Grounding.IMetricRegistry> sp)
-
-                        // A committed run raises its table's change, for a
-                        // reader that keeps what it read.
-                        match tryService<IFactTableChangeSignal> sp with
-                        | Some signal -> FactTableChangeSignal.raisingWriter signal writer
-                        | None -> writer)
-                )
-
-            app
-            |> contribute register
-            |> ServerApp.bindFactTables (Grounding.BindAllFactTables DefaultFactTableWriter.Destination)
-
-    /// **Adds** the once-per-delivery narrative trigger: the composed
-    /// `IFactTableWriter`, decorated so a successful commit of a table a run
-    /// names enqueues that run through `GroundedNarrativeTrigger`. `runsFor` says
-    /// which runs a table's commit enqueues (none: the table is not watched). The
-    /// firing rule is `DeliveryTrigger`'s. Compose it after `withFactTableWriter`,
-    /// whose registration it decorates; before it, the composition is refused
-    /// naming the order. Under `FeatureMode.Disabled` the app is unchanged.
-    let withDeliveryTrigger (runsFor: string -> string list) (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            app
-            |> contribute (fun services ->
-                match ServiceComposition.captureDescriptor<IFactTableWriter> services with
-                | None ->
-                    ServiceComposition.refuse (
-                        CompositionRefusal.InvalidDeclaration(
-                            "FactsCompose.withDeliveryTrigger",
-                            "no IFactTableWriter is registered to decorate; compose it after FactsCompose.withFactTableWriter"
-                        )
-                    )
-                | Some captured ->
-                    services.AddSingleton<IFactTableWriter>(
-                        Func<IServiceProvider, IFactTableWriter>(fun sp ->
-                            DeliveryTrigger.decorate
-                                runsFor
-                                (fun () -> tryService<IJobScheduler> sp)
-                                (fun () -> tryService<Microsoft.AspNetCore.Http.IHttpContextAccessor> sp)
-                                (sp.GetRequiredService<ILogger>())
-                                (captured.Resolve sp))
-                    ))
-
-    /// **Adds** tolerance triggers: the composed `IFactTableWriter`, decorated so a
-    /// unit of work that moved a trigger's table asks whether its metric moved beyond
-    /// the tolerance, and enqueues the run through `GroundedNarrativeTrigger` when any
-    /// selected subject did. The firing rule is `ToleranceTrigger`'s. A trigger written
-    /// wrongly is refused here; one naming a table or metric no module declares is
-    /// refused by the compose-time preflight, once every module has declared its
-    /// tables. Compose it after `withFactTableWriter`, whose registration it decorates;
-    /// before it, the composition is refused naming the order. Under
-    /// `FeatureMode.Disabled` the app is unchanged.
-    let withToleranceTriggers (triggers: ToleranceTrigger list) (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            match ToleranceTrigger.malformed triggers with
-            | problem :: _ ->
-                ServiceComposition.refuse (
-                    CompositionRefusal.InvalidDeclaration("FactsCompose.withToleranceTriggers", problem)
-                )
-            | [] ->
-                app
-                |> contribute (fun services ->
-                    match ServiceComposition.captureDescriptor<IFactTableWriter> services with
-                    | None ->
-                        ServiceComposition.refuse (
-                            CompositionRefusal.InvalidDeclaration(
-                                "FactsCompose.withToleranceTriggers",
-                                "no IFactTableWriter is registered to decorate; compose it after FactsCompose.withFactTableWriter"
-                            )
-                        )
-                    | Some captured ->
-                        services.AddSingleton<ConfigValidation.IConfigValidator>(
-                            ToleranceTriggerGuard(triggers, services) :> ConfigValidation.IConfigValidator
-                        )
-                        |> ignore
-
-                        services.AddSingleton<IFactTableWriter>(
-                            Func<IServiceProvider, IFactTableWriter>(fun sp ->
-                                ToleranceTrigger.decorate
-                                    triggers
-                                    (fun () -> tryService<Grounding.IFactTableRegistry> sp)
-                                    (fun () -> tryService<IFactStore> sp)
-                                    (fun () -> tryService<IJobScheduler> sp)
-                                    (fun () -> tryService<Microsoft.AspNetCore.Http.IHttpContextAccessor> sp)
-                                    (sp.GetRequiredService<ILogger>())
-                                    (captured.Resolve sp))
-                        ))
-
-    // ─── Phase 986 — the fact tier as one composition, and its compiler ─
-
-    /// The whole fact tier in one call: turn the fact store on
-    /// (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`), then `withFactStore`
-    /// and `withFactTableWriter` over it. Because it sets the knob itself,
-    /// it does not depend on a `withConfig` having run first.
-    ///
-    /// For a RAG app, hand it to `RagOptions.withFacts`, which applies it
-    /// when the app is composed — after every `withConfig`, wherever the
-    /// call sits in the pipeline:
-    ///
-    /// ```fsharp
-    /// RagOptions.create factory providerProfile embedder
-    /// |> RagOptions.withFacts FactsCompose.withFactTier
-    /// |> ServerApp.withConfig config
-    /// ```
-    ///
-    /// What it arms: the fact tools (`query_facts` and its siblings, once
-    /// the AI tier is composed) and the fact store's push door — a
-    /// question compiled into a fact clause ahead of vector retrieval —
-    /// which compiles through the AI tier's `IAIProviderFactory` unless a
-    /// compiler is chosen with `withQuestionCompiler`.
-    let withFactTier (app: ServerApp) : ServerApp =
-        {
-            app with
-                Config = {
-                    app.Config with
-                        Stores = {
-                            app.Config.Stores with
-                                FactStore = FeatureMode.Enabled
-                        }
-                }
-        }
-        |> withFactStore
-        |> withFactTableWriter
-
-    /// Choose the answer planner's question compiler explicitly (Phase
-    /// 986). It outranks a registered `IAIProvider` and the AI tier's
-    /// `IAIProviderFactory`, which the planner otherwise compiles through.
-    /// Opt the push door out deliberately — and silence the startup
-    /// warning a compiler-less planner raises — with
-    /// `withQuestionCompiler AnswerPlanner.noQuestionCompiler`.
-    ///
-    /// Registers the choice whatever the fact-store knob says; it has an
-    /// effect only where the fact tier is composed, before or after this
-    /// call. The last choice registered wins.
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withQuestionCompiler (compiler: QuestionCompiler) (app: ServerApp) : ServerApp =
+    /// The default `IFactTableWriter`, over the composed `IFactStore` so a
+    /// declared table is usable before any dedicated table store is composed,
+    /// with every declared fact table bound to it. The writer resolves the
+    /// table and metric registries when first used, so modules may be added
+    /// before or after. A declared `Required` table with no writer refuses to
+    /// start at the fact-table preflight, naming the table.
+    let private applyFactTableWriter (app: ServerApp) =
         let register (s: IServiceCollection) =
-            s.AddSingleton<ExplicitQuestionCompiler>(ExplicitQuestionCompiler compiler)
+            s.AddSingleton<IFactTableWriter>(
+                Func<IServiceProvider, IFactTableWriter>(fun sp ->
+                    let writer =
+                        DefaultFactTableWriter.create
+                            (sp.GetRequiredService<IFactStore>())
+                            (sp.GetRequiredService<IBlobStorage>())
+                            (sp.GetRequiredService<IEventStore>())
+                            (tryService<Grounding.IFactTableRegistry> sp
+                             |> Option.defaultValue Grounding.FactTableRegistry.empty)
+                            (tryService<Grounding.IMetricRegistry> sp)
 
-        app |> contribute register
+                    // A committed run raises its table's change, for a
+                    // reader that keeps what it read.
+                    match tryService<IFactTableChangeSignal> sp with
+                    | Some signal -> FactTableChangeSignal.raisingWriter signal writer
+                    | None -> writer)
+            )
 
-    // ─── Phase 888 — a replacement IFactStore behind the same knob ─────
-    //
-    // `withFactStore` composes the blob default. A deployment that has
-    // outgrown it swaps in another `IFactStore` — the indexed companion
-    // `ToolUp.FactStores.Postgres` is the shipped one — without losing a
-    // single registration built over the store: the evidence source, the
-    // disclosure gate, the resolver, the provenance graph, reactive
-    // recomputation and the fact tools all resolve `IFactStore` from DI, so
-    // they follow the replacement.
+        app
+        |> contribute register
+        |> ServerApp.bindFactTables (Grounding.BindAllFactTables DefaultFactTableWriter.Destination)
 
-    /// Replace the composed `IFactStore` with `factory`'s store, keeping
-    /// every registration built over it (Phase 888). `backend` names the
-    /// implementation for introspection and for the blob store's
-    /// multi-replica scale guard, which stands down once the blob store is
-    /// no longer the one composed.
-    ///
-    /// Requires the fact store (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`);
-    /// under `FeatureMode.Disabled` this returns the app unchanged, exactly as
-    /// `withFactStore` does. Insert straight AFTER `withFactStore` and
-    /// before any knob that decorates the store (`withCoverageNarratives`):
-    /// the replacement removes every `IFactStore` registration made before
-    /// it, so a later `withFactStore` would put the blob store back and an
-    /// earlier decorator would be dropped:
-    ///
-    /// ```fsharp
-    /// ServerApp.empty
-    /// |> ServerApp.withStorage blob
-    /// |> FactsCompose.withFactStore
-    /// |> FactsCompose.withFactStoreImplementation "postgres" (fun sp -> myStore sp)
-    /// |> ServerApp.run
-    /// ```
-    ///
-    /// A companion normally wraps this in its own builder
-    /// (`PostgresFactStoreCompose.withPostgresFactStore`).
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withFactStoreImplementation
-        (backend: string)
-        (factory: IServiceProvider -> IFactStore)
+    /// Whether `app` already binds its declared tables to a writer: the
+    /// default writer, or the delegate writer for a delegated table.
+    let private writerComposed (app: ServerApp) : bool =
+        app.FactTableBindings
+        |> List.exists (fun binding ->
+            match binding with
+            | Grounding.BindAllFactTables destination -> destination = DefaultFactTableWriter.Destination
+            | Grounding.BindFactTable(_, destination) -> destination = DelegateFact.Destination)
+
+    /// Decorates the composed `IFactTableWriter`, captured from the collection.
+    /// The options were refused when no writer is composed, so a missing
+    /// descriptor is a composition that removed it, and is refused by name.
+    let private decorateWriter
+        (field: string)
+        (decorate: IServiceCollection -> CapturedService<IFactTableWriter> -> IServiceCollection)
         (app: ServerApp)
-        : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            let register (s: IServiceCollection) =
-                s.RemoveAll<IFactStore>() |> ignore
+        =
+        app
+        |> contribute (fun services ->
+            match ServiceComposition.captureDescriptor<IFactTableWriter> services with
+            | None ->
+                ServiceComposition.refuse (
+                    CompositionRefusal.MissingDependency(
+                        "FactsComposeOptions." + field,
+                        "IFactTableWriter",
+                        "set FactTableWriter = true, or hold the tables it watches as DelegateFacts"
+                    )
+                )
+            | Some captured -> decorate services captured)
 
-                s.AddSingleton<IFactStore>(Func<IServiceProvider, IFactStore>(factory))
-                |> ignore
+    /// The once-per-delivery narrative trigger: a successful commit of a table
+    /// a run names enqueues that run through `GroundedNarrativeTrigger`. The
+    /// firing rule is `DeliveryTrigger`'s.
+    let private applyDeliveryTrigger (runsFor: string -> string list) (app: ServerApp) =
+        app
+        |> decorateWriter "DeliveryTrigger" (fun services captured ->
+            services.AddSingleton<IFactTableWriter>(
+                Func<IServiceProvider, IFactTableWriter>(fun sp ->
+                    DeliveryTrigger.decorate
+                        runsFor
+                        (fun () -> tryService<IJobScheduler> sp)
+                        (fun () -> tryService<Microsoft.AspNetCore.Http.IHttpContextAccessor> sp)
+                        (sp.GetRequiredService<ILogger>())
+                        (captured.Resolve sp))
+            ))
 
-                s.RemoveAll<FactStoreBackend>() |> ignore
-                s.AddSingleton<FactStoreBackend>({ Backend = backend })
+    /// Tolerance triggers: a unit of work that moved a trigger's table asks
+    /// whether its metric moved beyond the tolerance, and enqueues the run when
+    /// any selected subject did. A trigger naming a table or metric no module
+    /// declares is refused by the compose-time preflight, once every module has
+    /// declared its tables.
+    let private applyToleranceTriggers (triggers: ToleranceTrigger list) (app: ServerApp) =
+        app
+        |> decorateWriter "ToleranceTriggers" (fun services captured ->
+            services.AddSingleton<ConfigValidation.IConfigValidator>(
+                ToleranceTriggerGuard(triggers, services) :> ConfigValidation.IConfigValidator
+            )
+            |> ignore
 
-            app |> contribute register
+            services.AddSingleton<IFactTableWriter>(
+                Func<IServiceProvider, IFactTableWriter>(fun sp ->
+                    ToleranceTrigger.decorate
+                        triggers
+                        (fun () -> tryService<Grounding.IFactTableRegistry> sp)
+                        (fun () -> tryService<IFactStore> sp)
+                        (fun () -> tryService<IJobScheduler> sp)
+                        (fun () -> tryService<Microsoft.AspNetCore.Http.IHttpContextAccessor> sp)
+                        (sp.GetRequiredService<ILogger>())
+                        (captured.Resolve sp))
+            ))
+
+    /// The answer planner's explicit question compiler. It outranks a
+    /// registered `IAIProvider` and the AI tier's `IAIProviderFactory`; the
+    /// last choice registered wins.
+    let private applyQuestionCompiler (compiler: QuestionCompiler) (app: ServerApp) =
+        app
+        |> contribute (fun s -> s.AddSingleton<ExplicitQuestionCompiler>(ExplicitQuestionCompiler compiler))
+
+    // ─── A replacement IFactStore behind the same knob ────────────────
+    //
+    // The blob default suits a store of modest size; a deployment that has
+    // outgrown it swaps in another `IFactStore` (the indexed companion
+    // `ToolUp.FactStores.Postgres` is the shipped one) without losing a single
+    // registration built over the store: the evidence source, the disclosure
+    // gate, the resolver, the provenance graph, reactive recomputation and the
+    // fact tools all resolve `IFactStore` from DI, so they follow it.
+
+    /// Removes every `IFactStore` registration made before it and registers
+    /// the replacement, renaming the backend marker the blob store's
+    /// multi-replica scale guard reads, so the guard stands down.
+    let private applyStoreImplementation (replacement: FactStoreReplacement) (app: ServerApp) =
+        app
+        |> contribute (fun s ->
+            s.RemoveAll<IFactStore>() |> ignore
+
+            s.AddSingleton<IFactStore>(Func<IServiceProvider, IFactStore>(replacement.Factory))
+            |> ignore
+
+            s.RemoveAll<FactStoreBackend>() |> ignore
+            s.AddSingleton<FactStoreBackend>({ Backend = replacement.Backend }))
+
     // ─── Phase 889 — delegate facts (opt-in) ──────────────────────────
     //
     // A declared fact table can hold its metric populations as delegates:
@@ -2058,7 +1527,7 @@ module FactsCompose =
                 | Ok delegates -> delegates
                 | Error reason ->
                     ServiceComposition.refuse (
-                        CompositionRefusal.InvalidDeclaration("FactsCompose.withDelegateFacts", reason)
+                        CompositionRefusal.InvalidDeclaration("FactsComposeOptions.DelegateFacts", reason)
                     )
 
             services.AddSingleton<DelegatedFactStore>(
@@ -2101,45 +1570,25 @@ module FactsCompose =
                         (fun () -> DateTime.UtcNow))
             )
 
-    /// Hold the named declared fact tables as delegate facts (Phase 889):
-    /// each table is bound to the delegate destination and kept as rows;
-    /// each of its columns becomes one delegate record in the fact tier; and
-    /// a point or population read of a delegated metric is answered from the
-    /// table, minting as ordinary facts only the rows it returns.
-    ///
-    /// Requires the fact store (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`);
-    /// under `FeatureMode.Disabled` this returns the app unchanged. Insert AFTER
-    /// `withFactStore` (and after `withFactStoreImplementation`, which drops
-    /// every registration made before it) — it decorates what they
-    /// registered. `withFactTableWriter` may come before or after: tables
-    /// bound here are held by the delegate writer, and every other table is
-    /// handed to the writer that composed it.
-    ///
-    /// ```fsharp
-    /// ServerApp.empty
-    /// |> ServerApp.withConfig { ServerConfig.defaults with Stores = { ServerConfig.defaults.Stores with FactStore = FeatureMode.Enabled } }
-    /// |> ServerApp.addModules [ salesModule ]
-    /// |> FactsCompose.withFactStore
-    /// |> FactsCompose.withFactTableWriter
-    /// |> FactsCompose.withDelegateFacts [ "sku-sales" ]
-    /// ```
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withDelegateFacts (tableIds: string list) (app: ServerApp) : ServerApp =
-        match app.Config.Stores.FactStore, tableIds with
-        | FeatureMode.Disabled, _
-        | _, [] -> app
-        | FeatureMode.Enabled, _ ->
-            let register = registerDelegateFacts tableIds
-
-            let bound =
-                tableIds
-                |> List.distinct
-                |> List.fold
-                    (fun a tableId ->
-                        ServerApp.bindFactTables (Grounding.BindFactTable(tableId, DelegateFact.Destination)) a)
-                    app
-
-            bound |> contribute register
+    /// Holds the named declared fact tables as delegate facts: each table is
+    /// bound to the delegate destination and kept as rows, each of its columns
+    /// becomes one delegate record in the fact tier, and a point or population
+    /// read of a delegated metric is answered from the table, minting as
+    /// ordinary facts only the rows it returns. It decorates the composed store
+    /// and writer, so it applies after the store's replacement and the default
+    /// writer; tables bound here are held by the delegate writer, and every
+    /// other table is handed to the writer that composed it.
+    let private applyDelegateFacts (tableIds: string list) (app: ServerApp) =
+        match tableIds with
+        | [] -> app
+        | tableIds ->
+            tableIds
+            |> List.distinct
+            |> List.fold
+                (fun a tableId ->
+                    ServerApp.bindFactTables (Grounding.BindFactTable(tableId, DelegateFact.Destination)) a)
+                app
+            |> contribute (registerDelegateFacts tableIds)
 
     // ─── Phase 896 — team output visibility (opt-in) ──────────────────
     //
@@ -2193,119 +1642,94 @@ module FactsCompose =
             }
         }
 
-    /// Compose team output visibility (Phase 896): a team may limit who
-    /// sees the `Restricted` output its modules publish to the whole team,
-    /// the team's admins, or platform admins — the same three levels as
-    /// conversation visibility. `defaultLevel` is the level a team starts
-    /// with, `allowed` the levels a team owner may choose from; the
-    /// declaration is validated here, and an empty allowed set or a default
-    /// outside it fails composition.
-    ///
-    /// Arms: the settings (read by the store that holds each team's
-    /// choice), the platform's `ITeamOutputVisibilitySource` over that
-    /// store and the startup check that the two deployment defaults do not
-    /// conflict (Phase 936), the gate's viewer-aware facet, and the
-    /// middleware that establishes the request's viewer. The declaration
-    /// is recorded on the app, so the composition manifest projects it. `Surfaceable` facts stay
-    /// visible to every viewer the scope admits and `Internal` facts are
-    /// never disclosed, exactly as before; module permission is not
-    /// consulted, because permission governs use, not sight.
-    ///
-    /// **Not composing this is the default**, and so is composing it with
-    /// `TeamVisible` as the default and no team choosing otherwise: every
-    /// check is then decided exactly as before (GP 11). A `FeatureMode.Disabled`
-    /// deployment is unchanged. Insert after `withFactStore`:
-    ///
-    /// ```fsharp
-    /// ServerApp.empty
-    /// |> ServerApp.withStorage blob
-    /// |> FactsCompose.withFactStore
-    /// |> FactsCompose.withTeamOutputVisibility TeamVisible [ TeamVisible; TeamAdmins ]
-    /// |> ServerApp.run
-    /// ```
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withTeamOutputVisibility
-        (defaultLevel: TeamVisibilityLevel)
-        (allowed: TeamVisibilityLevel list)
-        (app: ServerApp)
-        : ServerApp =
-        match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
-        | FeatureMode.Enabled ->
-            let settings =
-                match TeamOutputVisibilitySettings.create defaultLevel allowed with
-                | Ok settings -> settings
-                | Error message ->
-                    ServiceComposition.refuse (
-                        CompositionRefusal.InvalidDeclaration("FactsCompose.withTeamOutputVisibility", message)
-                    )
-
-            let register (s: IServiceCollection) =
-                s.RemoveAll<TeamOutputVisibilitySettings>() |> ignore
-                s.AddSingleton<TeamOutputVisibilitySettings>(settings) |> ignore
-
-                // Phase 936 — the platform's source over the per-team record,
-                // and the startup check that the two deployment defaults do
-                // not conflict (an instance: preflight refuses a factory).
-                s.TryAddSingleton<ITeamOutputVisibilitySource>(
-                    Func<IServiceProvider, ITeamOutputVisibilitySource>(fun sp ->
-                        TeamPolicyStore.TeamPolicyOutputVisibilitySource(sp) :> ITeamOutputVisibilitySource)
+    /// Team output visibility: a team may limit who sees the `Restricted`
+    /// output its modules publish to the whole team, the team's admins, or
+    /// platform admins, the same three levels as conversation visibility.
+    /// Arms the settings (read by the store that holds each team's choice), the
+    /// platform's `ITeamOutputVisibilitySource` over that store and the startup
+    /// check that the two deployment defaults do not conflict, the gate's
+    /// viewer-aware facet, and the middleware that establishes the request's
+    /// viewer; the declaration is recorded on the app, so the composition
+    /// manifest projects it. `Surfaceable` facts stay visible to every viewer
+    /// the scope admits and `Internal` facts are never disclosed; module
+    /// permission is not consulted, because permission governs use, not sight.
+    /// Composing it with `TeamVisible` as the default and no team choosing
+    /// otherwise decides every check exactly as before (GP 11).
+    let private applyTeamOutputVisibility (declared: TeamOutputVisibilityDeclaration) (app: ServerApp) =
+        let settings =
+            match TeamOutputVisibilitySettings.create declared.Default declared.Allowed with
+            | Ok settings -> settings
+            | Error message ->
+                ServiceComposition.refuse (
+                    CompositionRefusal.InvalidDeclaration("FactsComposeOptions.TeamOutputVisibility", message)
                 )
 
-                s
-                |> Seq.filter (fun d -> d.ImplementationInstance :? TeamPolicyStore.TeamVisibilityDefaultsValidator)
-                |> List.ofSeq
-                |> List.iter (s.Remove >> ignore)
+        let register (s: IServiceCollection) =
+            s.RemoveAll<TeamOutputVisibilitySettings>() |> ignore
+            s.AddSingleton<TeamOutputVisibilitySettings>(settings) |> ignore
 
-                s.AddSingleton<ConfigValidation.IConfigValidator>(
-                    TeamPolicyStore.TeamVisibilityDefaultsValidator(settings, s) :> ConfigValidation.IConfigValidator
-                )
-                |> ignore
+            // The platform's source over the per-team record, and the
+            // startup check that the two deployment defaults do
+            // not conflict (an instance: preflight refuses a factory).
+            s.TryAddSingleton<ITeamOutputVisibilitySource>(
+                Func<IServiceProvider, ITeamOutputVisibilitySource>(fun sp ->
+                    TeamPolicyStore.TeamPolicyOutputVisibilitySource(sp) :> ITeamOutputVisibilitySource)
+            )
 
-                match ServiceComposition.captureDescriptor<IFactDisclosureGate> s with
-                | None ->
-                    ServiceComposition.refuse (
-                        CompositionRefusal.MissingDependency(
-                            "FactsCompose.withTeamOutputVisibility",
-                            "IFactDisclosureGate",
-                            "compose FactsCompose.withFactStore first"
-                        )
-                    )
-                | Some inner ->
-                    s.Remove inner.Descriptor |> ignore
+            s
+            |> Seq.filter (fun d -> d.ImplementationInstance :? TeamPolicyStore.TeamVisibilityDefaultsValidator)
+            |> List.ofSeq
+            |> List.iter (s.Remove >> ignore)
 
-                    s.AddSingleton<IFactDisclosureGate>(
-                        Func<IServiceProvider, IFactDisclosureGate>(fun sp ->
-                            match inner.Resolve sp with
-                            | :? FactDisclosureGate as gate -> gate.WithViewerAwareness(viewerAwareFacet settings sp)
-                            | other ->
-                                ServiceComposition.refuse (
-                                    CompositionRefusal.UnsupportedImplementation(
-                                        "FactsCompose.withTeamOutputVisibility",
-                                        "IFactDisclosureGate",
-                                        $"{other.GetType().FullName}, not the platform's FactDisclosureGate"
-                                    )
-                                ))
-                    )
+            s.AddSingleton<ConfigValidation.IConfigValidator>(
+                TeamPolicyStore.TeamVisibilityDefaultsValidator(settings, s) :> ConfigValidation.IConfigValidator
+            )
+            |> ignore
 
-            let establishViewer (builder: Microsoft.AspNetCore.Builder.IApplicationBuilder) =
-                Microsoft.AspNetCore.Builder.UseExtensions.Use(
-                    builder,
-                    Func<
-                        Microsoft.AspNetCore.Http.HttpContext,
-                        Func<System.Threading.Tasks.Task>,
-                        System.Threading.Tasks.Task
-                     >(
-                        FactViewerContext.middleware
+            match ServiceComposition.captureDescriptor<IFactDisclosureGate> s with
+            | None ->
+                ServiceComposition.refuse (
+                    CompositionRefusal.MissingDependency(
+                        "FactsComposeOptions.TeamOutputVisibility",
+                        "IFactDisclosureGate",
+                        "compose the fact store with FactsCompose.withOptions, which registers it"
                     )
                 )
+            | Some inner ->
+                s.Remove inner.Descriptor |> ignore
 
-            {
-                app with
-                    Extensions.PreMiddleware = app.Extensions.PreMiddleware @ [ establishViewer ]
-                    TeamOutputVisibility = Some settings
-            }
-            |> contribute register
+                s.AddSingleton<IFactDisclosureGate>(
+                    Func<IServiceProvider, IFactDisclosureGate>(fun sp ->
+                        match inner.Resolve sp with
+                        | :? FactDisclosureGate as gate -> gate.WithViewerAwareness(viewerAwareFacet settings sp)
+                        | other ->
+                            ServiceComposition.refuse (
+                                CompositionRefusal.UnsupportedImplementation(
+                                    "FactsComposeOptions.TeamOutputVisibility",
+                                    "IFactDisclosureGate",
+                                    $"{other.GetType().FullName}, not the platform's FactDisclosureGate"
+                                )
+                            ))
+                )
+
+        let establishViewer (builder: Microsoft.AspNetCore.Builder.IApplicationBuilder) =
+            Microsoft.AspNetCore.Builder.UseExtensions.Use(
+                builder,
+                Func<
+                    Microsoft.AspNetCore.Http.HttpContext,
+                    Func<System.Threading.Tasks.Task>,
+                    System.Threading.Tasks.Task
+                 >(
+                    FactViewerContext.middleware
+                )
+            )
+
+        {
+            app with
+                Extensions.PreMiddleware = app.Extensions.PreMiddleware @ [ establishViewer ]
+                TeamOutputVisibility = Some settings
+        }
+        |> contribute register
     // ─── Phase 897 — team-to-team fact publication (opt-in) ───────────
     //
     // A consolidated view is built by PUBLISHING, never by reading across
@@ -2320,93 +1744,429 @@ module FactsCompose =
     // untouched. A deployment that does not call it is unchanged, and one
     // that calls it but records no grant writes nothing anywhere.
 
-    /// Compose team-to-team fact publication (Phase 897). `config` declares
-    /// the consolidation tables publications may be written into and the
-    /// signing profile: `FactPublicationConfig.create targets` for recorded
-    /// provenance, `FactPublicationConfig.signed` for the regulated profile,
-    /// which additionally needs an `IArtefactSigner` and an
-    /// `IArtefactVerifier` composed.
+    /// Team-to-team fact publication: the publication service (grants, the
+    /// two consents, the one cross-scope write seam) and the publication and
+    /// refresh job handlers on the composed scheduler. The signed profile
+    /// (`FactPublicationConfig.signed`) also needs an `IArtefactSigner` and an
+    /// `IArtefactVerifier` composed; owner acts read the team's roles from the
+    /// composed team store.
+    let private applyFactPublication (config: FactPublicationConfig) (app: ServerApp) =
+        let register (s: IServiceCollection) =
+            s.AddSingleton<IFactPublication>(
+                Func<IServiceProvider, IFactPublication>(fun sp ->
+                    let teams = tryService<ToolUp.Platform.Config.TeamManagement.ITeamStore> sp
+
+                    // Phase 935 — grants persist when the platform's
+                    // scope carrier is composed (it is, beside the
+                    // DataProtection key ring, in every composition).
+                    let create =
+                        match tryService<ScopeCarrier> sp with
+                        | Some carrier -> FactPublication.createDurable carrier
+                        | None -> FactPublication.createWith
+
+                    create
+                        config
+                        (sp.GetRequiredService<IFactStore>())
+                        (sp.GetRequiredService<IBlobStorage>())
+                        (sp.GetRequiredService<IEventStore>())
+                        (sp.GetRequiredService<IFactDisclosureGate>())
+                        (tryService<Grounding.IFactTableRegistry> sp
+                         |> Option.defaultValue Grounding.FactTableRegistry.empty)
+                        (tryService<Grounding.IMetricRegistry> sp)
+                        (tryService<IFactTableWriter> sp)
+                        (fun teamId userId ->
+                            match teams with
+                            | Some teams -> teams.GetMemberRole(TeamId teamId, UserId userId)
+                            | None -> async.Return None)
+                        (tryService<ToolUp.ArtefactSigning.IArtefactSigner> sp)
+                        (tryService<ToolUp.ArtefactSigning.IArtefactVerifier> sp)
+                        (fun () -> DateTime.UtcNow))
+            )
+            |> ignore
+
+            // The handlers are registered, never scheduled: a publication
+            // is scheduled by the source team's owner under the source's
+            // minted scope, and a refresh by the target's under its own
+            // (`FactPublicationJobs.schedulePublication` / `scheduleRefresh`).
+            // Once at start: a handler registration, placed by the
+            // scheduler's own unit.
+            Hosting.register
+                s
+                (BackgroundUnit.create "fact-publication-handler-registration" OnceAtStart (fun sp ->
+                    Hosting.atStart (fun () ->
+                        // Resolving the service here surfaces a
+                        // declaration defect at startup, not at the
+                        // first publication.
+                        let publication = sp.GetRequiredService<IFactPublication>()
+
+                        match tryService<IJobScheduler> sp with
+                        | Some scheduler ->
+                            scheduler.RegisterHandler(
+                                FactPublicationJobs.PublishHandler,
+                                FactPublicationJobs.publishHandler publication
+                            )
+
+                            scheduler.RegisterHandler(
+                                FactPublicationJobs.RefreshHandler,
+                                FactPublicationJobs.refreshHandler publication
+                            )
+                        | None -> ())))
+            |> ignore
+
+            s
+
+        app |> contribute register
+    // ─── The options record, composed once ───────────────────────────
+
+    /// The tool names an app declares, with the fact tools the store declares.
+    let private declaredToolNames (app: ServerApp) : Set<string> =
+        app.AITools @ NarrativeGrounding.factTools
+        |> List.map (fun (definition, _) -> definition.Name)
+        |> Set.ofList
+
+    let private applyIf (field: 'T option) (apply: 'T -> ServerApp -> ServerApp) (app: ServerApp) =
+        match field with
+        | Some value -> apply value app
+        | None -> app
+
+    /// Compose the fact tier as one value: the fact store per
+    /// `ServerConfig.Stores.FactStore` (or turned on by `EnableStore`) and
+    /// every field of `options` over it, in one fixed order whatever order
+    /// the record is written in. `FactsComposeOptions.defaults` composes the
+    /// store alone.
     ///
-    /// Requires the fact store, and the table writer for the tables it
-    /// names; owner acts read the team's roles from the composed team store.
-    /// A `FeatureMode.Disabled` deployment is unchanged. Insert after
-    /// `withFactTableWriter`:
-    ///
-    /// ```fsharp
+    /// ```fsharp skip=fragment
     /// ServerApp.empty
     /// |> ServerApp.withStorage blob
-    /// |> FactsCompose.withFactStore
-    /// |> FactsCompose.withFactTableWriter
-    /// |> FactsCompose.withFactPublication (FactPublicationConfig.create [ FactPublicationTarget.create "group-sales" "region" ])
+    /// |> FactsCompose.withOptions {
+    ///     FactsComposeOptions.defaults with
+    ///         FactTableWriter = true
+    ///         DelegateFacts = [ "sku-sales" ]
+    ///         TeamOutputVisibility = Some(TeamOutputVisibilityDeclaration.create TeamVisible [ TeamVisible; TeamAdmins ])
+    /// }
     /// |> ServerApp.run
     /// ```
-    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
-    let withFactPublication (config: FactPublicationConfig) (app: ServerApp) : ServerApp =
+    ///
+    /// A contradictory record is refused ONCE, here, before anything
+    /// composes, raising `CompositionRefused` with the first of
+    /// `FactsComposeOptions.refusals` (read against what the app already
+    /// composes), named by its field. Where the store is not enabled the app
+    /// is returned unchanged, except that a `QuestionCompiler` is registered
+    /// whatever the knob says (GP 11 / GP 13). The store is composed once: a
+    /// later `withOptions` composes only its own fields over it, so a
+    /// companion builder may add to a root's options. Insert before a RAG
+    /// compose, so the retrieval pipeline's DI pickup sees the fact tier, and
+    /// after the modules whose grounding declarations a
+    /// `GroundingEnvelopeSeal` is to cover.
+    /// **Adds** its registrations as contributions under the Facts companion's id; a later `withExtensions` keeps them.
+    let withOptions (options: FactsComposeOptions) (app: ServerApp) : ServerApp =
+        let app =
+            if options.EnableStore then
+                {
+                    app with
+                        Config = {
+                            app.Config with
+                                Stores = {
+                                    app.Config.Stores with
+                                        FactStore = FeatureMode.Enabled
+                                }
+                        }
+                }
+            else
+                app
+
         match app.Config.Stores.FactStore with
-        | FeatureMode.Disabled -> app
+        | FeatureMode.Disabled -> app |> applyIf options.QuestionCompiler applyQuestionCompiler
         | FeatureMode.Enabled ->
-            let register (s: IServiceCollection) =
-                s.AddSingleton<IFactPublication>(
-                    Func<IServiceProvider, IFactPublication>(fun sp ->
-                        let teams = tryService<ToolUp.Platform.Config.TeamManagement.ITeamStore> sp
+            match FactsComposeOptions.refusalsOver (writerComposed app) (declaredToolNames app) options with
+            | refusal :: _ -> ServiceComposition.refuse refusal
+            | [] ->
+                app
+                |> composeStore
+                |> applyIf options.StoreImplementation applyStoreImplementation
+                |> applyIf options.QuestionCompiler applyQuestionCompiler
+                |> applyIf options.DisclosurePurposes applyDisclosurePurposes
+                |> applyIf options.DeclassificationBudgets applyDeclassificationBudgets
+                |> applyIf options.DisclosureFanOut applyDisclosureFanOut
+                |> (if options.FactTableWriter then applyFactTableWriter else id)
+                |> applyDelegateFacts options.DelegateFacts
+                |> applyIf options.CoverageNarratives applyCoverageNarratives
+                |> applyIf options.DeliveryTrigger applyDeliveryTrigger
+                |> (if options.ToleranceTriggers.IsEmpty then
+                        id
+                    else
+                        applyToleranceTriggers options.ToleranceTriggers)
+                |> applyIf options.TeamOutputVisibility applyTeamOutputVisibility
+                |> applyIf options.FactPublication applyFactPublication
+                |> applyIf options.FactImport applyFactImport
+                |> applyIf options.CoherenceChecks applyCoherenceChecks
+                |> applyIf options.NarrativeCalculations applyNarrativeCalculations
+                |> applyIf options.PipelineProfile applyPipelineProfile
+                |> declareTools options.SpecTools
+                |> applyIf options.Methods applyMethods
+                |> applyIf options.DatasetModels applyDatasetModels
+                |> applyIf options.FactTables applyFactTables
+                |> fun app ->
+                    options.WithholdingSurfaces
+                    |> List.fold (fun app (name, surface) -> WithholdingSurfaces.contribute name surface app) app
+                |> applyIf options.GroundingEnvelopeSeal applyGroundingEnvelopeSeal
 
-                        // Phase 935 — grants persist when the platform's
-                        // scope carrier is composed (it is, beside the
-                        // DataProtection key ring, in every composition).
-                        let create =
-                            match tryService<ScopeCarrier> sp with
-                            | Some carrier -> FactPublication.createDurable carrier
-                            | None -> FactPublication.createWith
+    // ─── The setters the options record replaced ─────────────────────
+    //
+    // Each composes the one field it names through `withOptions`, and keeps
+    // compiling for the deprecation window (docs/platform/deprecation-policy.md).
 
-                        create
-                            config
-                            (sp.GetRequiredService<IFactStore>())
-                            (sp.GetRequiredService<IBlobStorage>())
-                            (sp.GetRequiredService<IEventStore>())
-                            (sp.GetRequiredService<IFactDisclosureGate>())
-                            (tryService<Grounding.IFactTableRegistry> sp
-                             |> Option.defaultValue Grounding.FactTableRegistry.empty)
-                            (tryService<Grounding.IMetricRegistry> sp)
-                            (tryService<IFactTableWriter> sp)
-                            (fun teamId userId ->
-                                match teams with
-                                | Some teams -> teams.GetMemberRole(TeamId teamId, UserId userId)
-                                | None -> async.Return None)
-                            (tryService<ToolUp.ArtefactSigning.IArtefactSigner> sp)
-                            (tryService<ToolUp.ArtefactSigning.IArtefactVerifier> sp)
-                            (fun () -> DateTime.UtcNow))
-                )
-                |> ignore
+    [<Obsolete("Use FactsCompose.withOptions FactsComposeOptions.defaults. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withFactStore (app: ServerApp) : ServerApp =
+        withOptions FactsComposeOptions.defaults app
 
-                // The handlers are registered, never scheduled: a publication
-                // is scheduled by the source team's owner under the source's
-                // minted scope, and a refresh by the target's under its own
-                // (`FactPublicationJobs.schedulePublication` / `scheduleRefresh`).
-                // Once at start: a handler registration, placed by the
-                // scheduler's own unit.
-                Hosting.register
-                    s
-                    (BackgroundUnit.create "fact-publication-handler-registration" OnceAtStart (fun sp ->
-                        Hosting.atStart (fun () ->
-                            // Resolving the service here surfaces a
-                            // declaration defect at startup, not at the
-                            // first publication.
-                            let publication = sp.GetRequiredService<IFactPublication>()
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.WithholdingSurfaces. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withWithholdingSurface (name: string) (surface: FactEgressSurface) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    WithholdingSurfaces = [ name, surface ]
+            }
+            app
 
-                            match tryService<IJobScheduler> sp with
-                            | Some scheduler ->
-                                scheduler.RegisterHandler(
-                                    FactPublicationJobs.PublishHandler,
-                                    FactPublicationJobs.publishHandler publication
-                                )
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.NarrativeCalculations. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withNarrativeCalculations (calculations: NarrativeCalculations) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    NarrativeCalculations = Some calculations
+            }
+            app
 
-                                scheduler.RegisterHandler(
-                                    FactPublicationJobs.RefreshHandler,
-                                    FactPublicationJobs.refreshHandler publication
-                                )
-                            | None -> ())))
-                |> ignore
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.PipelineProfile. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withPipelineProfile (profile: RegisteredPipelineProfile) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    PipelineProfile = Some profile
+            }
+            app
 
-                s
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.SpecTools (FactsComposeOptions.specTool). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withSpecTool (tool: SpecTool<'Spec, 'Refusal, 'Result>) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    SpecTools = [ FactsComposeOptions.specTool tool ]
+            }
+            app
 
-            app |> contribute register
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.Methods. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withMethods (profile: MethodProfile) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    Methods = Some profile
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.DatasetModels (DatasetModelsDeclaration.create). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withDatasetModels
+        (resolver: DisclosurePolicyResolver)
+        (registry: DatasetModelRegistry)
+        (app: ServerApp)
+        : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    DatasetModels = Some(DatasetModelsDeclaration.create resolver registry)
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.FactTables. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withFactTablesOptions (options: FactTablesOptions) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    FactTables = Some options
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.DisclosurePurposes. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withDisclosurePurposes (config: DisclosurePurposeConfig) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    DisclosurePurposes = Some config
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.DeclassificationBudgets. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withDeclassificationBudgetConfig (config: DeclassificationBudgetConfig) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    DeclassificationBudgets = Some config
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.DeclassificationBudgets (DeclassificationBudgetConfig.create). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withDeclassificationBudgets
+        (ledger: IPrivacyBudgetLedger)
+        (budgets: DeclassificationBudget list)
+        (app: ServerApp)
+        : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    DeclassificationBudgets = Some(DeclassificationBudgetConfig.create ledger budgets)
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.DisclosureFanOut. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withDisclosureFanOut (maxConcurrentReads: int) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    DisclosureFanOut = Some maxConcurrentReads
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.FactImport. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withFactImport (anchors: PeerTrustAnchor list) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    FactImport = Some anchors
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.GroundingEnvelopeSeal (GroundingEnvelopeSealDeclaration.create). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withGroundingEnvelopeSeal
+        (profile: CompositionProfile)
+        (observe: (unit -> GroundingEnvelope) option)
+        (app: ServerApp)
+        : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    GroundingEnvelopeSeal = Some(GroundingEnvelopeSealDeclaration.create profile observe)
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.CoverageNarratives. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withCoverageNarratives (options: CoverageNarrative.CoverageNarrativeOptions) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    CoverageNarratives = Some options
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.CoherenceChecks (CoherenceCheckSchedule.create). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withCoherenceChecksConfig
+        (config: CoherenceConfig)
+        (cadence: Trigger)
+        (principals: DeclaredPrincipal list)
+        (app: ServerApp)
+        : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    CoherenceChecks = Some(CoherenceCheckSchedule.create config cadence principals)
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.CoherenceChecks (CoherenceCheckSchedule.forPrincipal). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withCoherenceChecks (cadence: Trigger) (principal: DeclaredPrincipal) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    CoherenceChecks = Some(CoherenceCheckSchedule.forPrincipal cadence principal)
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.FactTableWriter. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withFactTableWriter (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    FactTableWriter = true
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.DeliveryTrigger. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withDeliveryTrigger (runsFor: string -> string list) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    DeliveryTrigger = Some runsFor
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.ToleranceTriggers. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withToleranceTriggers (triggers: ToleranceTrigger list) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    ToleranceTriggers = triggers
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.EnableStore and FactTableWriter. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withFactTier (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    EnableStore = true
+                    FactTableWriter = true
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.QuestionCompiler. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withQuestionCompiler (compiler: QuestionCompiler) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    QuestionCompiler = Some compiler
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.StoreImplementation (FactStoreReplacement.create). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withFactStoreImplementation
+        (backend: string)
+        (factory: IServiceProvider -> IFactStore)
+        (app: ServerApp)
+        : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    StoreImplementation = Some(FactStoreReplacement.create backend factory)
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.DelegateFacts. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withDelegateFacts (tableIds: string list) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    DelegateFacts = tableIds
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.TeamOutputVisibility (TeamOutputVisibilityDeclaration.create). See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withTeamOutputVisibility
+        (defaultLevel: TeamVisibilityLevel)
+        (allowed: TeamVisibilityLevel list)
+        (app: ServerApp)
+        : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    TeamOutputVisibility = Some(TeamOutputVisibilityDeclaration.create defaultLevel allowed)
+            }
+            app
+
+    [<Obsolete("Use FactsCompose.withOptions with FactsComposeOptions.FactPublication. See docs/migrations/1159-factscompose-options.md. Removed in a future major.")>]
+    let withFactPublication (config: FactPublicationConfig) (app: ServerApp) : ServerApp =
+        withOptions
+            {
+                FactsComposeOptions.defaults with
+                    FactPublication = Some config
+            }
+            app

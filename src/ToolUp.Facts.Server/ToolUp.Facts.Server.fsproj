@@ -176,6 +176,9 @@
         <Compile Include="Server\MethodTool.fs" />
         <Compile Include="Server\MethodProfile.fs" />
         <Compile Include="Server\MethodRegistry.fs" />
+        <!-- The facts configuration of a composition root as one record. Before
+             the compose module, which takes it. -->
+        <Compile Include="Server\FactsComposeOptions.fs" />
         <Compile Include="Server\FactsCompose.fs" />
         <!-- Phase 1145 — evaluate_pipeline: a Fuaran.Compute pipeline the
              model writes, evaluated over the fact browse's gated view slice.
