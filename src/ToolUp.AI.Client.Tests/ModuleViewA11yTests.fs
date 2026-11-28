@@ -412,6 +412,12 @@ let private treeSurfaceTests =
                     (TreeViewParityTests.inspectorStates panel)
                     (TreeViewParityTests.inspectorTree panel))
 
+        testCase "every data-ingestion state passes the Strict floor as a tree" (fun () ->
+            TreeViewParityTests.withStripeForm (fun () ->
+                TreeViewParityTests.strictInEvery
+                    (TreeViewParityTests.ingestionStates ())
+                    TreeViewParityTests.ingestionTree))
+
         testCase "the palette's tree, its overlay an island, passes the Strict floor" (fun () ->
             let html = ViewMount.mount (Components.CommandPaletteTree.Surface paletteProps)
             let node = Accessibility.ofHtml html
@@ -607,6 +613,9 @@ let private treeSurfaceTests =
                 "the composition inspector's five pages",
                 render CompositionInspectorUI.builtIn.View (TreeViewParityTests.inspectorLoaded ()).Model,
                 MessageCatalog.english.CompositionInspector.Subheading
+                "the data-ingestion admin",
+                render DataIngestionUI.builtIn.View (TreeViewParityTests.ingestionLoaded ()).Model,
+                MessageCatalog.english.DataIngestion.OAuthFootnote
             ]
 
             for name, rendered, text in pages do

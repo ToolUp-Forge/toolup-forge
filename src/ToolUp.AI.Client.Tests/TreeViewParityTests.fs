@@ -2620,6 +2620,149 @@ let private inspectorTests =
                     failwithf "%A: %s" panel e.Message)
     ]
 
+// ─── The subject: the data-ingestion admin ───────────────────────────
+
+let private ingestionMsgs = MessageCatalog.english.DataIngestion
+
+let private ingestionFeliz (model: DataIngestionUI.Model) (dispatch: DataIngestionUI.Msg -> unit) : Feliz.ReactElement =
+    FelizReferenceViews.DataIngestion.body ingestionMsgs model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let ingestionTree (model: DataIngestionUI.Model) (dispatch: DataIngestionUI.Msg -> unit) : Feliz.ReactElement =
+    lowerTree dispatch (DataIngestionTree.tree ingestionMsgs model dispatch)
+
+/// A connector's credential form, as a companion contributes one: a React
+/// element of its own, which calls the page's refresh once it saved.
+let private stripeForm (context: DataSourceCredentialUIContext) : Feliz.ReactElement =
+    Feliz.Html.button [
+        Feliz.prop.type' "button"
+        Feliz.prop.text (
+            match context.DataSource with
+            | Some source -> "Save credentials for " + source.Name
+            | None -> "Save the new source"
+        )
+        Feliz.prop.onClick (fun _ -> context.Refresh())
+    ]
+
+/// `body` with one connector kind's credential form registered, the registry
+/// emptied again after it, as the shell's boot leaves it in every other test.
+let withStripeForm (body: unit -> unit) =
+    DataSourceCredentialUIRegistry.setHandlers [ "Stripe", stripeForm ]
+
+    try
+        body ()
+    finally
+        DataSourceCredentialUIRegistry.setHandlers []
+
+let private source (id: string) (name: string) (kind: string) : DataSourceConfig = {
+    Id = id
+    Name = name
+    Kind = kind
+    ConnectionScope = Map.empty
+    CredentialKey = id + "-credential"
+    Tables = None
+    Tags = Map.empty
+}
+
+let private connectedAt =
+    System.DateTime(2026, 11, 2, 9, 15, 0, System.DateTimeKind.Utc)
+
+let ingestionInit () =
+    fromUnitInit DataIngestionUI.init DataIngestionUI.update
+
+/// Two sources: one connected, its token refreshed; one never configured,
+/// with no refresh descriptor.
+let ingestionLoaded () =
+    (ingestionInit ())
+        .Dispatch(
+            DataIngestionUI.SourcesLoaded(
+                Ok [
+                    source "ga-main" "Analytics" "GoogleAnalytics"
+                    source "stripe-main" "Payments" "Stripe"
+                ]
+            )
+        )
+        .Dispatch(DataIngestionUI.StatusLoaded("ga-main", Connected connectedAt))
+        .Dispatch(DataIngestionUI.StatusLoaded("stripe-main", NotConfigured))
+        .Dispatch(
+            DataIngestionUI.TokenStatusLoaded(
+                "ga-main",
+                Some {
+                    Provider = "google"
+                    LastOutcome = Some(RefreshedOutcome(connectedAt.AddHours 1.0))
+                    LastOutcomeAt = Some connectedAt
+                    NextScheduledRefresh = Some(connectedAt.AddMinutes 50.0)
+                }
+            )
+        )
+        .Dispatch(DataIngestionUI.TokenStatusLoaded("stripe-main", None))
+
+/// The states the data-ingestion admin is held to, each reached through
+/// `update`. Run under `withStripeForm`.
+let ingestionStates () = [
+    "the first read in flight", ingestionInit ()
+    "no sources yet", (ingestionInit ()).Dispatch(DataIngestionUI.SourcesLoaded(Ok []))
+    "adding a source of a registered kind",
+    (ingestionInit ()).Dispatch(DataIngestionUI.SourcesLoaded(Ok [])).Dispatch(DataIngestionUI.StartCreate "Stripe")
+    "two sources read", ingestionLoaded ()
+    "a source's statuses still in flight",
+    (ingestionInit ()).Dispatch(DataIngestionUI.SourcesLoaded(Ok [ source "ga-main" "Analytics" "GoogleAnalytics" ]))
+    "a source with no form for its kind open", (ingestionLoaded ()).Dispatch(DataIngestionUI.ToggleExpanded "ga-main")
+    "a source with its kind's form open", (ingestionLoaded ()).Dispatch(DataIngestionUI.ToggleExpanded "stripe-main")
+    "a disconnect in flight", (ingestionLoaded ()).Dispatch(DataIngestionUI.DisconnectClicked "ga-main")
+    "a connect refused",
+    (ingestionLoaded ())
+        .Dispatch(DataIngestionUI.ConnectUrlReady("stripe-main", Error "no OAuth flow is registered for stripe"))
+    "the read failed",
+    (ingestionInit ()).Dispatch(DataIngestionUI.SourcesLoaded(Error "the data-source store is unreachable"))
+]
+
+let private ingestionTests =
+    testList "the data-ingestion admin as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            withStripeForm (fun () -> strictInEvery (ingestionStates ()) ingestionTree))
+
+        testCase "assertion 2: a kept row's actions, the add buttons and a hosted form reach update" (fun () ->
+            withStripeForm (fun () ->
+                (ingestionLoaded ())
+                    .Interact(ViewMount.mountAndInteract, ingestionTree, Drive.click ingestionMsgs.Disconnect)
+                    .AssertModelWith(
+                        "Disconnect starts the connected source's disconnect",
+                        fun m -> m.Disconnecting = Set.singleton "ga-main"
+                    )
+                |> ignore
+
+                (ingestionLoaded ())
+                    .Interact(ViewMount.mountAndInteract, ingestionTree, Drive.click "Payments")
+                    .AssertModelWith("the name opens its credential panel", fun m -> m.Expanded = Some "stripe-main")
+                |> ignore
+
+                (ingestionLoaded ())
+                    .Interact(ViewMount.mountAndInteract, ingestionTree, Drive.click "+ Stripe")
+                    .AssertModelWith("an add button opens the create flow", fun m -> m.Creating = Some "Stripe")
+                |> ignore
+
+                (ingestionLoaded ())
+                    .Dispatch(DataIngestionUI.ToggleExpanded "stripe-main")
+                    .Interact(ViewMount.mountAndInteract, ingestionTree, Drive.click "Save credentials for Payments")
+                    .AssertModelWith(
+                        "the hosted form's refresh reads the sources again",
+                        fun m -> Remote.isLoading m.Sources
+                    )
+                |> ignore
+
+                (ingestionLoaded ())
+                    .Dispatch(DataIngestionUI.ConnectUrlReady("stripe-main", Error "refused"))
+                    .Interact(ViewMount.mountAndInteract, ingestionTree, Drive.click ingestionMsgs.DismissError)
+                    .AssertModelWith("Dismiss clears the notice", fun m -> m.LastError.IsNone)
+                |> ignore))
+
+        testCase "assertion 3: parity with the Feliz page, but for the judged differences" (fun () ->
+            withStripeForm (fun () ->
+                atParity (ingestionStates ()) ingestionFeliz ingestionTree [] tabOrderOnly (fun _ -> false)))
+    ]
+
 // ─── What a dispatch constructs ──────────────────────────────────────
 
 /// Of the nodes of `after`, how many are new objects, built for this dispatch,
@@ -3091,6 +3234,27 @@ let private constructedTests =
 
             Expect.isTrue (built <= oneRow) (sprintf "built %d of %d (a one-row page builds %d)" built total oneRow)
             Expect.isTrue (total > 900) (sprintf "the page holds the 100 rows (%d nodes)" total))
+
+        testCase "data ingestion: one source's status arriving among 100 builds that row" (fun () ->
+            let many =
+                List.init 100 (fun i -> source (sprintf "source-%03d" i) (sprintf "Source %03d" i) "GoogleAnalytics")
+
+            let tree m =
+                DataIngestionTree.tree ingestionMsgs m ignore
+
+            let answer = DataIngestionUI.StatusLoaded("source-007", Connected connectedAt)
+
+            let built, total =
+                across tree ((ingestionInit ()).Dispatch(DataIngestionUI.SourcesLoaded(Ok many))) answer
+
+            let oneRow, _ =
+                across
+                    tree
+                    ((ingestionInit ()).Dispatch(DataIngestionUI.SourcesLoaded(Ok [ List.item 7 many ])))
+                    answer
+
+            Expect.isTrue (built <= oneRow) (sprintf "built %d of %d (a one-row page builds %d)" built total oneRow)
+            Expect.isTrue (total > 1000) (sprintf "the page holds the 100 rows (%d nodes)" total))
     ]
 
 // ─── The kit's own go-red proofs ─────────────────────────────────────
@@ -3322,6 +3486,7 @@ let tests =
         usageTests
         landingTests
         inspectorTests
+        ingestionTests
         constructedTests
         goRedTests
         nameTests

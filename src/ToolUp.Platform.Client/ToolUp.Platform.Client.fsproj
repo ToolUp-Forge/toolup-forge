@@ -40,7 +40,7 @@
          the nupkg; Fable's package loader extracts and compiles source
          directly. Mirrors the Feliz / Fable.Elmish convention. -->
     <ItemGroup>
-        <Content Include="**\*.fsproj;**\*.fs;**\*.svg;**\*.png;**\TreeLoweringRuntime.js;**\TeamManagerTree.js;**\ModuleVisibilityAdminTree.js;**\PlatformAdminTree.js;**\CommandPaletteTree.js;**\SessionSecurityTree.js;**\PermissionsAdminTree.js;**\PlatformUsersTree.js;**\DataSubjectRequestAdminTree.js;**\AuditLogTree.js;**\ExternalContactManagerTree.js;**\HealthMonitorTree.js;**\JobsAdminTree.js;**\ServiceStatusBoardTree.js;**\MigrationStatusTree.js;**\UsageDashboardTree.js;**\NoActiveTeamLandingTree.js;**\CompositionInspectorTree.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg;**\*.png;**\TreeLoweringRuntime.js;**\TeamManagerTree.js;**\ModuleVisibilityAdminTree.js;**\PlatformAdminTree.js;**\CommandPaletteTree.js;**\SessionSecurityTree.js;**\PermissionsAdminTree.js;**\PlatformUsersTree.js;**\DataSubjectRequestAdminTree.js;**\AuditLogTree.js;**\ExternalContactManagerTree.js;**\HealthMonitorTree.js;**\JobsAdminTree.js;**\ServiceStatusBoardTree.js;**\MigrationStatusTree.js;**\UsageDashboardTree.js;**\NoActiveTeamLandingTree.js;**\CompositionInspectorTree.js;**\DataIngestionTree.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
@@ -473,6 +473,7 @@
         <!-- Phase 10g — OAuth 1.0a credential form helpers (Feliz). -->
         <Compile Include="Client\OAuth1aCredentialUIHelpers.fs" />
         <Compile Include="Client\DataIngestionUI.fs" />
+        <Compile Include="Client\DataIngestionTree.fs" />
         <!-- Phase 10a — module data-migration admin: declared schema
              version + per-scope progress + Owner/Admin manual trigger +
              the per-object failure log. Opt-in via

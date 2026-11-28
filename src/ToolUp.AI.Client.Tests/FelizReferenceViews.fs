@@ -5134,3 +5134,449 @@ module CompositionInspector =
             | ProvenancePanel -> provenanceBody
 
         inspectorPage msgs panel model dispatch render
+
+/// The data-ingestion admin's page as Feliz (`DataIngestionUI`'s view before its tree).
+module DataIngestion =
+    open DataIngestionUI
+
+    // ─── View ───────────────────────────────────────────────────────────
+
+    let private statusPill (msgs: DataIngestionMessages) (status: CredentialStatus) =
+        let label, cls =
+            match status with
+            | NotConfigured -> msgs.StatusNotConfigured, ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary)
+            | NeedsAuthorization -> msgs.StatusNeedsAuthorization, "bg-yellow-100 text-yellow-700 border-yellow-200"
+            | Connected _ -> msgs.StatusConnected, "bg-green-100 text-green-700 border-green-200"
+            | NeedsReauthorization _ -> msgs.StatusNeedsReauthorization, "bg-red-100 text-red-700 border-red-200"
+
+        Html.span [
+            prop.className $"inline-block text-xs px-2 py-0.5 rounded border font-medium {cls}"
+            prop.text label
+        ]
+
+    let private statusDetail (msgs: DataIngestionMessages) (status: CredentialStatus) =
+        match status with
+        | Connected at ->
+            Html.span [
+                prop.className ("text-xs " + Tokens.Text.muted)
+                prop.text (msgs.SinceLabel(at.ToString("yyyy-MM-dd HH:mm") + " UTC"))
+            ]
+        | NeedsReauthorization reason -> Html.span [ prop.className "text-xs text-red-700"; prop.text reason ]
+        | _ -> Html.none
+
+    // ─── Token-status column ────────────────────────────────────────────
+    //
+    // Last terminal `_platform.oauth.refresh` outcome + next scheduled
+    // refresh, derived server-side from `IOAuthTokenRefresher` +
+    // `IEventStore`. Three render shapes:
+    //
+    //   * `Map` entry absent → lookup still in flight → render nothing
+    //     (no spinner; the column is supplementary).
+    //   * `Some None` → no descriptor registered → render "—".
+    //   * `Some (Some status)` → render outcome pill + next-refresh detail.
+
+    let private tokenOutcomePill (msgs: DataIngestionMessages) (outcome: OAuthRefreshOutcome) =
+        let label, cls =
+            match outcome with
+            | RefreshedOutcome _ -> msgs.OutcomeRefreshed, "bg-green-100 text-green-700 border-green-200"
+            | TransientErrorOutcome _ -> msgs.OutcomeTransientError, "bg-yellow-100 text-yellow-700 border-yellow-200"
+            | RequiresReauthOutcome _ -> msgs.OutcomeRequiresReauth, "bg-red-100 text-red-700 border-red-200"
+            | DeadLetteredOutcome _ -> msgs.OutcomeDeadLettered, "bg-red-100 text-red-700 border-red-200"
+
+        Html.span [
+            prop.className $"inline-block text-xs px-2 py-0.5 rounded border font-medium {cls}"
+            prop.text label
+        ]
+
+    let private tokenStatusDetail (msgs: DataIngestionMessages) (status: TokenStatus) =
+        // Two-line detail under the pill: the last-outcome timestamp (or
+        // the failure reason for the error cases — operators want to see
+        // why before they read when), then the next-scheduled-refresh.
+        let outcomeLine =
+            match status.LastOutcome, status.LastOutcomeAt with
+            | Some(RefreshedOutcome _), Some at ->
+                Html.span [
+                    prop.className ("text-xs " + Tokens.Text.muted)
+                    prop.text (msgs.AtLabel(at.ToString("yyyy-MM-dd HH:mm") + " UTC"))
+                ]
+            | Some(TransientErrorOutcome reason), _
+            | Some(RequiresReauthOutcome reason), _
+            | Some(DeadLetteredOutcome reason), _ ->
+                Html.span [ prop.className "text-xs text-red-700"; prop.text reason ]
+            | None, _ ->
+                // Descriptor registered but no terminal audit row yet —
+                // typically the first minute after Connect, before the
+                // scheduled refresh fires.
+                Html.span [
+                    prop.className ("text-xs " + Tokens.Text.muted)
+                    prop.text msgs.AwaitingFirstRefresh
+                ]
+            | _ -> Html.none
+
+        let nextLine =
+            match status.NextScheduledRefresh with
+            | Some at ->
+                Html.span [
+                    prop.className ("text-xs " + Tokens.Text.muted)
+                    prop.text (msgs.NextLabel(at.ToString("yyyy-MM-dd HH:mm") + " UTC"))
+                ]
+            | None -> Html.none
+
+        Html.div [
+            prop.className "flex flex-col gap-0.5"
+            prop.children [ outcomeLine; nextLine ]
+        ]
+
+    let private tokenStatusCell (msgs: DataIngestionMessages) (entry: TokenStatus option option) =
+        match entry with
+        | None ->
+            // Lookup still pending. Empty cell keeps the row visually
+            // calm; refreshing will populate it shortly.
+            Html.none
+        | Some None ->
+            // No descriptor — non-OAuth connector or descriptor not yet
+            // registered. Neutral dash, no styling.
+            Html.span [ prop.className ("text-xs " + Tokens.Text.muted); prop.text "—" ]
+        | Some(Some status) ->
+            Html.div [
+                prop.className "flex flex-col gap-0.5"
+                prop.children [
+                    match status.LastOutcome with
+                    | Some outcome -> tokenOutcomePill msgs outcome
+                    | None ->
+                        Html.span [
+                            prop.className (
+                                "inline-block text-xs px-2 py-0.5 rounded border font-medium bg-gray-100 border-gray-200 "
+                                + Tokens.Text.secondary
+                            )
+                            prop.text msgs.OutcomePending
+                        ]
+                    tokenStatusDetail msgs status
+                ]
+            ]
+
+    let private connectButton
+        (msgs: DataIngestionMessages)
+        (id: DataSourceId)
+        (flowName: string)
+        (dispatch: Msg -> unit)
+        =
+        Forms.Button.primaryWith Forms.Button.Enabled msgs.Connect (fun () -> dispatch (ConnectClicked(id, flowName)))
+
+    let private disconnectButton (msgs: DataIngestionMessages) (id: DataSourceId) (busy: bool) (dispatch: Msg -> unit) =
+        Forms.Button.secondaryWith (Forms.Button.stateOf busy msgs.Disconnecting false) msgs.Disconnect (fun () ->
+            dispatch (DisconnectClicked id))
+
+    /// Render the row's action button(s). For OAuth-shaped sources we
+    /// derive the flow name from the source's `Kind` by lowercasing +
+    /// kebab-casing — the convention companions follow (`Kind =
+    /// "GoogleAnalytics"` ↔ flow `Name = "google-analytics"`). Companions
+    /// that diverge from this convention can override by setting
+    /// `ConnectionScope["oauthFlow"]` to their flow name.
+    let private flowNameFor (config: DataSourceConfig) : string =
+        match config.ConnectionScope |> Map.tryFind "oauthFlow" with
+        | Some explicit -> explicit
+        | None ->
+            // PascalCase → kebab-case fallback. "GoogleAnalytics" →
+            // "google-analytics"; "Stripe" → "stripe".
+            let chars = config.Kind.ToCharArray()
+
+            let buffer = System.Text.StringBuilder()
+
+            for i in 0 .. chars.Length - 1 do
+                let c = chars[i]
+
+                if Char.IsUpper c && i > 0 then
+                    buffer.Append '-' |> ignore
+
+                buffer.Append(Char.ToLowerInvariant c) |> ignore
+
+            buffer.ToString()
+
+    let private rowActions
+        (msgs: DataIngestionMessages)
+        (config: DataSourceConfig)
+        (status: CredentialStatus)
+        (busy: bool)
+        (dispatch: Msg -> unit)
+        =
+        Html.div [
+            prop.className "flex gap-2 items-center"
+            prop.children [
+                match status with
+                | NotConfigured
+                | NeedsAuthorization
+                | NeedsReauthorization _ -> connectButton msgs config.Id (flowNameFor config) dispatch
+                | Connected _ -> disconnectButton msgs config.Id busy dispatch
+            ]
+        ]
+
+    let private credentialPanel (msgs: DataIngestionMessages) (config: DataSourceConfig) (refresh: unit -> unit) =
+        match DataSourceCredentialUIRegistry.tryGet config.Kind with
+        | Some renderer ->
+            Html.div [
+                prop.className "p-4 bg-gray-50 border-t border-border"
+                prop.children [
+                    renderer {
+                        DataSource = Some config
+                        Refresh = refresh
+                    }
+                ]
+            ]
+        | None ->
+            Html.div [
+                prop.className "p-4 bg-gray-50 border-t border-border"
+                prop.children [
+                    Html.p [
+                        prop.className ("text-sm " + Tokens.Text.secondary)
+                        prop.text (msgs.NoCredentialUIForKind config.Kind)
+                    ]
+                ]
+            ]
+
+    /// The source table's columns. The name cell toggles the row's
+    /// credential panel, which renders under the table.
+    let private sourceColumns
+        (msgs: DataIngestionMessages)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        : Data.Column<DataSourceConfig> list =
+        let statusOf (config: DataSourceConfig) =
+            model.Statuses |> Map.tryFind config.Id |> Option.defaultValue NotConfigured
+
+        let mono (text: string) =
+            Html.span [ prop.className [ "text-xs font-mono"; Tokens.Text.muted ]; prop.text text ]
+
+        [
+            {
+                Header = msgs.ColumnStatus
+                Align = Data.Left
+                Cell =
+                    fun config ->
+                        let status = statusOf config
+
+                        Html.div [
+                            prop.className "flex flex-col gap-0.5"
+                            prop.children [ statusPill msgs status; statusDetail msgs status ]
+                        ]
+            }
+            {
+                Header = msgs.ColumnName
+                Align = Data.Left
+                Cell =
+                    fun config ->
+                        Html.button [
+                            prop.type' "button"
+                            prop.ariaExpanded (model.Expanded = Some config.Id)
+                            prop.className "font-medium text-left hover:underline"
+                            prop.onClick (fun _ -> dispatch (ToggleExpanded config.Id))
+                            prop.text config.Name
+                        ]
+            }
+            {
+                Header = msgs.ColumnId
+                Align = Data.Left
+                Cell = fun config -> mono config.Id
+            }
+            {
+                Header = msgs.ColumnKind
+                Align = Data.Left
+                Cell = fun config -> mono config.Kind
+            }
+            {
+                Header = msgs.ColumnTokenStatus
+                Align = Data.Left
+                Cell = fun config -> tokenStatusCell msgs (model.TokenStatuses |> Map.tryFind config.Id)
+            }
+            {
+                Header = msgs.ColumnActions
+                Align = Data.Left
+                Cell =
+                    fun config ->
+                        rowActions
+                            msgs
+                            config
+                            (statusOf config)
+                            (model.Disconnecting |> Set.contains config.Id)
+                            dispatch
+            }
+        ]
+
+    /// Inline credential panel for the create-flow. Renders the per-Kind
+    /// renderer with `DataSource = None` so the credential UI's "first
+    /// save" branch fires (it persists a fresh DataSourceConfig before
+    /// writing credentials). The Refresh callback flips `Creating` back
+    /// to None so the create panel collapses and the new row appears in
+    /// the table.
+    let private createCredentialPanel (msgs: DataIngestionMessages) (kind: string) (dispatch: Msg -> unit) =
+        match DataSourceCredentialUIRegistry.tryGet kind with
+        | Some renderer ->
+            Html.div [
+                prop.className "p-4 bg-gray-50 border border-border rounded-lg"
+                prop.children [
+                    Html.div [
+                        prop.className "flex items-center justify-between mb-3"
+                        prop.children [
+                            Html.h3 [
+                                prop.className ("text-sm font-semibold " + Tokens.Text.primary)
+                                prop.text (msgs.NewSourceHeading kind)
+                            ]
+                            Html.button [
+                                prop.className ("text-xs hover:underline " + Tokens.Text.muted)
+                                prop.text msgs.CancelCreate
+                                prop.onClick (fun _ -> dispatch CancelCreate)
+                            ]
+                        ]
+                    ]
+                    renderer {
+                        DataSource = None
+                        Refresh = fun () -> dispatch RefreshSources
+                    }
+                ]
+            ]
+        | None ->
+            // Defensive: registry says this Kind exists but tryGet now
+            // returns None (registration was overwritten). Surface a
+            // helpful message rather than rendering nothing.
+            Html.div [
+                prop.className "p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800"
+                prop.text (msgs.CredentialUIUnregistered kind)
+            ]
+
+    /// Kind-selector strip. One button per registered Kind. Clicking
+    /// dispatches StartCreate, which expands the createCredentialPanel.
+    let private kindSelector (msgs: DataIngestionMessages) (dispatch: Msg -> unit) (creating: string option) =
+        let kinds = DataSourceCredentialUIRegistry.registeredKinds ()
+
+        if List.isEmpty kinds then
+            Html.div [
+                prop.className ("p-4 text-sm bg-gray-50 border border-border rounded-lg " + Tokens.Text.muted)
+                prop.text msgs.NoCredentialUIsRegistered
+            ]
+        else
+            Html.div [
+                prop.className "flex items-center gap-2 flex-wrap"
+                prop.children [
+                    Html.span [
+                        prop.className ("text-sm mr-1 " + Tokens.Text.secondary)
+                        prop.text msgs.AddDataSource
+                    ]
+                    for kind in kinds do
+                        let isSelected = creating = Some kind
+
+                        Html.button [
+                            prop.className [
+                                "px-3 py-1.5 text-sm font-medium rounded border transition-colors"
+                                if isSelected then
+                                    "bg-brand text-white border-brand"
+                                else
+                                    ("bg-white border-border hover:bg-gray-50 " + Tokens.Text.secondary)
+                            ]
+                            prop.text $"+ {kind}"
+                            prop.onClick (fun _ ->
+                                if isSelected then
+                                    dispatch CancelCreate
+                                else
+                                    dispatch (StartCreate kind))
+                        ]
+                ]
+            ]
+
+    let private sourcesTable
+        (msgs: DataIngestionMessages)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        (sources: DataSourceConfig list)
+        =
+        if List.isEmpty sources then
+            Html.div [
+                prop.className ("text-sm space-y-3 " + Tokens.Text.muted)
+                prop.children [
+                    Html.p [ prop.text msgs.NoSourcesYet ]
+                    kindSelector msgs dispatch model.Creating
+                    match model.Creating with
+                    | Some kind -> createCredentialPanel msgs kind dispatch
+                    | None -> Html.none
+                ]
+            ]
+        else
+            Html.div [
+                prop.className "space-y-3"
+                prop.children [
+                    // Add-data-source affordance above the existing-sources
+                    // table. Operators can wire a second connector or a
+                    // second instance of the same connector at any time.
+                    kindSelector msgs dispatch model.Creating
+                    match model.Creating with
+                    | Some kind -> createCredentialPanel msgs kind dispatch
+                    | None -> Html.none
+                    Html.div [
+                        prop.className "border border-border rounded-lg overflow-hidden"
+                        prop.children [
+                            Data.table (sourceColumns msgs model dispatch) sources
+                            match
+                                model.Expanded
+                                |> Option.bind (fun id -> sources |> List.tryFind (fun s -> s.Id = id))
+                            with
+                            | Some config ->
+                                // Refresh just the source list + statuses; the
+                                // user is editing this row so it stays expanded.
+                                credentialPanel msgs config (fun () -> dispatch RefreshSources)
+                            | None -> Html.none
+                        ]
+                    ]
+                ]
+            ]
+
+    let private refreshButton (msgs: DataIngestionMessages) (loading: bool) (dispatch: Msg -> unit) =
+        Forms.Button.secondaryWith (Forms.Button.stateOf loading msgs.Refreshing false) msgs.Refresh (fun () ->
+            dispatch RefreshSources)
+
+    let private bodyView (msgs: DataIngestionMessages) (model: Model) (dispatch: Msg -> unit) =
+        let loading = Remote.isLoading model.Sources
+        let noticeMsgs = { Dismiss = msgs.DismissError }
+
+        Html.div [
+            prop.className "flex-1 p-6 overflow-y-auto"
+            prop.children [
+                Html.div [
+                    prop.className "flex items-center justify-between mb-4"
+                    prop.children [
+                        Html.div [
+                            prop.children [
+                                Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.SourcesHeading ]
+                                Html.p [
+                                    prop.className ("text-xs " + Tokens.Text.muted)
+                                    prop.text msgs.OAuthFootnote
+                                ]
+                            ]
+                        ]
+                        refreshButton msgs loading dispatch
+                    ]
+                ]
+                match model.LastError with
+                | Some _ ->
+                    Html.div [
+                        prop.className "mb-4"
+                        prop.children [
+                            StateViews.notice noticeMsgs model.LastError (fun () -> dispatch DismissError)
+                        ]
+                    ]
+                | None -> Html.none
+                match model.Sources with
+                | Remote.NotAsked
+                | Remote.Loading
+                | Remote.Reloading _ ->
+                    Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
+                | Remote.Failed msg ->
+                    StateViews.notice noticeMsgs (Some(Notice.Problem msg)) (fun () -> dispatch DismissError)
+                | Remote.Loaded sources -> sourcesTable msgs model dispatch sources
+            ]
+        ]
+
+    /// The module's page, over the catalog section the view hands it.
+    let body (msgs: DataIngestionMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+        Html.div [
+            prop.className "flex flex-col h-full"
+            prop.children [ bodyView msgs model dispatch ]
+        ]
