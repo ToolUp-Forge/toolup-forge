@@ -29,9 +29,10 @@ open ToolUp.Platform.Compose
 //
 // **Usage in a consumer GCF project.** Two shapes are supported.
 //
-// *Recommended: register the adapter's `ServerHostFunction` as the
-// Functions Framework's function target.* The framework instantiates
-// it per cold-start and calls `HandleAsync` per invocation.
+// *Recommended: subclass the adapter's `ServerHostFunction` in the
+// consumer's project and make that subclass the Functions Framework's
+// function target.* The framework instantiates it per cold-start and
+// calls `HandleAsync` per invocation.
 //
 // `ServerApp` has no compose-only entry point: `ServerApp.run` composes
 // and then calls `RunBlocking()`, which a function must never do. The
@@ -41,8 +42,8 @@ open ToolUp.Platform.Compose
 // ServerlessHost`, and set the plan's `Handlers` (and any other
 // registration field) to what the deployment serves.
 //
-//     // Function.fs
-//     module Function
+//     // Functions.fs
+//     module Functions
 //
 //     open Google.Cloud.Functions.Framework
 //     open Google.Cloud.Functions.Hosting
@@ -78,14 +79,15 @@ open ToolUp.Platform.Compose
 //             services.AddSingleton<IServerHost>(serverHost) |> ignore
 //
 //     [<FunctionsStartup(typeof<Startup>)>]
-//     type ServerHostFunction(host: IServerHost) =
-//         interface IHttpFunction with
-//             member _.HandleAsync(ctx: HttpContext) =
-//                 GoogleCloudFunctionHost.bridge (host, ctx)
+//     type Function(host: IServerHost) =
+//         inherit ServerHostFunction(host)
 //
-// Set `FUNCTION_TARGET=Function.ServerHostFunction` (or pass
-// `--target Function.ServerHostFunction`) when running locally /
-// deploying.
+// The Functions Framework looks the target type up in the function's
+// own assembly, by its full CLR name, so the target is the subclass and
+// never `ServerHostFunction` itself. A type inside an F# module is a
+// nested type: set `FUNCTION_TARGET=Functions+Function` (or pass
+// `--target Functions+Function`) when running locally / deploying. With
+// one function type in the assembly the framework finds it unset.
 //
 // *Manual shape: write your own `IHttpFunction` and call `bridge`
 // directly.* Useful when you need additional per-invocation logic
@@ -141,9 +143,10 @@ type GoogleCloudFunctionHost =
         host.Invoke ctx
 
 /// Default `IHttpFunction` implementation that forwards every GCF
-/// invocation to a compose-built `IServerHost`. Register as the
-/// Functions Framework target via `FUNCTION_TARGET` /
-/// `--target <FullyQualifiedTypeName>`. Consumers wanting custom
+/// invocation to a compose-built `IServerHost`. The Functions Framework
+/// resolves its target in the function's own assembly, so a consumer
+/// subclasses this type in its project and names the subclass in
+/// `FUNCTION_TARGET` / `--target <full type name>`. Consumers wanting custom
 /// per-invocation logic can implement `IHttpFunction` themselves
 /// and call `GoogleCloudFunctionHost.bridge` directly.
 type ServerHostFunction(host: IServerHost) =

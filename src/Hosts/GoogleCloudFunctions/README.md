@@ -78,7 +78,9 @@ type Function(host: IServerHost) =
     inherit ServerHostFunction(host)
 ```
 
-The framework resolves the constructor argument from DI; the `Startup` above registered `IServerHost` as a singleton, so `ServerHostFunction` is instantiated automatically per cold-start. Deploy with `FUNCTION_TARGET=YourAssembly.Function` (or `dotnet run --target YourAssembly.Function`).
+The framework resolves the constructor argument from DI; the `Startup` above registered `IServerHost` as a singleton, so the function is instantiated automatically per cold-start.
+
+The Functions Framework looks the target up in the function's own assembly (the one its generated entry point starts), by the type's full CLR name. `FUNCTION_TARGET` (or `dotnet run --target …`) therefore names your subclass, never `ServerHostFunction`, which lives in this package's assembly. A type `Function` in namespace `MyFunctions` is `MyFunctions.Function`; a type declared inside an F# module `Functions` is a nested type, `Functions+Function`. When the assembly holds exactly one function type, the framework finds it with no target set.
 
 ### 3b. Or write your own `IHttpFunction` and call `bridge` directly
 
