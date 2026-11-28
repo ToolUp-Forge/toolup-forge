@@ -4,8 +4,8 @@
 module ServiceStatusBoardUI
 
 open Fuaran.MVU
-open Feliz
-open Toolup.UIToolkit
+open Fable.Core
+open Fable.Core.JsInterop
 open ToolUp.Platform
 
 // ─── ServiceStatusBoard admin module ─────────────────────────────────
@@ -94,7 +94,11 @@ let init (ctx: ClientModuleContext) : Model * Step<Msg, RemoteEffect<Msg>> list 
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-let private sectionOf (msgs: ServiceStatusBoardMessages) (snap: ServiceStatusSnapshot) (name: string) : SectionSummary =
+let internal sectionOf
+    (msgs: ServiceStatusBoardMessages)
+    (snap: ServiceStatusSnapshot)
+    (name: string)
+    : SectionSummary =
     match name with
     | s when s = ServiceStatusSnapshot.HealthSection -> snap.Health
     | s when s = ServiceStatusSnapshot.PreflightSection -> snap.Preflight
@@ -267,171 +271,33 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
             },
             []
 
-// ─── Renderers ───────────────────────────────────────────────────────
-
-let private severityPill (msgs: ServiceStatusBoardMessages) (summary: SectionSummary) =
-    let label, cls =
-        if summary.Disabled then
-            msgs.SeverityDisabled, ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary)
-        else
-            match summary.Severity with
-            | StatusSeverity.Ok -> msgs.SeverityOk, "bg-green-100 text-green-700 border-green-200"
-            | StatusSeverity.Warn -> msgs.SeverityWarn, "bg-yellow-100 text-yellow-700 border-yellow-200"
-            | StatusSeverity.Error -> msgs.SeverityError, "bg-red-100 text-red-700 border-red-200"
-
-    Html.span [
-        prop.className $"inline-block text-xs px-2 py-0.5 rounded border font-medium {cls}"
-        prop.text label
-    ]
-
-let private overallPill (msgs: ServiceStatusBoardMessages) (overall: OverallStatus) =
-    let label, cls =
-        match overall with
-        | AllOk -> msgs.AllSystemsOk, "bg-green-100 text-green-700 border-green-200"
-        | DegradedBy sections ->
-            let joined = sections |> String.concat ", "
-            msgs.DegradedBy joined, "bg-yellow-100 text-yellow-700 border-yellow-200"
-        | UnhealthyBy sections ->
-            let joined = sections |> String.concat ", "
-            msgs.UnhealthyBy joined, "bg-red-100 text-red-700 border-red-200"
-
-    Html.span [
-        prop.className $"inline-block text-sm px-3 py-1 rounded border font-semibold {cls}"
-        prop.text label
-    ]
-
-let private sectionPanel
-    (msgs: ServiceStatusBoardMessages)
-    (model: Model)
-    (dispatch: Msg -> unit)
-    (section: string)
-    (summary: SectionSummary)
-    : ReactElement =
-    let isCollapsed = Set.contains section model.Collapsed
-    let isRefreshing = Set.contains section model.Refreshing
-    let isFlipped = Set.contains section model.RecentlyFlipped
-
-    Html.div [
-        prop.className [
-            "border border-border rounded-lg overflow-hidden bg-white"
-            if isFlipped then
-                "animate-pulse"
-        ]
-        prop.children [
-            Html.div [
-                prop.className "flex items-center justify-between gap-3 px-4 py-3 bg-gray-50 border-b border-border"
-                prop.children [
-                    Html.button [
-                        prop.className "flex items-center gap-2 text-left flex-1"
-                        prop.onClick (fun _ -> dispatch (ToggleCollapsed section))
-                        prop.children [
-                            Html.span [
-                                prop.className [ "text-xs font-mono w-4"; Tokens.Text.muted ]
-                                prop.text (if isCollapsed then "▸" else "▾")
-                            ]
-                            Html.span [
-                                prop.className [ "text-sm font-semibold"; Tokens.Text.primary ]
-                                prop.text section
-                            ]
-                            severityPill msgs summary
-                        ]
-                    ]
-                    Forms.Button.secondaryWith
-                        (Forms.Button.stateOf isRefreshing msgs.Refreshing false)
-                        msgs.Refresh
-                        (fun () -> dispatch (RefreshSection section))
-                ]
-            ]
-            if not isCollapsed then
-                Html.div [
-                    prop.className "px-4 py-3"
-                    prop.children [
-                        Html.p [
-                            prop.className [ "text-sm"; Tokens.Text.secondary ]
-                            prop.text (
-                                if summary.Disabled then
-                                    summary.DisabledReason
-                                else
-                                    summary.Headline
-                            )
-                        ]
-                        if not summary.Details.IsEmpty then
-                            Html.ul [
-                                prop.className [ "mt-2 text-xs list-disc pl-5 space-y-1"; Tokens.Text.secondary ]
-                                prop.children (summary.Details |> List.map (fun d -> Html.li [ prop.text d ]))
-                            ]
-                    ]
-                ]
-        ]
-    ]
-
 // ─── View ────────────────────────────────────────────────────────────
 
-let private boardView (msgs: ServiceStatusBoardMessages) (model: Model) (dispatch: Msg -> unit) =
-    let isLoading = Remote.isLoading model.Snapshot
+/// What the deferred tree component takes.
+type internal SurfaceProps = {|
+    Model: Model
+    Dispatch: Msg -> unit
+    Messages: ServiceStatusBoardMessages
+    Locale: string
+|}
 
-    Html.div [
-        prop.className "flex-1 p-6 overflow-y-auto"
-        prop.children [
-            Html.div [
-                prop.className "flex items-center justify-between mb-4"
-                prop.children [
-                    Html.div [
-                        prop.children [
-                            Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.Heading ]
-                            Html.p [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.Subheading ]
-                        ]
-                    ]
-                    Forms.Button.secondaryWith
-                        (Forms.Button.stateOf isLoading msgs.Refreshing false)
-                        msgs.RefreshAll
-                        (fun () -> dispatch RefreshAll)
-                ]
-            ]
-            match model.Snapshot with
-            | Remote.NotAsked
-            | Remote.Loading
-            | Remote.Reloading _ -> Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.Loading ]
-            | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
-            | Remote.Loaded snap ->
-                Html.div [
-                    prop.children [
-                        Html.div [
-                            prop.className
-                                "flex items-center justify-between p-3 mb-4 bg-white border border-border rounded-lg"
-                            prop.children [
-                                overallPill msgs snap.Overall
-                                Html.span [
-                                    prop.className [ "text-xs"; Tokens.Text.muted ]
-                                    prop.text (msgs.GeneratedAt(snap.GeneratedAt.ToString "u"))
-                                ]
-                            ]
-                        ]
-                        Html.div [
-                            prop.className "flex flex-col gap-3"
-                            prop.children [
-                                sectionPanel msgs model dispatch ServiceStatusSnapshot.HealthSection snap.Health
-                                sectionPanel msgs model dispatch ServiceStatusSnapshot.PreflightSection snap.Preflight
-                                sectionPanel msgs model dispatch ServiceStatusSnapshot.DriftSection snap.Drift
-                                sectionPanel msgs model dispatch ServiceStatusSnapshot.RateLimitSection snap.RateLimit
-                                sectionPanel msgs model dispatch ServiceStatusSnapshot.JobQueueSection snap.JobQueue
-                                sectionPanel msgs model dispatch ServiceStatusSnapshot.SmokeTestSection snap.SmokeTest
-                            ]
-                        ]
-                    ]
-                ]
-        ]
-    ]
+[<Emit("$0.then(m => m.Surface)")>]
+let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
 
-/// The module's page, over the catalog section the view hands it.
-let private body (msgs: ServiceStatusBoardMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    Html.div [
-        prop.className "flex flex-col h-full"
-        prop.children [ boardView msgs model dispatch ]
-    ]
+/// The tree's file, fetched on demand with the node vocabulary and the
+/// renderer, so the shell's first load pays nothing for them.
+let private loadSurface () : JS.Promise<obj> =
+    surfaceOf (importDynamic "./ServiceStatusBoardTree.fs")
 
 let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
-    PageContent.FullWidth(body ctx.Messages.ServiceStatusBoard model ctx.Dispatch)
+    PageContent.FullWidth(
+        TreeSurface.deferred "ServiceStatusBoardTree.Surface" loadSurface {|
+            Model = model
+            Dispatch = ctx.Dispatch
+            Messages = ctx.Messages.ServiceStatusBoard
+            Locale = ctx.Locale
+        |}
+    )
 
 // ─── Module creation ─────────────────────────────────────────────────
 

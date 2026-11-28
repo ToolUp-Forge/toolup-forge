@@ -3399,3 +3399,1259 @@ module ExternalContactManager =
                 body
             ]
         ]
+
+/// The health monitor as Feliz (`HealthMonitorUI`'s view before its tree).
+module HealthMonitor =
+    open HealthMonitorUI
+
+    // ─── Status-pill renderers ───────────────────────────────────────────
+
+    /// Three-colour status pill mirroring the convention used elsewhere in
+    /// the admin UI (`WebhookAdminUI.outcomeLabel`'s green / yellow / red
+    /// idiom). Centralised so the live-health and preflight tables stay
+    /// visually consistent — the same probe status (`Healthy`) and the same
+    /// validator outcome (`Ok`) read identically green.
+    let private statusPill (status: string) =
+        let cls =
+            match status with
+            | "Healthy"
+            | "Ok" -> "bg-green-100 text-green-700 border-green-200"
+            | "Degraded"
+            | "Warning" -> "bg-yellow-100 text-yellow-700 border-yellow-200"
+            | "Unhealthy"
+            | "Error" -> "bg-red-100 text-red-700 border-red-200"
+            | _ -> ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary)
+
+        Html.span [
+            prop.className $"inline-block text-xs px-2 py-0.5 rounded border font-medium {cls}"
+            prop.text status
+        ]
+
+    let private refreshButton (msgs: HealthMonitorMessages) (label: string) (onClick: unit -> unit) (loading: bool) =
+        Forms.Button.secondaryWith (Forms.Button.stateOf loading msgs.Refreshing false) label onClick
+
+    // ─── Live health tab ─────────────────────────────────────────────────
+
+    // ─── Job-scheduler telemetry card ────────────────────────────────────
+
+    /// Inline card on the Live tab. Suppressed entirely when no scheduler
+    /// is registered (`HasScheduler = false`) so deployments without
+    /// background jobs don't see a misleading zero counter. When a miss
+    /// has been observed, the card pulls a warning border so operators
+    /// scanning the page register the signal before reading the numbers.
+    let private schedulerTelemetryCard (msgs: HealthMonitorMessages) (view: JobSchedulerTelemetryView) =
+        if not view.HasScheduler then
+            Html.none
+        else
+            let hasMiss = view.TickMissedCount60Min > 0 || view.LastTickMissedAt.IsSome
+
+            let borderCls =
+                if hasMiss then
+                    "border-yellow-300 bg-yellow-50"
+                else
+                    "border-border bg-white"
+
+            let countCls =
+                if hasMiss then
+                    "text-yellow-700 font-semibold"
+                else
+                    Tokens.Text.secondary
+
+            let driftCell =
+                match view.LastDriftMs with
+                | Some ms -> Html.text $"{ms} ms"
+                | None -> Html.span [ prop.className Tokens.Text.muted; prop.text "—" ]
+
+            let missedAtCell =
+                match view.LastTickMissedAt with
+                | Some ts -> Html.text (ts.ToString "u")
+                | None -> Html.span [ prop.className Tokens.Text.muted; prop.text "—" ]
+
+            Html.div [
+                prop.className $"border rounded-lg p-3 mb-4 text-sm {borderCls}"
+                prop.children [
+                    Html.div [
+                        prop.className "flex items-baseline justify-between mb-1"
+                        prop.children [
+                            Html.h3 [ prop.className "text-sm font-semibold"; prop.text msgs.SchedulerDriftHeading ]
+                            let generatedAtLabel = view.GeneratedAt.ToString "u"
+
+                            Html.span [
+                                prop.className ("text-xs " + Tokens.Text.muted)
+                                prop.text (msgs.AsOf generatedAtLabel)
+                            ]
+                        ]
+                    ]
+                    Html.p [
+                        prop.className ("text-xs mb-2 " + Tokens.Text.secondary)
+                        prop.text msgs.SchedulerLagHelp
+                    ]
+                    Html.div [
+                        prop.className "grid grid-cols-3 gap-x-4 gap-y-1"
+                        prop.children [
+                            Html.div [
+                                prop.className ("text-xs " + Tokens.Text.muted)
+                                prop.text msgs.SchedulerMissed60m
+                            ]
+                            Html.div [
+                                prop.className ("text-xs " + Tokens.Text.muted)
+                                prop.text msgs.SchedulerLastDrift
+                            ]
+                            Html.div [
+                                prop.className ("text-xs " + Tokens.Text.muted)
+                                prop.text msgs.SchedulerLastMissAt
+                            ]
+                            Html.div [
+                                prop.className $"text-sm font-mono {countCls}"
+                                prop.text (string view.TickMissedCount60Min)
+                            ]
+                            Html.div [ prop.className "text-sm font-mono"; prop.children [ driftCell ] ]
+                            Html.div [ prop.className "text-sm font-mono"; prop.children [ missedAtCell ] ]
+                        ]
+                    ]
+                ]
+            ]
+
+    // ─── Degraded-capability card ────────────────────────────────────────
+
+    /// Inline card on the Live tab listing capabilities that wired
+    /// best-effort and FAILED — the deployment is up but a capability is
+    /// silently down (e.g. cross-silo crypto-shred cache eviction). Rendered
+    /// ONLY when the set is non-empty (GP 13): a healthy deployment sees
+    /// nothing, matching the byte-for-byte-unchanged `/health` payload. The
+    /// red border signals this is a security/correctness degradation, not a
+    /// transient probe blip.
+    let private degradedCapabilitiesCard (msgs: HealthMonitorMessages) (entries: DegradedCapability list) =
+        if List.isEmpty entries then
+            Html.none
+        else
+            Html.div [
+                prop.className "border border-red-300 bg-red-50 rounded-lg p-3 mb-4"
+                prop.children [
+                    Html.div [
+                        prop.className "flex items-baseline justify-between mb-2"
+                        prop.children [
+                            Html.h3 [
+                                prop.className "text-sm font-semibold text-red-800"
+                                prop.text (msgs.DegradedCapabilities entries.Length)
+                            ]
+                        ]
+                    ]
+                    Html.p [
+                        prop.className "text-xs text-red-700 mb-3"
+                        prop.text msgs.DegradedCapabilitiesHelp
+                    ]
+                    Html.div [
+                        prop.className "flex flex-col gap-3"
+                        prop.children (
+                            entries
+                            |> List.map (fun d ->
+                                Html.div [
+                                    prop.className "border border-red-200 bg-white rounded p-3"
+                                    prop.children [
+                                        Html.div [
+                                            prop.className "flex items-baseline justify-between mb-1"
+                                            prop.children [
+                                                Html.span [
+                                                    prop.className "text-sm font-mono font-semibold text-red-800"
+                                                    prop.text d.Capability
+                                                ]
+                                                Html.span [
+                                                    prop.className ("text-xs " + Tokens.Text.muted)
+                                                    prop.text (msgs.DegradedSince(string d.DegradedSince))
+                                                ]
+                                            ]
+                                        ]
+                                        Html.dl [
+                                            prop.className "grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs"
+                                            prop.children [
+                                                Html.dt [
+                                                    prop.className ("font-medium " + Tokens.Text.muted)
+                                                    prop.text msgs.DegradedReason
+                                                ]
+                                                Html.dd [ prop.className Tokens.Text.secondary; prop.text d.Reason ]
+                                                Html.dt [
+                                                    prop.className ("font-medium " + Tokens.Text.muted)
+                                                    prop.text msgs.DegradedImpact
+                                                ]
+                                                Html.dd [ prop.className Tokens.Text.secondary; prop.text d.Impact ]
+                                                Html.dt [
+                                                    prop.className ("font-medium " + Tokens.Text.muted)
+                                                    prop.text msgs.Remediation
+                                                ]
+                                                Html.dd [
+                                                    prop.className Tokens.Text.secondary
+                                                    prop.text d.Remediation
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ])
+                        )
+                    ]
+                ]
+            ]
+
+    // ─── AI action-denial card ───────────────────────────────────────────
+
+    /// Inline card on the Live tab showing the rolling AI action-denial
+    /// rollup — the production-safe twin of the `EnableDevEndpoints`-gated
+    /// `/dev/ai-allowlist` endpoint. Same `AIDenialRollup` record, same
+    /// numbers; an operator watching a prompt-injection campaign in
+    /// production does not have to turn the debug surface on to see it.
+    ///
+    /// **Suppressed entirely when the deployment has never recorded a
+    /// denial** (GP 13) — an install with no AI, or one whose allowlist has
+    /// never refused anything, sees no card at all. Once it HAS recorded
+    /// one, the card stays and honestly reports a clean current window,
+    /// because "it has subsided" is exactly what an operator who just
+    /// received the alert needs to read.
+    ///
+    /// Renders only what the rollup carries: reasons are already
+    /// control-stripped and truncated by the producing tier, and raw model
+    /// arguments are never in the payload at all.
+    let private aiDenialCard (msgs: HealthMonitorMessages) (rollup: AIDenialRollup) =
+        if rollup.TotalDenialsAllTime = 0 then
+            Html.none
+        else
+            let active = rollup.TotalDenialsInWindow > 0
+
+            let shellCls =
+                if active then
+                    "border border-amber-300 bg-amber-50 rounded-lg p-3 mb-4"
+                else
+                    "border border-border bg-surface rounded-lg p-3 mb-4"
+
+            let headingCls =
+                if active then
+                    "text-sm font-semibold text-amber-800"
+                else
+                    ("text-sm font-semibold " + Tokens.Text.secondary)
+
+            let groupList (heading: string) (rows: AIDenialGroupCount list) =
+                if List.isEmpty rows then
+                    Html.none
+                else
+                    Html.div [
+                        prop.children [
+                            Html.div [
+                                prop.className ("text-xs font-medium mb-1 " + Tokens.Text.muted)
+                                prop.text heading
+                            ]
+                            Html.div [
+                                prop.className "flex flex-col gap-0.5"
+                                prop.children (
+                                    rows
+                                    |> List.truncate 5
+                                    |> List.map (fun row ->
+                                        Html.div [
+                                            prop.className "flex items-baseline justify-between gap-3 text-xs"
+                                            prop.children [
+                                                Html.span [
+                                                    prop.className ("font-mono " + Tokens.Text.secondary)
+                                                    prop.text row.Key
+                                                ]
+                                                Html.span [
+                                                    prop.className ("font-mono " + Tokens.Text.muted)
+                                                    prop.text (string row.Count)
+                                                ]
+                                            ]
+                                        ])
+                                )
+                            ]
+                        ]
+                    ]
+
+            let recentRow (d: RecentAIDenial) =
+                Html.div [
+                    prop.className "text-xs bg-white border border-border rounded p-2"
+                    prop.children [
+                        Html.div [
+                            prop.className "flex items-baseline justify-between gap-3"
+                            prop.children [
+                                Html.span [
+                                    prop.className ("font-mono " + Tokens.Text.secondary)
+                                    prop.text $"{d.ToolName} · {d.ActiveModule}"
+                                ]
+                                Html.span [ prop.className Tokens.Text.muted; prop.text (string d.OccurredAt) ]
+                            ]
+                        ]
+                        Html.div [ prop.className ("mt-0.5 " + Tokens.Text.secondary); prop.text d.Reason ]
+                    ]
+                ]
+
+            Html.div [
+                prop.className shellCls
+                prop.children [
+                    Html.div [
+                        prop.className "flex items-baseline justify-between mb-2"
+                        prop.children [
+                            Html.h3 [
+                                prop.className headingCls
+                                prop.text (msgs.AIDenials rollup.TotalDenialsInWindow)
+                            ]
+                            Html.span [
+                                prop.className ("text-xs font-mono " + Tokens.Text.muted)
+                                prop.text (
+                                    msgs.AIDenialsRate rollup.WindowMinutes (sprintf "%.2f" rollup.DenialsPerMinute)
+                                )
+                            ]
+                        ]
+                    ]
+                    Html.p [
+                        prop.className ("text-xs mb-3 " + Tokens.Text.secondary)
+                        prop.text msgs.AIDenialsHelp
+                    ]
+
+                    if not active then
+                        Html.p [
+                            prop.className ("text-xs " + Tokens.Text.muted)
+                            prop.text msgs.AIDenialsQuiet
+                        ]
+                    else
+                        Html.div [
+                            prop.className "flex flex-col gap-3"
+                            prop.children [
+                                Html.div [
+                                    prop.className "grid grid-cols-1 sm:grid-cols-2 gap-3"
+                                    prop.children [
+                                        groupList msgs.AIDenialsByTool rollup.ByToolName
+                                        groupList msgs.AIDenialsByModule rollup.ByActiveModule
+                                    ]
+                                ]
+                                if not (List.isEmpty rollup.RecentDenials) then
+                                    Html.div [
+                                        prop.children [
+                                            Html.div [
+                                                prop.className ("text-xs font-medium mb-1 " + Tokens.Text.muted)
+                                                prop.text msgs.AIDenialsRecent
+                                            ]
+                                            Html.div [
+                                                prop.className "flex flex-col gap-1"
+                                                prop.children (
+                                                    rollup.RecentDenials |> List.truncate 5 |> List.map recentRow
+                                                )
+                                            ]
+                                        ]
+                                    ]
+                            ]
+                        ]
+                ]
+            ]
+
+    let private liveHealthHeader (msgs: HealthMonitorMessages) (snapshot: HealthSnapshot) =
+        Html.div [
+            prop.className ("text-xs " + Tokens.Text.muted)
+            prop.text (msgs.GeneratedAt (string snapshot.GeneratedAt) snapshot.Probes.Length)
+        ]
+
+    let private column header (cell: 'row -> ReactElement) : Data.Column<'row> = {
+        Header = header
+        Align = Data.Left
+        Cell = cell
+    }
+
+    let private quiet (classes: string) (value: string) =
+        Html.span [ prop.className [ "text-xs"; classes ]; prop.text value ]
+
+    /// A probe whose status flipped since the previous snapshot pulses its
+    /// status pill, so the change is the first thing the eye lands on.
+    let private probeColumns
+        (msgs: HealthMonitorMessages)
+        (recentlyFlipped: Set<string>)
+        : Data.Column<HealthProbeView> list =
+        [
+            column msgs.ColumnStatus (fun row ->
+                Html.span [
+                    if recentlyFlipped |> Set.contains row.Name then
+                        prop.className "inline-block animate-pulse"
+                    prop.children [ statusPill row.Status ]
+                ])
+            column msgs.ColumnProbe (fun row -> Html.span [ prop.className "font-medium"; prop.text row.Name ])
+            column msgs.ColumnKind (fun row -> quiet Tokens.Text.muted row.Kind)
+            column msgs.ColumnTimeout (fun row -> quiet ("font-mono " + Tokens.Text.muted) $"{row.TimeoutMs} ms")
+            column msgs.ColumnElapsed (fun row -> quiet ("font-mono " + Tokens.Text.muted) $"{row.ElapsedMs} ms")
+            column msgs.ColumnMessage (fun row -> quiet Tokens.Text.secondary row.Message)
+        ]
+
+    let private probesTable
+        (msgs: HealthMonitorMessages)
+        (recentlyFlipped: Set<string>)
+        (probes: HealthProbeView list)
+        =
+        if List.isEmpty probes then
+            Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.NoProbes ]
+        else
+            Data.table (probeColumns msgs recentlyFlipped) probes
+
+    let private liveHealthTabView (msgs: HealthMonitorMessages) (model: Model) (dispatch: Msg -> unit) =
+        let isLoading = Remote.isLoading model.Live
+
+        Html.div [
+            prop.className "flex-1 p-6 overflow-y-auto"
+            prop.children [
+                Html.div [
+                    prop.className "flex items-center justify-between mb-4"
+                    prop.children [
+                        Html.div [
+                            prop.children [
+                                Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.LiveHealthHeading ]
+                                Html.p [
+                                    prop.className ("text-xs " + Tokens.Text.muted)
+                                    prop.text msgs.ProbesFootnote
+                                ]
+                            ]
+                        ]
+                        refreshButton msgs msgs.Refresh (fun () -> dispatch RefreshLive) isLoading
+                    ]
+                ]
+                // Degraded capabilities first (most urgent: a
+                // capability is down). Suppressed when the set is empty or
+                // the load is in flight.
+                match model.Degraded with
+                | Remote.Loaded entries -> degradedCapabilitiesCard msgs entries
+                | _ -> Html.none
+
+                // AI action denials. `Loaded None` means no AI
+                // companion is composed, so there is nothing to say; a
+                // `Some` rollup suppresses itself when the deployment has
+                // never recorded a denial.
+                match model.AIDenials with
+                | Remote.Loaded(Some rollup) -> aiDenialCard msgs rollup
+                | _ -> Html.none
+
+                // Surface scheduler drift above the probe
+                // table. Suppressed when no scheduler is registered, and
+                // when the load is in flight (no point flashing "Loading..."
+                // for a side-counter).
+                match model.SchedulerTelemetry with
+                | Remote.Loaded view -> schedulerTelemetryCard msgs view
+                | _ -> Html.none
+
+                match model.Live with
+                | Remote.NotAsked
+                | Remote.Loading
+                | Remote.Reloading _ ->
+                    Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
+                | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
+                | Remote.Loaded snapshot ->
+                    Html.div [
+                        prop.children [
+                            liveHealthHeader msgs snapshot
+                            Html.div [
+                                prop.className "mt-3"
+                                prop.children [ probesTable msgs model.RecentlyFlipped snapshot.Probes ]
+                            ]
+                        ]
+                    ]
+            ]
+        ]
+
+    // ─── Preflight tab ───────────────────────────────────────────────────
+
+    let private outcomeColumns (msgs: HealthMonitorMessages) : Data.Column<PreflightOutcomeView> list = [
+        column msgs.ColumnStatus (fun row -> statusPill row.Status)
+        column msgs.ColumnValidator (fun row -> Html.span [ prop.className "font-medium"; prop.text row.Name ])
+        column msgs.ColumnElapsed (fun row -> quiet ("font-mono " + Tokens.Text.muted) $"{row.ElapsedMs} ms")
+        column msgs.ColumnMessage (fun row -> quiet Tokens.Text.secondary row.Message)
+    ]
+
+    let private outcomesTable (msgs: HealthMonitorMessages) (outcomes: PreflightOutcomeView list) =
+        if List.isEmpty outcomes then
+            Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.NoValidators ]
+        else
+            Data.table (outcomeColumns msgs) outcomes
+
+    let private preflightTabView (msgs: HealthMonitorMessages) (model: Model) (dispatch: Msg -> unit) =
+        let isLoading = Remote.isLoading model.Preflight
+
+        Html.div [
+            prop.className "flex-1 p-6 overflow-y-auto"
+            prop.children [
+                Html.div [
+                    prop.className "flex items-center justify-between mb-4"
+                    prop.children [
+                        Html.div [
+                            prop.children [
+                                Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.PreflightHeading ]
+                                Html.p [
+                                    prop.className ("text-xs " + Tokens.Text.muted)
+                                    prop.text msgs.PreflightFootnote
+                                ]
+                            ]
+                        ]
+                        refreshButton msgs msgs.Refetch (fun () -> dispatch RefreshPreflight) isLoading
+                    ]
+                ]
+                match model.Preflight with
+                | Remote.NotAsked
+                | Remote.Loading
+                | Remote.Reloading _ ->
+                    Html.p [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
+                | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
+                | Remote.Loaded snapshot ->
+                    if not snapshot.HasSnapshot then
+                        Html.p [
+                            prop.className ("text-sm " + Tokens.Text.muted)
+                            prop.text msgs.PreflightUnavailable
+                        ]
+                    else
+                        outcomesTable msgs snapshot.Outcomes
+            ]
+        ]
+
+    // ─── View ────────────────────────────────────────────────────────────
+
+    let private tabBar (msgs: HealthMonitorMessages) (model: Model) (dispatch: Msg -> unit) =
+        Html.div [
+            prop.className [ "px-4"; Tokens.Bg.card ]
+            prop.children [
+                Tabs.bar
+                    [ LiveHealthTab, msgs.LiveHealthTab; PreflightTab, msgs.PreflightTab ]
+                    model.ActiveTab
+                    (SwitchTab >> dispatch)
+            ]
+        ]
+
+    /// The module's page, over the catalog section the view hands it.
+    let body (msgs: HealthMonitorMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+        let content =
+            match model.ActiveTab with
+            | LiveHealthTab -> liveHealthTabView msgs model dispatch
+            | PreflightTab -> preflightTabView msgs model dispatch
+
+        Html.div [
+            prop.className "flex flex-col h-full"
+            prop.children [ tabBar msgs model dispatch; content ]
+        ]
+
+/// The background-jobs admin as Feliz (`JobsAdminUI`'s view before its tree).
+module JobsAdmin =
+    open JobsAdminUI
+
+    // ─── View ───────────────────────────────────────────────────────────
+
+    let private standingLabel (msgs: JobsAdminMessages) (standing: JobStanding) =
+        match standing with
+        | JobStanding.PermanentlyFailed -> msgs.StandingPermanentlyFailed
+        | JobStanding.FailingWillRetry -> msgs.StandingFailingWillRetry
+        | JobStanding.InProgress -> msgs.StandingInProgress
+        | JobStanding.Succeeded -> msgs.StandingSucceeded
+        | JobStanding.AttemptCancelled -> msgs.StandingAttemptCancelled
+        | JobStanding.NotYetRun -> msgs.StandingNotYetRun
+
+    let private standingPill (msgs: JobsAdminMessages) (standing: JobStanding) =
+        let cls =
+            match standing with
+            | JobStanding.PermanentlyFailed -> "bg-red-100 text-red-700 border-red-200"
+            | JobStanding.FailingWillRetry -> "bg-yellow-100 text-yellow-700 border-yellow-200"
+            | JobStanding.InProgress -> "bg-blue-100 text-blue-700 border-blue-200"
+            | JobStanding.Succeeded -> "bg-green-100 text-green-700 border-green-200"
+            | JobStanding.AttemptCancelled
+            | JobStanding.NotYetRun -> ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary)
+
+        Html.span [
+            prop.className $"inline-block px-2 py-0.5 text-xs rounded border {cls}"
+            prop.text (standingLabel msgs standing)
+        ]
+
+    let private formatTime (time: DateTime) =
+        time.ToString("yyyy-MM-dd HH:mm:ss") + " UTC"
+
+    let private rerunCell (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg -> unit) (job: JobDefinition) =
+        let progress =
+            match model.Reruns.TryFind job.JobId with
+            | Some RerunProgress.Starting -> Some msgs.RerunStarting
+            | Some(RerunProgress.Awaiting _) -> Some msgs.RerunAwaiting
+            | Some(RerunProgress.Landed standing) -> Some(msgs.RerunLanded(standingLabel msgs standing))
+            | Some RerunProgress.StillRunning -> Some msgs.RerunStillRunning
+            | Some(RerunProgress.Refused reason) -> Some(msgs.RerunRefused reason)
+            | None -> None
+
+        let inFlight =
+            match model.Reruns.TryFind job.JobId with
+            | Some RerunProgress.Starting
+            | Some(RerunProgress.Awaiting _) -> true
+            | _ -> false
+
+        Html.div [
+            prop.className "space-y-1"
+            prop.children [
+                match rerunOffer job with
+                | RerunOffer.Offered ->
+                    Forms.Button.secondaryWith
+                        (Forms.Button.stateOf inFlight msgs.RerunButton false)
+                        msgs.RerunButton
+                        (fun () -> dispatch (RerunRequested job.JobId))
+                | RerunOffer.RefusedDisabled ->
+                    Html.p [
+                        prop.className [ "text-xs"; Tokens.Text.muted ]
+                        prop.text msgs.RerunUnavailableDisabled
+                    ]
+                | RerunOffer.RefusedCancelled ->
+                    Html.p [
+                        prop.className [ "text-xs"; Tokens.Text.muted ]
+                        prop.text msgs.RerunUnavailableCancelled
+                    ]
+                match progress with
+                | Some text -> Html.p [ prop.className [ "text-xs"; Tokens.Text.secondary ]; prop.text text ]
+                | None -> Html.none
+            ]
+        ]
+
+    let private attemptLabel (msgs: JobsAdminMessages) (reading: AttemptReading) =
+        match reading with
+        | AttemptReading.InProgress -> msgs.StandingInProgress
+        | AttemptReading.RetryPending -> msgs.AttemptRetryPending
+        | AttemptReading.Failed -> msgs.AttemptFailed
+        | AttemptReading.Succeeded -> msgs.StandingSucceeded
+        | AttemptReading.PermanentlyFailed -> msgs.StandingPermanentlyFailed
+        | AttemptReading.Cancelled -> msgs.StandingAttemptCancelled
+
+    let private attemptPill (msgs: JobsAdminMessages) (reading: AttemptReading) =
+        let cls =
+            match reading with
+            | AttemptReading.PermanentlyFailed -> "bg-red-100 text-red-700 border-red-200"
+            | AttemptReading.Failed -> "bg-yellow-100 text-yellow-700 border-yellow-200"
+            | AttemptReading.InProgress
+            | AttemptReading.RetryPending -> "bg-blue-100 text-blue-700 border-blue-200"
+            | AttemptReading.Succeeded -> "bg-green-100 text-green-700 border-green-200"
+            | AttemptReading.Cancelled -> ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary)
+
+        Html.span [
+            prop.className $"inline-block px-2 py-0.5 text-xs rounded border {cls}"
+            prop.text (attemptLabel msgs reading)
+        ]
+
+    /// A success's warning, shown in amber beside the status it qualifies.
+    let private warningNote (warning: string) =
+        Html.p [
+            prop.className "mt-1 text-xs text-amber-700 font-mono break-all"
+            prop.text warning
+        ]
+
+    let private attemptItem (msgs: JobsAdminMessages) (job: JobDefinition) (run: JobRun) =
+        let reading = attemptReading job run
+
+        Html.li [
+            prop.key (string run.RunId)
+            prop.className "py-1"
+            prop.children [
+                Html.div [
+                    prop.className ("flex flex-wrap items-center gap-2 text-xs " + Tokens.Text.secondary)
+                    prop.children [
+                        Html.span [ prop.className "font-medium"; prop.text (msgs.AttemptNumber run.Attempt) ]
+                        attemptPill msgs reading
+                        Html.span [ prop.text (msgs.AttemptStarted(formatTime run.StartedAt)) ]
+                        match attemptDuration run with
+                        | Some span -> Html.span [ prop.text (msgs.AttemptTook(formatDuration span)) ]
+                        | None -> Html.none
+                    ]
+                ]
+                match run.Error with
+                | Some error ->
+                    Html.p [
+                        prop.className "mt-0.5 text-xs text-red-700"
+                        prop.children [
+                            Html.span [ prop.className "font-medium"; prop.text msgs.ReasonLabel ]
+                            Html.span [ prop.className "ml-1 font-mono break-all"; prop.text error ]
+                        ]
+                    ]
+                | None -> Html.none
+                match run.Status, run.Warning with
+                | JobRunStatus.Succeeded, Some warning -> warningNote warning
+                | _ -> Html.none
+            ]
+        ]
+
+    let private attemptsList (msgs: JobsAdminMessages) (model: Model) (job: JobDefinition) =
+        Html.div [
+            prop.className [ "mt-2 px-3 py-2 rounded"; Tokens.Bg.subtle ]
+            prop.children [
+                match model.Attempts.TryFind job.JobId with
+                | None
+                | Some Remote.NotAsked
+                | Some Remote.Loading ->
+                    Html.p [
+                        prop.className [ "text-xs"; Tokens.Text.muted ]
+                        prop.text msgs.AttemptsLoading
+                    ]
+                | Some(Remote.Failed message) ->
+                    Html.p [
+                        prop.className "text-xs text-red-700"
+                        prop.text (msgs.AttemptsLoadFailed message)
+                    ]
+                | Some(Remote.Reloading [])
+                | Some(Remote.Loaded []) ->
+                    Html.p [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.NoAttempts ]
+                | Some(Remote.Reloading runs)
+                | Some(Remote.Loaded runs) -> Html.ul (runs |> List.map (attemptItem msgs job))
+            ]
+        ]
+
+    /// The job cell: handler, id, status, the attempts toggle, and the
+    /// attempts list beneath it when expanded.
+    let private jobCell (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg -> unit) (job: JobDefinition) =
+        let expanded = model.Expanded.Contains job.JobId
+
+        Html.div [
+            Html.div [ prop.className "text-sm font-medium"; prop.text job.Handler ]
+            Html.div [
+                prop.className [ "text-xs font-mono"; Tokens.Text.muted ]
+                prop.text (string job.JobId)
+            ]
+            match job.Status with
+            | JobStatus.Disabled ->
+                Html.span [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.JobDisabled ]
+            | JobStatus.Cancelled ->
+                Html.span [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.JobCancelled ]
+            | JobStatus.Active -> Html.none
+            Html.div [
+                Html.button [
+                    prop.className [ "text-xs underline"; Tokens.Text.secondary ]
+                    prop.ariaExpanded expanded
+                    prop.text (if expanded then msgs.HideAttempts else msgs.ShowAttempts)
+                    prop.onClick (fun _ -> dispatch (ToggleAttempts job.JobId))
+                ]
+            ]
+            if expanded then
+                attemptsList msgs model job
+        ]
+
+    let private lastRunCell (msgs: JobsAdminMessages) (model: Model) (job: JobDefinition) =
+        let newer =
+            match model.Attempts.TryFind job.JobId with
+            | Some(Remote.Loaded runs) -> newerThanRecord job runs
+            | _ -> None
+
+        Html.div [
+            prop.className "text-sm"
+            prop.children [
+                Html.div [
+                    prop.text (job.LastRunAt |> Option.map formatTime |> Option.defaultValue msgs.NeverRun)
+                ]
+                match newer with
+                | Some run ->
+                    Html.p [
+                        prop.className "mt-1 text-xs text-blue-700"
+                        prop.text (msgs.NewerAttempt run.Attempt (formatTime run.StartedAt))
+                    ]
+                | None -> Html.none
+            ]
+        ]
+
+    let private statusCell (msgs: JobsAdminMessages) (job: JobDefinition) =
+        let standing = standingOf job
+
+        Html.div [
+            standingPill msgs standing
+            match standing, job.LastRunError with
+            | (JobStanding.PermanentlyFailed | JobStanding.FailingWillRetry), Some error ->
+                Html.p [
+                    prop.className "mt-1 text-xs text-red-700"
+                    prop.children [
+                        Html.span [ prop.className "font-medium"; prop.text msgs.ReasonLabel ]
+                        Html.span [ prop.className "ml-1 font-mono break-all"; prop.text error ]
+                    ]
+                ]
+            | _ -> Html.none
+            match warningOf job with
+            | Some warning -> warningNote warning
+            | None -> Html.none
+        ]
+
+    let private jobsTable (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg -> unit) (jobs: JobDefinition list) =
+        if jobs.IsEmpty then
+            Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.NoJobs ]
+        else
+            Data.table
+                [
+                    {
+                        Header = msgs.ColumnJob
+                        Align = Data.Left
+                        Cell = jobCell msgs model dispatch
+                    }
+                    {
+                        Header = msgs.ColumnLastRun
+                        Align = Data.Left
+                        Cell = lastRunCell msgs model
+                    }
+                    {
+                        Header = msgs.ColumnStatus
+                        Align = Data.Left
+                        Cell = statusCell msgs
+                    }
+                    {
+                        Header = msgs.ColumnActions
+                        Align = Data.Left
+                        Cell = rerunCell msgs model dispatch
+                    }
+                ]
+                (ordered jobs)
+
+    /// The re-run confirmation, while one is pending.
+    let private rerunConfirm (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg -> unit) =
+        match model.Confirming |> Option.bind (findJob model) with
+        | Some job ->
+            Modal.confirm
+                {
+                    Title = msgs.RerunButton
+                    Confirm = msgs.RerunConfirm
+                    Busy = msgs.RerunStarting
+                    Cancel = msgs.RerunCancel
+                }
+                [
+                    Html.p [
+                        prop.className [ "text-sm"; Tokens.Text.secondary ]
+                        prop.text (msgs.RerunConfirmPrompt job.Handler)
+                    ]
+                ]
+                (fun () -> dispatch (RerunConfirmed job.JobId))
+                (fun () -> dispatch RerunCancelled)
+                false
+        | None -> Html.none
+
+    /// The module's page, over the catalog section the view hands it.
+    let body (msgs: JobsAdminMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+        let loading = Remote.isLoading model.Jobs
+
+        Html.div [
+            prop.className "flex-1 p-6 overflow-y-auto"
+            prop.children [
+                Html.div [
+                    prop.className "flex items-center justify-between mb-4"
+                    prop.children [
+                        Html.div [
+                            prop.children [
+                                Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.Heading ]
+                                Html.p [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.Subheading ]
+                            ]
+                        ]
+                        Forms.Button.secondaryWith
+                            (Forms.Button.stateOf loading msgs.Refreshing false)
+                            msgs.Refresh
+                            (fun () -> dispatch Refresh)
+                    ]
+                ]
+                StateViews.notice { Dismiss = msgs.Dismiss } model.LastError (fun () -> dispatch DismissError)
+                match model.Jobs with
+                | Remote.NotAsked
+                | Remote.Loading -> Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.Loading ]
+                | Remote.Failed message -> StateViews.noticeStatic (Notice.Problem message)
+                | Remote.Reloading jobs
+                | Remote.Loaded jobs -> jobsTable msgs model dispatch jobs
+                rerunConfirm msgs model dispatch
+            ]
+        ]
+
+/// The service status board as Feliz (`ServiceStatusBoardUI`'s view before its tree).
+module ServiceStatusBoard =
+    open ServiceStatusBoardUI
+
+    // ─── Renderers ───────────────────────────────────────────────────────
+
+    let private severityPill (msgs: ServiceStatusBoardMessages) (summary: SectionSummary) =
+        let label, cls =
+            if summary.Disabled then
+                msgs.SeverityDisabled, ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary)
+            else
+                match summary.Severity with
+                | StatusSeverity.Ok -> msgs.SeverityOk, "bg-green-100 text-green-700 border-green-200"
+                | StatusSeverity.Warn -> msgs.SeverityWarn, "bg-yellow-100 text-yellow-700 border-yellow-200"
+                | StatusSeverity.Error -> msgs.SeverityError, "bg-red-100 text-red-700 border-red-200"
+
+        Html.span [
+            prop.className $"inline-block text-xs px-2 py-0.5 rounded border font-medium {cls}"
+            prop.text label
+        ]
+
+    let private overallPill (msgs: ServiceStatusBoardMessages) (overall: OverallStatus) =
+        let label, cls =
+            match overall with
+            | AllOk -> msgs.AllSystemsOk, "bg-green-100 text-green-700 border-green-200"
+            | DegradedBy sections ->
+                let joined = sections |> String.concat ", "
+                msgs.DegradedBy joined, "bg-yellow-100 text-yellow-700 border-yellow-200"
+            | UnhealthyBy sections ->
+                let joined = sections |> String.concat ", "
+                msgs.UnhealthyBy joined, "bg-red-100 text-red-700 border-red-200"
+
+        Html.span [
+            prop.className $"inline-block text-sm px-3 py-1 rounded border font-semibold {cls}"
+            prop.text label
+        ]
+
+    let private sectionPanel
+        (msgs: ServiceStatusBoardMessages)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        (section: string)
+        (summary: SectionSummary)
+        : ReactElement =
+        let isCollapsed = Set.contains section model.Collapsed
+        let isRefreshing = Set.contains section model.Refreshing
+        let isFlipped = Set.contains section model.RecentlyFlipped
+
+        Html.div [
+            prop.className [
+                "border border-border rounded-lg overflow-hidden bg-white"
+                if isFlipped then
+                    "animate-pulse"
+            ]
+            prop.children [
+                Html.div [
+                    prop.className "flex items-center justify-between gap-3 px-4 py-3 bg-gray-50 border-b border-border"
+                    prop.children [
+                        Html.button [
+                            prop.className "flex items-center gap-2 text-left flex-1"
+                            prop.onClick (fun _ -> dispatch (ToggleCollapsed section))
+                            prop.children [
+                                Html.span [
+                                    prop.className [ "text-xs font-mono w-4"; Tokens.Text.muted ]
+                                    prop.text (if isCollapsed then "▸" else "▾")
+                                ]
+                                Html.span [
+                                    prop.className [ "text-sm font-semibold"; Tokens.Text.primary ]
+                                    prop.text section
+                                ]
+                                severityPill msgs summary
+                            ]
+                        ]
+                        Forms.Button.secondaryWith
+                            (Forms.Button.stateOf isRefreshing msgs.Refreshing false)
+                            msgs.Refresh
+                            (fun () -> dispatch (RefreshSection section))
+                    ]
+                ]
+                if not isCollapsed then
+                    Html.div [
+                        prop.className "px-4 py-3"
+                        prop.children [
+                            Html.p [
+                                prop.className [ "text-sm"; Tokens.Text.secondary ]
+                                prop.text (
+                                    if summary.Disabled then
+                                        summary.DisabledReason
+                                    else
+                                        summary.Headline
+                                )
+                            ]
+                            if not summary.Details.IsEmpty then
+                                Html.ul [
+                                    prop.className [ "mt-2 text-xs list-disc pl-5 space-y-1"; Tokens.Text.secondary ]
+                                    prop.children (summary.Details |> List.map (fun d -> Html.li [ prop.text d ]))
+                                ]
+                        ]
+                    ]
+            ]
+        ]
+
+    // ─── View ────────────────────────────────────────────────────────────
+
+    let private boardView (msgs: ServiceStatusBoardMessages) (model: Model) (dispatch: Msg -> unit) =
+        let isLoading = Remote.isLoading model.Snapshot
+
+        Html.div [
+            prop.className "flex-1 p-6 overflow-y-auto"
+            prop.children [
+                Html.div [
+                    prop.className "flex items-center justify-between mb-4"
+                    prop.children [
+                        Html.div [
+                            prop.children [
+                                Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.Heading ]
+                                Html.p [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.Subheading ]
+                            ]
+                        ]
+                        Forms.Button.secondaryWith
+                            (Forms.Button.stateOf isLoading msgs.Refreshing false)
+                            msgs.RefreshAll
+                            (fun () -> dispatch RefreshAll)
+                    ]
+                ]
+                match model.Snapshot with
+                | Remote.NotAsked
+                | Remote.Loading
+                | Remote.Reloading _ ->
+                    Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.Loading ]
+                | Remote.Failed msg -> StateViews.noticeStatic (Notice.Problem msg)
+                | Remote.Loaded snap ->
+                    Html.div [
+                        prop.children [
+                            Html.div [
+                                prop.className
+                                    "flex items-center justify-between p-3 mb-4 bg-white border border-border rounded-lg"
+                                prop.children [
+                                    overallPill msgs snap.Overall
+                                    Html.span [
+                                        prop.className [ "text-xs"; Tokens.Text.muted ]
+                                        prop.text (msgs.GeneratedAt(snap.GeneratedAt.ToString "u"))
+                                    ]
+                                ]
+                            ]
+                            Html.div [
+                                prop.className "flex flex-col gap-3"
+                                prop.children [
+                                    sectionPanel msgs model dispatch ServiceStatusSnapshot.HealthSection snap.Health
+                                    sectionPanel
+                                        msgs
+                                        model
+                                        dispatch
+                                        ServiceStatusSnapshot.PreflightSection
+                                        snap.Preflight
+                                    sectionPanel msgs model dispatch ServiceStatusSnapshot.DriftSection snap.Drift
+                                    sectionPanel
+                                        msgs
+                                        model
+                                        dispatch
+                                        ServiceStatusSnapshot.RateLimitSection
+                                        snap.RateLimit
+                                    sectionPanel msgs model dispatch ServiceStatusSnapshot.JobQueueSection snap.JobQueue
+                                    sectionPanel
+                                        msgs
+                                        model
+                                        dispatch
+                                        ServiceStatusSnapshot.SmokeTestSection
+                                        snap.SmokeTest
+                                ]
+                            ]
+                        ]
+                    ]
+            ]
+        ]
+
+    /// The module's page, over the catalog section the view hands it.
+    let body (msgs: ServiceStatusBoardMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+        Html.div [
+            prop.className "flex flex-col h-full"
+            prop.children [ boardView msgs model dispatch ]
+        ]
+
+/// The data-migration admin as Feliz (`MigrationStatusUI`'s view before its tree).
+module MigrationStatus =
+    open MigrationStatusUI
+
+    // ─── View ───────────────────────────────────────────────────────────
+
+    let private statePill (msgs: MigrationStatusMessages) (state: MigrationRunState) =
+        let label, cls =
+            match state with
+            | MigrationIdle -> msgs.NotYetRun, ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary)
+            | MigrationInProgress -> msgs.InProgressLabel, "bg-blue-100 text-blue-700 border-blue-200"
+            | MigrationComplete -> msgs.UpToDate, "bg-green-100 text-green-700 border-green-200"
+            | MigrationCompleteWithFailures ->
+                msgs.CompletedWithFailures, "bg-yellow-100 text-yellow-700 border-yellow-200"
+            | MigrationChainBlocked _ -> msgs.Blocked, "bg-red-100 text-red-700 border-red-200"
+
+        Html.span [
+            prop.className $"inline-block px-2 py-0.5 text-xs rounded border {cls}"
+            prop.text label
+        ]
+
+    /// The progress sentence the phase asked for, in the module's own
+    /// vocabulary: which version pair, and how far through the scope.
+    let private progressText
+        (msgs: MigrationStatusMessages)
+        (info: MigrationDataTypeInfo)
+        (status: MigrationStatus option)
+        =
+        match status with
+        | None -> msgs.NoPassRecorded
+        | Some s ->
+            let done' = s.MigratedObjects + s.AlreadyCurrentObjects
+
+            match s.State with
+            | MigrationChainBlocked reason -> reason
+            | MigrationIdle -> msgs.NoPassRecorded
+            | MigrationInProgress -> msgs.InProgressText info.DisplayName s.TargetVersion done' s.TotalObjects
+            | MigrationComplete -> msgs.CompleteText s.TotalObjects s.TargetVersion
+            | MigrationCompleteWithFailures ->
+                msgs.CompleteWithFailuresText done' s.TotalObjects s.TargetVersion s.FailedObjects
+
+    let private failureRows (msgs: MigrationStatusMessages) (status: MigrationStatus) =
+        if status.Failures.IsEmpty then
+            Html.p [
+                prop.className [ "text-xs"; Tokens.Text.muted ]
+                prop.text msgs.NoFailuresRecorded
+            ]
+        else
+            Html.div [
+                prop.className "space-y-1"
+                prop.children [
+                    Html.p [
+                        prop.className [ "text-xs"; Tokens.Text.muted ]
+                        prop.text (msgs.FailuresSummary(List.length status.Failures))
+                    ]
+                    Html.ul [
+                        prop.className "text-xs font-mono space-y-1"
+                        prop.children (
+                            status.Failures
+                            |> List.map (fun failure ->
+                                Html.li [
+                                    prop.className "text-red-700"
+                                    prop.text (msgs.FailureLine failure.ObjectId failure.AtVersion failure.Error)
+                                ])
+                        )
+                    ]
+                ]
+            ]
+
+    let private dataTypeCell (info: MigrationDataTypeInfo) =
+        Html.div [
+            Html.div [ prop.className "text-sm font-medium"; prop.text info.DisplayName ]
+            Html.div [
+                prop.className [ "text-xs font-mono"; Tokens.Text.muted ]
+                prop.text info.DataTypeId
+            ]
+        ]
+
+    /// The progress sentence, and the recorded failures beneath it while they
+    /// are expanded.
+    let private progressCell (msgs: MigrationStatusMessages) (model: Model) (info: MigrationDataTypeInfo) =
+        let status = model.Statuses.TryFind info.DataTypeId
+
+        Html.div [
+            Html.p [
+                prop.className [ "text-sm"; Tokens.Text.secondary ]
+                prop.text (progressText msgs info status)
+            ]
+            match status with
+            | Some s when model.ExpandedFailures = Some info.DataTypeId ->
+                Html.div [
+                    prop.className [ "mt-2 p-3 rounded"; Tokens.Bg.subtle ]
+                    prop.children [ failureRows msgs s ]
+                ]
+            | _ -> Html.none
+        ]
+
+    let private actionsCell
+        (msgs: MigrationStatusMessages)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        (info: MigrationDataTypeInfo)
+        =
+        let triggering = model.Triggering.Contains info.DataTypeId
+        let expanded = model.ExpandedFailures = Some info.DataTypeId
+
+        let failureCount =
+            model.Statuses.TryFind info.DataTypeId
+            |> Option.map _.FailedObjects
+            |> Option.defaultValue 0
+
+        Html.div [
+            prop.className "flex items-center justify-end gap-3"
+            prop.children [
+                match info.ChainProblem with
+                | Some problem ->
+                    Html.span [
+                        prop.className "text-xs text-red-700"
+                        prop.title problem
+                        prop.text msgs.ChainIncomplete
+                    ]
+                | None ->
+                    Forms.Button.secondaryWith
+                        (Forms.Button.stateOf triggering msgs.Migrating false)
+                        msgs.MigrateNow
+                        (fun () -> dispatch (TriggerClicked info.DataTypeId))
+                if failureCount > 0 then
+                    Html.button [
+                        prop.className "text-xs underline text-red-700"
+                        prop.text (
+                            if expanded then
+                                msgs.HideFailures
+                            else
+                                msgs.FailuresButton failureCount
+                        )
+                        prop.onClick (fun _ -> dispatch (ToggleFailures info.DataTypeId))
+                    ]
+            ]
+        ]
+
+    let private dataTypesTable
+        (msgs: MigrationStatusMessages)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        (dataTypes: MigrationDataTypeInfo list)
+        =
+        if dataTypes.IsEmpty then
+            Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.NoDataTypes ]
+        else
+            Data.table
+                [
+                    {
+                        Header = msgs.ColumnDataType
+                        Align = Data.Left
+                        Cell = dataTypeCell
+                    }
+                    {
+                        Header = msgs.ColumnDeclared
+                        Align = Data.Left
+                        Cell = fun info -> Html.text (msgs.DeclaredVersion info.CurrentVersion)
+                    }
+                    {
+                        Header = msgs.ColumnProgress
+                        Align = Data.Left
+                        Cell = progressCell msgs model
+                    }
+                    {
+                        Header = msgs.ColumnState
+                        Align = Data.Left
+                        Cell =
+                            fun info ->
+                                match model.Statuses.TryFind info.DataTypeId with
+                                | Some s -> statePill msgs s.State
+                                | None -> statePill msgs MigrationIdle
+                    }
+                    {
+                        Header = msgs.ColumnActions
+                        Align = Data.Right
+                        Cell = actionsCell msgs model dispatch
+                    }
+                ]
+                dataTypes
+
+    /// The module's page, over the catalog section the view hands it.
+    let body (msgs: MigrationStatusMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+        let loading = Remote.isLoading model.DataTypes
+        let noticeMsgs = { Dismiss = msgs.Dismiss }
+
+        Html.div [
+            prop.className "flex-1 p-6 overflow-y-auto"
+            prop.children [
+                Html.div [
+                    prop.className "flex items-center justify-between mb-4"
+                    prop.children [
+                        Html.div [
+                            prop.children [
+                                Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.Heading ]
+                                Html.p [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.Subheading ]
+                            ]
+                        ]
+                        Forms.Button.secondaryWith
+                            (Forms.Button.stateOf loading msgs.Refreshing false)
+                            msgs.Refresh
+                            (fun () -> dispatch Refresh)
+                    ]
+                ]
+                match model.LastError with
+                | Some _ ->
+                    Html.div [
+                        prop.className "mb-4"
+                        prop.children [
+                            StateViews.notice noticeMsgs model.LastError (fun () -> dispatch DismissError)
+                        ]
+                    ]
+                | None -> Html.none
+                match model.DataTypes with
+                | Remote.NotAsked
+                | Remote.Loading
+                | Remote.Reloading _ ->
+                    Html.p [
+                        prop.className [ "text-sm"; Tokens.Text.muted ]
+                        prop.text msgs.LoadingDataTypes
+                    ]
+                | Remote.Failed message ->
+                    StateViews.notice noticeMsgs (Some(Notice.Problem message)) (fun () -> dispatch DismissError)
+                | Remote.Loaded dataTypes -> dataTypesTable msgs model dispatch dataTypes
+            ]
+        ]

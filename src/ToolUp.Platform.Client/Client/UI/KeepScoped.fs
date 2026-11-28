@@ -51,3 +51,23 @@ type One<'Ctx, 'Msg>(same: 'Ctx -> 'Ctx -> bool, build: 'Ctx -> Node<'Msg>) =
             let node = build context
             current <- Some(context, node)
             node
+
+/// The inputs of a row that shows its record and that record's entries in the
+/// model's maps (its attempts, its call in flight), served as the objects drawn
+/// last while `same` holds for the row under the same key. A row keyed on its
+/// input in a `Keep` is then built again only when its own record or its own
+/// entries moved, whatever happened to the other rows' entries.
+type RowInputs<'Key, 'Row when 'Key: comparison and 'Row: not struct>(key: 'Row -> 'Key, same: 'Row -> 'Row -> bool) =
+    // Sanctioned module-level mutable state: the inputs last drawn, by key.
+    let mutable drawn: Map<'Key, 'Row> = Map.empty
+
+    member _.Of(rows: 'Row list) : 'Row list =
+        let stable =
+            rows
+            |> List.map (fun row ->
+                match drawn.TryFind(key row) with
+                | Some was when same was row -> was
+                | _ -> row)
+
+        drawn <- stable |> List.map (fun row -> key row, row) |> Map.ofList
+        stable

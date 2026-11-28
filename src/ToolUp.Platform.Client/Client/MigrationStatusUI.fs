@@ -4,9 +4,9 @@
 module MigrationStatusUI
 
 open Fuaran.MVU
-open Feliz
+open Fable.Core
+open Fable.Core.JsInterop
 open ToolUp.Platform
-open Toolup.UIToolkit
 
 // ─── Built-in data-migration admin ──────────────────────────────────
 //
@@ -168,234 +168,30 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
 
 // ─── View ───────────────────────────────────────────────────────────
 
-let private statePill (msgs: MigrationStatusMessages) (state: MigrationRunState) =
-    let label, cls =
-        match state with
-        | MigrationIdle -> msgs.NotYetRun, ("bg-gray-100 border-gray-200 " + Tokens.Text.secondary)
-        | MigrationInProgress -> msgs.InProgressLabel, "bg-blue-100 text-blue-700 border-blue-200"
-        | MigrationComplete -> msgs.UpToDate, "bg-green-100 text-green-700 border-green-200"
-        | MigrationCompleteWithFailures -> msgs.CompletedWithFailures, "bg-yellow-100 text-yellow-700 border-yellow-200"
-        | MigrationChainBlocked _ -> msgs.Blocked, "bg-red-100 text-red-700 border-red-200"
+/// What the deferred tree component takes.
+type internal SurfaceProps = {|
+    Model: Model
+    Dispatch: Msg -> unit
+    Messages: MigrationStatusMessages
+    Locale: string
+|}
 
-    Html.span [
-        prop.className $"inline-block px-2 py-0.5 text-xs rounded border {cls}"
-        prop.text label
-    ]
+[<Emit("$0.then(m => m.Surface)")>]
+let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
 
-/// The progress sentence the phase asked for, in the module's own
-/// vocabulary: which version pair, and how far through the scope.
-let private progressText
-    (msgs: MigrationStatusMessages)
-    (info: MigrationDataTypeInfo)
-    (status: MigrationStatus option)
-    =
-    match status with
-    | None -> msgs.NoPassRecorded
-    | Some s ->
-        let done' = s.MigratedObjects + s.AlreadyCurrentObjects
-
-        match s.State with
-        | MigrationChainBlocked reason -> reason
-        | MigrationIdle -> msgs.NoPassRecorded
-        | MigrationInProgress -> msgs.InProgressText info.DisplayName s.TargetVersion done' s.TotalObjects
-        | MigrationComplete -> msgs.CompleteText s.TotalObjects s.TargetVersion
-        | MigrationCompleteWithFailures ->
-            msgs.CompleteWithFailuresText done' s.TotalObjects s.TargetVersion s.FailedObjects
-
-let private failureRows (msgs: MigrationStatusMessages) (status: MigrationStatus) =
-    if status.Failures.IsEmpty then
-        Html.p [
-            prop.className [ "text-xs"; Tokens.Text.muted ]
-            prop.text msgs.NoFailuresRecorded
-        ]
-    else
-        Html.div [
-            prop.className "space-y-1"
-            prop.children [
-                Html.p [
-                    prop.className [ "text-xs"; Tokens.Text.muted ]
-                    prop.text (msgs.FailuresSummary(List.length status.Failures))
-                ]
-                Html.ul [
-                    prop.className "text-xs font-mono space-y-1"
-                    prop.children (
-                        status.Failures
-                        |> List.map (fun failure ->
-                            Html.li [
-                                prop.className "text-red-700"
-                                prop.text (msgs.FailureLine failure.ObjectId failure.AtVersion failure.Error)
-                            ])
-                    )
-                ]
-            ]
-        ]
-
-let private dataTypeCell (info: MigrationDataTypeInfo) =
-    Html.div [
-        Html.div [ prop.className "text-sm font-medium"; prop.text info.DisplayName ]
-        Html.div [
-            prop.className [ "text-xs font-mono"; Tokens.Text.muted ]
-            prop.text info.DataTypeId
-        ]
-    ]
-
-/// The progress sentence, and the recorded failures beneath it while they
-/// are expanded.
-let private progressCell (msgs: MigrationStatusMessages) (model: Model) (info: MigrationDataTypeInfo) =
-    let status = model.Statuses.TryFind info.DataTypeId
-
-    Html.div [
-        Html.p [
-            prop.className [ "text-sm"; Tokens.Text.secondary ]
-            prop.text (progressText msgs info status)
-        ]
-        match status with
-        | Some s when model.ExpandedFailures = Some info.DataTypeId ->
-            Html.div [
-                prop.className [ "mt-2 p-3 rounded"; Tokens.Bg.subtle ]
-                prop.children [ failureRows msgs s ]
-            ]
-        | _ -> Html.none
-    ]
-
-let private actionsCell
-    (msgs: MigrationStatusMessages)
-    (model: Model)
-    (dispatch: Msg -> unit)
-    (info: MigrationDataTypeInfo)
-    =
-    let triggering = model.Triggering.Contains info.DataTypeId
-    let expanded = model.ExpandedFailures = Some info.DataTypeId
-
-    let failureCount =
-        model.Statuses.TryFind info.DataTypeId
-        |> Option.map _.FailedObjects
-        |> Option.defaultValue 0
-
-    Html.div [
-        prop.className "flex items-center justify-end gap-3"
-        prop.children [
-            match info.ChainProblem with
-            | Some problem ->
-                Html.span [
-                    prop.className "text-xs text-red-700"
-                    prop.title problem
-                    prop.text msgs.ChainIncomplete
-                ]
-            | None ->
-                Forms.Button.secondaryWith
-                    (Forms.Button.stateOf triggering msgs.Migrating false)
-                    msgs.MigrateNow
-                    (fun () -> dispatch (TriggerClicked info.DataTypeId))
-            if failureCount > 0 then
-                Html.button [
-                    prop.className "text-xs underline text-red-700"
-                    prop.text (
-                        if expanded then
-                            msgs.HideFailures
-                        else
-                            msgs.FailuresButton failureCount
-                    )
-                    prop.onClick (fun _ -> dispatch (ToggleFailures info.DataTypeId))
-                ]
-        ]
-    ]
-
-let private dataTypesTable
-    (msgs: MigrationStatusMessages)
-    (model: Model)
-    (dispatch: Msg -> unit)
-    (dataTypes: MigrationDataTypeInfo list)
-    =
-    if dataTypes.IsEmpty then
-        Html.p [ prop.className [ "text-sm"; Tokens.Text.muted ]; prop.text msgs.NoDataTypes ]
-    else
-        Data.table
-            [
-                {
-                    Header = msgs.ColumnDataType
-                    Align = Data.Left
-                    Cell = dataTypeCell
-                }
-                {
-                    Header = msgs.ColumnDeclared
-                    Align = Data.Left
-                    Cell = fun info -> Html.text (msgs.DeclaredVersion info.CurrentVersion)
-                }
-                {
-                    Header = msgs.ColumnProgress
-                    Align = Data.Left
-                    Cell = progressCell msgs model
-                }
-                {
-                    Header = msgs.ColumnState
-                    Align = Data.Left
-                    Cell =
-                        fun info ->
-                            match model.Statuses.TryFind info.DataTypeId with
-                            | Some s -> statePill msgs s.State
-                            | None -> statePill msgs MigrationIdle
-                }
-                {
-                    Header = msgs.ColumnActions
-                    Align = Data.Right
-                    Cell = actionsCell msgs model dispatch
-                }
-            ]
-            dataTypes
-
-/// The module's page, over the catalog section the view hands it.
-let private body (msgs: MigrationStatusMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    let loading = Remote.isLoading model.DataTypes
-    let noticeMsgs = { Dismiss = msgs.Dismiss }
-
-    Html.div [
-        prop.className "flex-1 p-6 overflow-y-auto"
-        prop.children [
-            Html.div [
-                prop.className "flex items-center justify-between mb-4"
-                prop.children [
-                    Html.div [
-                        prop.children [
-                            Html.h2 [ prop.className "text-lg font-semibold"; prop.text msgs.Heading ]
-                            Html.p [ prop.className [ "text-xs"; Tokens.Text.muted ]; prop.text msgs.Subheading ]
-                        ]
-                    ]
-                    Forms.Button.secondaryWith
-                        (Forms.Button.stateOf loading msgs.Refreshing false)
-                        msgs.Refresh
-                        (fun () -> dispatch Refresh)
-                ]
-            ]
-            match model.LastError with
-            | Some _ ->
-                Html.div [
-                    prop.className "mb-4"
-                    prop.children [
-                        StateViews.notice noticeMsgs model.LastError (fun () -> dispatch DismissError)
-                    ]
-                ]
-            | None -> Html.none
-            match model.DataTypes with
-            | Remote.NotAsked
-            | Remote.Loading
-            | Remote.Reloading _ ->
-                Html.p [
-                    prop.className [ "text-sm"; Tokens.Text.muted ]
-                    prop.text msgs.LoadingDataTypes
-                ]
-            | Remote.Failed message ->
-                StateViews.notice noticeMsgs (Some(Notice.Problem message)) (fun () -> dispatch DismissError)
-            | Remote.Loaded dataTypes -> dataTypesTable msgs model dispatch dataTypes
-        ]
-    ]
+/// The tree's file, fetched on demand with the node vocabulary and the
+/// renderer, so the shell's first load pays nothing for them.
+let private loadSurface () : JS.Promise<obj> =
+    surfaceOf (importDynamic "./MigrationStatusTree.fs")
 
 let private view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
     PageContent.FullWidth(
-        Html.div [
-            prop.className "flex flex-col h-full"
-            prop.children [ body ctx.Messages.MigrationStatus model ctx.Dispatch ]
-        ]
+        TreeSurface.deferred "MigrationStatusTree.Surface" loadSurface {|
+            Model = model
+            Dispatch = ctx.Dispatch
+            Messages = ctx.Messages.MigrationStatus
+            Locale = ctx.Locale
+        |}
     )
 
 // ─── Module creation ────────────────────────────────────────────────
