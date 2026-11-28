@@ -254,6 +254,7 @@ ToolUp.Platform.Audit.DataObjectStoreErasureHandler+DataObjectStoreExporter..cto
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler (class)
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler.auditToLog(ToolUp.Platform.IAuditLog, ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Audit.IDataExporter+IDataExporter], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Audit.IDataExporter+IErasureHandler], ToolUp.Platform.ErasurePolicy, System.String, System.String, ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAsyncDeps]) : ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi
+ToolUp.Platform.Audit.DataSubjectRequestApiHandler.createWithPreviews(ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Audit.IDataExporter+IDataExporter], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Audit.IDataExporter+IErasureHandler], ToolUp.Platform.ErasurePolicy, System.String, System.String, ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAsyncDeps]) : ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler.noOpAuditCallback : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler.serialiseSegments(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ExportSegment]) : System.Byte[]
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAsyncDeps (class)
@@ -298,6 +299,14 @@ ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrJobPayload.serialise(Syste
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrJobs (class)
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrJobs.ErasureHandler : System.String (literal)
 ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrJobs.ExportHandler : System.String (literal)
+ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews (class)
+ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews..ctor()
+ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews..ctor(System.TimeSpan, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews.Count : System.Int32 { get }
+ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews.DefaultTtl : System.TimeSpan { get }
+ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews.Put(System.String, ToolUp.Platform.DataSubjectRequest) : System.Void
+ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews.Remove(System.String, System.String) : System.Void
+ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews.TryFind(System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSubjectRequest]
 ToolUp.Platform.Audit.DefaultEvidenceChainWalker (class)
 ToolUp.Platform.Audit.DefaultEvidenceChainWalker..ctor(ToolUp.Platform.Audit.EvidenceChainSources, ToolUp.Platform.EvidenceChainCaps, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Platform.Audit.DefaultEvidenceChainWalker.VerdictDigest(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.EvidenceHop]) : System.String

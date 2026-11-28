@@ -141,7 +141,7 @@ ToolUp.Platform.Build 595/1073
 ToolUp.Platform.Client 2217/5555
 ToolUp.Platform.Core 8338/17296
 ToolUp.Platform.Server 3113/5586
-ToolUp.Platform.Server.Audit 376/696
+ToolUp.Platform.Server.Audit 384/705
 ToolUp.Platform.Server.Config 396/662
 ToolUp.Platform.Server.Infra 2301/3933
 ToolUp.Platform.Server.Jobs 933/1744

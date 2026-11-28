@@ -2,6 +2,7 @@ module ToolUp.Platform.Audit.DataSubjectRequestApiHandler
 
 open System
 open System.Collections.Concurrent
+open System.Collections.Generic
 open System.Text
 open System.Text.Json
 open System.Text.Json.Nodes
@@ -19,11 +20,12 @@ open ToolUp.Platform.Jobs
 // that scope; the orchestrator runs against the registered handler
 // list.
 //
-// In-memory preview cache: previews land in an in-process
-// ConcurrentDictionary keyed by `DataSubjectRequestId`. Confirm
-// looks up the preview to recover the subject + policy. Process
-// restart wipes the cache — admins re-preview after restart. A
-// distributed cache (Phase 9c half-2) is a follow-up.
+// Pending previews: `PreviewErasure` records the request in a
+// `PendingErasurePreviews` holder and `ConfirmErasure` reads it back to
+// recover the subject + policy. The mounted route builds a handler per
+// HTTP request, so it makes ONE holder per composed server and passes it
+// to every handler (`createWithPreviews`). The holder is in-process: a
+// restart wipes it and the admin re-previews.
 //
 // Audit emission: the audit callback receives an event-payload
 // record on every state transition (RequestStarted /
@@ -224,11 +226,69 @@ type DsrAsyncDeps = {
     Signer: IExportEnvelopeSigner option
 }
 
-/// Build a scoped `IDataSubjectRequestApi`. Caller supplies the
-/// registered exporter / erasure-handler lists, the deployment
-/// policy default, the scope id resolved upstream, the admin actor
-/// id, and the audit callback.
-let create
+/// The erasure previews waiting for their confirm. `PreviewErasure` records
+/// one and `ConfirmErasure`, a later request, reads it back, so one holder
+/// must outlive the request: the mounted route makes ONE per composed server
+/// and passes it to every handler it builds (`createWithPreviews`).
+///
+/// An entry is keyed by the scope that made it AND its request id, so a
+/// preview is confirmed only in its own scope. It lives `ttl` from the
+/// preview (`DefaultTtl`, 30 minutes): long enough for an admin to read the
+/// counts and confirm, short enough that a confirm never acts on counts that
+/// have gone stale, and it bounds the holder. A confirmed preview is removed;
+/// an expired one is removed when it is next read, and every `Put` sweeps the
+/// expired ones. The holder is process-local: a restart wipes it, and the
+/// admin re-previews.
+[<Sealed>]
+type PendingErasurePreviews(ttl: TimeSpan, clock: unit -> DateTimeOffset) =
+    let entries =
+        ConcurrentDictionary<struct (string * DataSubjectRequestId), DataSubjectRequest * DateTimeOffset>()
+
+    let expired (at: DateTimeOffset) (KeyValue(_, (_, expiresAt))) = expiresAt <= at
+
+    /// A holder with the default lifetime on the system clock.
+    new() = PendingErasurePreviews(PendingErasurePreviews.DefaultTtl, (fun () -> DateTimeOffset.UtcNow))
+
+    /// How long a preview waits for its confirm: 30 minutes.
+    static member DefaultTtl = TimeSpan.FromMinutes 30.0
+
+    /// Record `request`'s preview under `scopeId`, and drop every expired one.
+    member _.Put(scopeId: string, request: DataSubjectRequest) =
+        let at = clock ()
+
+        for entry in entries do
+            if expired at entry then
+                entries.TryRemove entry |> ignore
+
+        entries[struct (scopeId, request.Id)] <- (request, at + ttl)
+
+    /// The request previewed under `scopeId` as `requestId`, while it has not
+    /// expired; an expired one is removed and reads as absent.
+    member _.TryFind(scopeId: string, requestId: DataSubjectRequestId) : DataSubjectRequest option =
+        let key = struct (scopeId, requestId)
+
+        match entries.TryGetValue key with
+        | true, (request, expiresAt) when expiresAt > clock () -> Some request
+        | true, value ->
+            entries.TryRemove(KeyValuePair(key, value)) |> ignore
+            None
+        | false, _ -> None
+
+    /// Drop the preview of `requestId` under `scopeId` (its confirm ran).
+    member _.Remove(scopeId: string, requestId: DataSubjectRequestId) =
+        entries.TryRemove(struct (scopeId, requestId)) |> ignore
+
+    /// How many previews the holder carries, expired ones not yet swept included.
+    member _.Count = entries.Count
+
+/// Build a scoped `IDataSubjectRequestApi` over `previews`, the holder its
+/// erasure previews wait in. Caller supplies the registered exporter /
+/// erasure-handler lists, the deployment policy default, the scope id
+/// resolved upstream, the admin actor id, and the audit callback. A caller
+/// that builds a handler per request passes the same `previews` to each,
+/// so a preview made by one request is confirmed by a later one.
+let createWithPreviews
+    (previews: PendingErasurePreviews)
     (exporters: IDataExporter list)
     (handlers: IErasureHandler list)
     (defaultPolicy: ErasurePolicy)
@@ -245,12 +305,6 @@ let create
     // / PlatformAIKeysHandler so the client error banner renders uniformly.
     let denyNonAdmin () =
         not (AccessContext.canModifyPlatformConfig accessContext)
-    // Per-handler-instance preview cache. Process-local; admin re-
-    // previews after process restart. Acceptable for MVP since
-    // erasure is a low-frequency admin operation, not a hot-path
-    // request flow.
-    let previewCache =
-        ConcurrentDictionary<DataSubjectRequestId, DataSubjectRequest * ErasurePreview>()
 
     let mkRequest
         (kind: DataSubjectRequestKind)
@@ -335,7 +389,7 @@ let create
                             PerHandlerCounts = perHandler
                         }
 
-                        previewCache[request.Id] <- (request, preview)
+                        previews.Put(scopeId, request)
 
                         let totalAffected = perHandler.Values |> Seq.sumBy _.RecordsAffected
 
@@ -359,11 +413,13 @@ let create
                     return Result.Error "platform admin role required"
                 else
 
-                    match previewCache.TryGetValue requestId with
-                    | false, _ ->
+                    // Keyed by scope: a preview is confirmed only in the
+                    // scope that made it. An expired one reads as absent.
+                    match previews.TryFind(scopeId, requestId) with
+                    | None ->
                         return
                             Result.Ok(Refused $"No preview found for request {requestId}. Re-run PreviewErasure first.")
-                    | true, (request, _preview) ->
+                    | Some request ->
                         try
                             let! outcome = executeErase handlers request scopeId
 
@@ -389,9 +445,9 @@ let create
                                         "handlerCount", string outcome.PerHandler.Count
                                     ])
 
-                            // One-shot — drop the preview from the cache so a
-                            // second confirm doesn't re-run.
-                            previewCache.TryRemove requestId |> ignore
+                            // One-shot — drop the preview so a second confirm
+                            // doesn't re-run. A run that throws keeps it.
+                            previews.Remove(scopeId, requestId)
                             return Result.Ok(Completed outcome)
                         with ex ->
                             return Result.Error ex.Message
@@ -569,6 +625,31 @@ let create
                         return Result.Ok()
             }
     }
+
+/// Build a scoped `IDataSubjectRequestApi` whose erasure previews live as
+/// long as the handler: a preview is confirmed through the same handler
+/// value. A caller that builds a handler per request uses
+/// `createWithPreviews` with one shared holder instead.
+let create
+    (exporters: IDataExporter list)
+    (handlers: IErasureHandler list)
+    (defaultPolicy: ErasurePolicy)
+    (scopeId: string)
+    (actorUserId: string)
+    (accessContext: AccessContext)
+    (audit: AuditOnDsr)
+    (asyncDeps: DsrAsyncDeps option)
+    : IDataSubjectRequestApi =
+    createWithPreviews
+        (PendingErasurePreviews())
+        exporters
+        handlers
+        defaultPolicy
+        scopeId
+        actorUserId
+        accessContext
+        audit
+        asyncDeps
 
 /// No-op audit callback — useful in tests + dev where the consumer
 /// hasn't wired audit yet.

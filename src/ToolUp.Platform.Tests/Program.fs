@@ -133,6 +133,8 @@ let private registeredTests =
         DeckExportSeamTests.bundleTests
         DataSubjectRequestTests.tests
         DataSubjectRequestTests.authorizationTests
+        DataSubjectRequestTests.routeTests
+        DataSubjectRequestTests.previewHolderTests
         PostgresFactStoreTests.offlineTests
         PostgresFactStoreTests.tests
         TransactionalDispatcherTests.tests
