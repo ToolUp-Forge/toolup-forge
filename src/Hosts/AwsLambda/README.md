@@ -22,30 +22,30 @@ The consumer's `.fsproj` targets `net10.0` and produces a self-contained Lambda 
 
 ```fsharp skip=fragment
 open ToolUp.Platform
+open ToolUp.Platform.Compose
 
-let serverHost: IServerHost =
-    ServerApp.empty
-    |> ServerApp.withConfig {
-        ServerConfig.defaults with
-            Surfaces = Surfaces.anonymous
-            ServerlessHost = ServerlessHost
-            JobScheduler = NoJobScheduler
-            Webhooks = FeatureMode.Disabled
-            Notifications = NoNotificationsExplicit
-            AuditLog = FeatureMode.Disabled
-            UsageMetering = FeatureMode.Disabled
-            Observability = {
-                ServerConfig.defaults.Observability with
-                    HealthStateTracking = false
-            }
-    }
-    |> ServerApp.addModule (myModule.register ())
-    // Lambda drives `Invoke` per request; do NOT call
-    // `ServerApp.run` (which would call `RunBlocking`).
-    |> composeWithoutRunning
+let config = {
+    ServerConfig.defaults with
+        Surfaces = Surfaces.anonymous
+        ServerlessHost = ServerlessHost
+        JobScheduler = NoJobScheduler
+        Webhooks = FeatureMode.Disabled
+        Notifications = NoNotificationsExplicit
+        AuditLog = FeatureMode.Disabled
+        UsageMetering = FeatureMode.Disabled
+        Observability = {
+            ServerConfig.defaults.Observability with
+                HealthStateTracking = false
+        }
+}
+
+// Lambda drives `Invoke` per request; do NOT call
+// `ServerApp.run` (which would call `RunBlocking`).
+let plan = Server.CompositionPlan.ofConfig config
+let serverHost: IServerHost = Server.compose { plan with Handlers = myHandlers }
 ```
 
-`composeWithoutRunning` is **your own** one-liner, not an SDK member: `ServerApp` ships no compose-only entry point, because `ServerApp.run` composes and then calls `RunBlocking()`. Write it over `ToolUp.Platform.Server.compose`, passing the positional argument list, and return the `IServerHost` without starting the blocking host.
+`ServerApp` ships no compose-only entry point: `ServerApp.run` composes and then calls `RunBlocking()`, and the `CompositionPlan` it builds on the way is not returned. The one call that returns an `IServerHost` without running it is `ToolUp.Platform.Compose.Server.compose`, which takes one `CompositionPlan` record. `Server.CompositionPlan.ofConfig` gives a plan that composes the configuration and nothing else; set `Handlers` to the deployment's Giraffe handlers, and any other registration field the deployment needs, on that record. A plan composed this way gets nothing `ServerApp.run` adds around `compose`, such as the composition-inspector route.
 
 ### 2. Start the host once at cold-start
 

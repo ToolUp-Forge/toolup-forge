@@ -11,7 +11,7 @@ open ToolUp.Platform.Compose
 
 // ─── ToolUp.Hosts.GoogleCloudFunctions — GCF adapter ─────────────────
 //
-// Phase 16 host-adapter companion. Bridges Google Cloud Functions
+// Host-adapter companion. Bridges Google Cloud Functions
 // (Functions Framework for .NET) HTTP invocations through
 // `IServerHost.Invoke` so a compose-built ToolUp deployment runs on
 // Google Cloud Functions (2nd gen / Cloud Run functions) without
@@ -33,6 +33,14 @@ open ToolUp.Platform.Compose
 // Functions Framework's function target.* The framework instantiates
 // it per cold-start and calls `HandleAsync` per invocation.
 //
+// `ServerApp` has no compose-only entry point: `ServerApp.run` composes
+// and then calls `RunBlocking()`, which a function must never do. The
+// one call that returns an `IServerHost` without running it is the
+// low-level `Server.compose`, over a `CompositionPlan`: start from
+// `CompositionPlan.ofConfig` with `ServerConfig.ServerlessHost =
+// ServerlessHost`, and set the plan's `Handlers` (and any other
+// registration field) to what the deployment serves.
+//
 //     // Function.fs
 //     module Function
 //
@@ -42,23 +50,22 @@ open ToolUp.Platform.Compose
 //     open Microsoft.Extensions.Hosting
 //     open ToolUp.Hosts.GoogleCloudFunctions
 //     open ToolUp.Platform
+//     open ToolUp.Platform.Compose
+//
+//     let config = {
+//         ServerConfig.defaults with
+//             Surfaces = Surfaces.anonymous
+//             ServerlessHost = ServerlessHost
+//             JobScheduler = NoJobScheduler
+//             Webhooks = FeatureMode.Disabled
+//             Notifications = NoNotificationsExplicit
+//             AuditLog = FeatureMode.Disabled
+//             UsageMetering = FeatureMode.Disabled
+//     }
 //
 //     // Compose the SDK once at cold-start; reused for every invocation.
-//     let serverHost: IServerHost =
-//         ServerApp.empty
-//         |> ServerApp.withConfig {
-//             ServerConfig.defaults with
-//                 Mode = Anonymous
-//                 ServerlessHost = ServerlessHost
-//                 JobScheduler = NoJobScheduler
-//                 Webhooks = FeatureMode.Disabled
-//                 Notifications = NoNotificationsExplicit
-//                 AuditLog = FeatureMode.Disabled
-//                 UsageMetering = FeatureMode.Disabled
-//                 HealthStateTracking = false
-//         }
-//         |> ServerApp.addModule (myModule.register ())
-//         |> ServerApp.composeOnly   // hypothetical helper returning IServerHost
+//     let plan = Server.CompositionPlan.ofConfig config
+//     let serverHost: IServerHost = Server.compose { plan with Handlers = myHandlers }
 //
 //     // Start the SDK host once at cold-start (no-op when every
 //     // IHostedService is gated off, but ASP.NET Core internals need

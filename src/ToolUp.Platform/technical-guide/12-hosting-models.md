@@ -66,7 +66,7 @@ Every cell in the serverless columns reads ❌ — `ServerlessHost = ServerlessH
 | `Webhooks = FeatureMode.Disabled` | ✅ | ✅ |
 | `AuditLog = FeatureMode.Enabled` | ✅ — `AuditReplicator` fans events to external sinks | ⚠ — `IAuditLog` writes still land in `IEventStore`, but the `AuditReplicator` `BackgroundService` is gated off, so external `IAuditSink`s never receive events from this silo. Set `AuditLog = FeatureMode.Disabled` for clarity, or pair with a sibling silo that runs the replicator |
 | `UsageMetering = FeatureMode.Enabled` | ✅ | ⚠ — `IUsageLog` writes still land, but the `UsageBatchFlusher` is gated off; rows accumulate without a flush. Set `FeatureMode.Disabled`, or pair with a sibling silo |
-| `HealthStateTracking = true` | ✅ | ❌ — `HealthStateTrackerService` is gated off; set `HealthStateTracking = false` |
+| `Observability.HealthStateTracking = true` | ✅ | ❌ — `HealthStateTrackerService` is gated off; set `Observability.HealthStateTracking = false` |
 | `OAuth` data-source connectors | ✅ — token refresher + state-cleanup run | ❌ — both gated off; pair with a sibling silo if any data source uses OAuth refresh |
 
 ### Notifications & SSE
@@ -78,15 +78,15 @@ Every cell in the serverless columns reads ❌ — `ServerlessHost = ServerlessH
 | `RedisNotifications _` | ✅ | ⚠ — substrate works (cross-instance fan-out is fine), but the client-facing `/api/notifications` SSE response is still buffered; useful only for server-side coordination (e.g. notifying a sibling worker silo of an event) |
 | `NoNotificationsExplicit` | ✅ | ✅ — required for the serverless front-door; gate AI-streaming routes off too (`AISlotFills = AISlotFills.empty`) |
 
-### Platform mode
+### Surfaces
 
-| `ServerConfig.Mode` | Kestrel | AzureFunctions / AwsLambda / GoogleCloudFunctions |
+| `ServerConfig.Surfaces` | Kestrel | AzureFunctions / AwsLambda / GoogleCloudFunctions |
 |---|---|---|
-| `Anonymous` | ✅ | ✅ — the canonical "stateless analytical tool" fit |
-| `AuthenticatedEphemeral` | ✅ | ⚠ — works; per-instance session state — pair with a cloud-backed `IBlobStorage` and `IRateLimitStore` for multi-instance scaling |
-| `Individual` | ✅ | ⚠ — as above; auth via OIDC server-to-server, persistence via cloud `IBlobStorage` |
-| `Team` | ✅ | ⚠ — as above; `ITeamStore` and `IPermissionStore` resolve against the same blob substrate |
-| `MultiTeam` | ✅ | ⚠ — as above; the header team-switcher and `TeamSwitched` reset path work because the SDK middleware that handles them is HTTP-shape, not BackgroundService-shape |
+| `Surfaces.anonymous` | ✅ | ✅ — the canonical "stateless analytical tool" fit |
+| `Surfaces.trial` | ✅ | ⚠ — works; per-instance session state — pair with a cloud-backed `IBlobStorage` and `IRateLimitStore` for multi-instance scaling |
+| `Surfaces.individual` | ✅ | ⚠ — as above; auth via OIDC server-to-server, persistence via cloud `IBlobStorage` |
+| `Surfaces.team` | ✅ | ⚠ — as above; `ITeamStore` and `IPermissionStore` resolve against the same blob substrate |
+| `Surfaces.multiTeam` | ✅ | ⚠ — as above; the header team-switcher and `TeamSwitched` reset path work because the SDK middleware that handles them is HTTP-shape, not BackgroundService-shape |
 
 Single-instance cache locality applies to every serverless deployment: if the SDK is configured with an in-memory store (`InMemoryEventStore`, `InMemoryRateLimitStore`), each function execution environment has its own cache. Multi-instance deployments require cloud-backed substrate — see the per-cloud worked examples below for typical pairings.
 
@@ -103,7 +103,7 @@ See the [Cold-start mitigation](#cold-start-mitigation) section below for the co
 
 ## Worked examples
 
-The three worked examples below share a common composition root and differ only in host wiring and deployment manifest. Each example targets the canonical "stateless analytical tool" shape (Anonymous mode + no background subsystems + no SSE), which is the minimum viable serverless deployment per the matrix above.
+The three worked examples below share a common composition root and differ only in host wiring and deployment manifest. Each example targets the canonical "stateless analytical tool" shape (the anonymous surface + no background subsystems + no SSE), which is the minimum viable serverless deployment per the matrix above.
 
 ### Common composition root
 
@@ -136,7 +136,7 @@ let app =
 let serverHost: IServerHost = composeWithoutRunning app
 ```
 
-**There is no compose-only step on the `ServerApp` pipeline today.** `ServerApp.run` composes and then blocks, which is exactly what a serverless adapter must not do, so `composeWithoutRunning` above stands in for the one call that returns an `IServerHost` without running it: `ToolUp.Platform.Server.compose`, invoked directly with its positional argument list. That list is long and unstable, which is why this guide does not spell it out — a pipeline step returning `IServerHost` is the shape this page wants, and it is not shipped.
+**There is no compose-only step on the `ServerApp` pipeline today, and `composeWithoutRunning` above cannot be written over one.** `ServerApp.run` composes and then blocks, which is exactly what a serverless adapter must not do, and the `CompositionPlan` it builds on the way is not returned. The one call that returns an `IServerHost` without running it is `ToolUp.Platform.Compose.Server.compose`, which takes one `CompositionPlan` record: a serverless root builds that record itself, from `Server.CompositionPlan.ofConfig` (a plan that composes the configuration and nothing else) with `Handlers` and any other registration field the deployment needs set on it, as each host package's README shows. A plan composed this way gets nothing `ServerApp.run` adds around `compose`, such as the composition-inspector route. The `ServerApp` pipeline step returning `IServerHost` is the shape this page's samples are written in, and it is not shipped.
 
 After composition, every adapter calls `Host.StartAsync(CancellationToken.None).Wait()` once at cold-start so ASP.NET Core's internal services (logger factory, config root, options) are ready. Under `ServerlessHost = ServerlessHost` every `IHostedService` registration is gated off, so `StartAsync` is effectively a no-op — the call still has to happen for the framework internals.
 
@@ -429,9 +429,9 @@ The fourth worked example pairs any of the three serverless front-doors above wi
 | `SecretStore` | Provider-native (`AzureKeyVault` / `AwsSecretsManager` / `GcpSecretManager`) | Same | Both halves' managed identity is granted read on the same secret scope |
 | `JobScheduler` | `NoJobScheduler` | `InProcessJobScheduler` | The front-door never schedules directly; it `INotificationChannel.Publish`es and the worker's job handler (subscribed via `IModuleQueryBus`) picks it up |
 | `Webhooks` | `FeatureMode.Disabled` | `FeatureMode.Enabled` | Modules call `IWebhookEvents.publish` on either side; the dispatcher only runs on the worker, so front-door publishes queue for the worker to drain |
-| `AuditLog` / `UsageMetering` / `HealthStateTracking` | `FeatureMode.Disabled` / `FeatureMode.Disabled` / `false` | `FeatureMode.Enabled` / `FeatureMode.Enabled` / `true` | Writes from both halves land in the shared `IEventStore`; only the worker silo replicates / flushes / tracks state |
+| `AuditLog` / `UsageMetering` / `Observability.HealthStateTracking` | `FeatureMode.Disabled` / `FeatureMode.Disabled` / `false` | `FeatureMode.Enabled` / `FeatureMode.Enabled` / `true` | Writes from both halves land in the shared `IEventStore`; only the worker silo replicates / flushes / tracks state |
 
-**Front-door composition root.** Same shape as the Anonymous worked example above, with substrate fields pointing at cloud companions and (typically) `Mode = Team` or `Mode = Individual` rather than `Anonymous`.
+**Front-door composition root.** Same shape as the Anonymous worked example above, with substrate fields pointing at cloud companions and (typically) `Surfaces = Surfaces.team` or `Surfaces = Surfaces.individual` rather than `Surfaces.anonymous`.
 
 ```fsharp skip=fragment
 // Server/FrontDoorComposition.fs
