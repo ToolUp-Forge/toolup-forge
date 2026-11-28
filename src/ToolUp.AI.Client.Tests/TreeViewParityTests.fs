@@ -695,6 +695,15 @@ let private sessionTests =
                 .AssertModelWith("the banner's dismiss clears the error", fun m -> m.Error.IsNone)
             |> ignore)
 
+        testCase "a failed first load shows its error, not the loading text" (fun () ->
+            let failed =
+                (sessionInit ()).Dispatch(SessionSecurityUI.SessionsLoaded(Error "the session service is unreachable"))
+
+            let html = failed.RenderViewHtml(ViewMount.mount, sessionTree)
+
+            Expect.isTrue (html.Contains "the session service is unreachable") "the load error is shown"
+            Expect.isFalse (html.Contains sessionMsgs.Loading) "the loading text is not shown beside it")
+
         // No difference to judge: the Feliz page was a heading, two notices,
         // a list of rows and its buttons, and so is the tree.
         testCase "assertion 3: at parity with the Feliz page in every state" (fun () ->

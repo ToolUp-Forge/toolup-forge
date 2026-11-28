@@ -144,7 +144,10 @@ let tree (msgs: SessionSecurityMessages) (now: DateTimeOffset) (model: Model) : 
         Nodes.text "session-security-subheading" msgs.Subheading
         yield! notice "session-security-error" msgs model.Error DismissError
         yield! notice "session-security-status" msgs model.Status DismissStatus
-        if not model.Loaded then
+        // A first load that failed has nothing to wait for: its notice says so.
+        if not model.Loaded && model.Error.IsSome then
+            ()
+        elif not model.Loaded then
             Nodes.text "sessions-loading" msgs.Loading
         elif List.isEmpty model.Sessions then
             Nodes.text "sessions-none" msgs.EmptyState
