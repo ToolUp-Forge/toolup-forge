@@ -370,108 +370,41 @@ let private treeSurfaceTests =
                 |> ignore)
 
         testCase "every Platform Management state passes the Strict floor as a tree" (fun () ->
-            for name, harness in TreeViewParityTests.adminStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.adminTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            TreeViewParityTests.strictInEvery (TreeViewParityTests.adminStates ()) TreeViewParityTests.adminTree)
 
         testCase "every session-security state passes the Strict floor as a tree" (fun () ->
-            for name, harness in TreeViewParityTests.sessionStates () do
-                try
-                    harness.AssertAccessibleView(
-                        ViewMount.mount,
-                        TreeViewParityTests.sessionTree,
-                        Accessibility.Strict
-                    )
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            TreeViewParityTests.strictInEvery (TreeViewParityTests.sessionStates ()) TreeViewParityTests.sessionTree)
 
         testCase "every permissions-admin state passes the Strict floor as a tree" (fun () ->
-            for name, harness in TreeViewParityTests.permissionsStates () do
-                try
-                    harness.AssertAccessibleView(
-                        ViewMount.mount,
-                        TreeViewParityTests.permissionsTree,
-                        Accessibility.Strict
-                    )
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            TreeViewParityTests.strictInEvery
+                (TreeViewParityTests.permissionsStates ())
+                TreeViewParityTests.permissionsTree)
 
         testCase "every platform-users state passes the Strict floor as a tree" (fun () ->
-            for name, harness in TreeViewParityTests.usersStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.usersTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            TreeViewParityTests.strictInEvery (TreeViewParityTests.usersStates ()) TreeViewParityTests.usersTree)
 
         testCase "every audit-trail state passes the Strict floor as a tree" (fun () ->
-            for name, harness in TreeViewParityTests.auditStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.auditTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            TreeViewParityTests.strictInEvery (TreeViewParityTests.auditStates ()) TreeViewParityTests.auditTree)
 
         testCase "every data-subject-request state passes the Strict floor as a tree" (fun () ->
-            for name, harness in TreeViewParityTests.dsrStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.dsrTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            TreeViewParityTests.strictInEvery (TreeViewParityTests.dsrStates ()) TreeViewParityTests.dsrTree)
 
         testCase "every external-contact state passes the Strict floor as a tree" (fun () ->
-            for name, harness in TreeViewParityTests.contactsStates () do
-                try
-                    harness.AssertAccessibleView(
-                        ViewMount.mount,
-                        TreeViewParityTests.contactsTree,
-                        Accessibility.Strict
-                    )
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            TreeViewParityTests.strictInEvery (TreeViewParityTests.contactsStates ()) TreeViewParityTests.contactsTree)
 
         testCase "every health-monitor state passes the Strict floor as a tree" (fun () ->
-            for name, harness in TreeViewParityTests.healthStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.healthTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            TreeViewParityTests.strictInEvery (TreeViewParityTests.healthStates ()) TreeViewParityTests.healthTree)
 
         testCase "every background-jobs state passes the Strict floor as a tree" (fun () ->
-            for name, harness in TreeViewParityTests.jobsStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.jobsTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            TreeViewParityTests.strictInEvery (TreeViewParityTests.jobsStates ()) TreeViewParityTests.jobsTree)
 
         testCase "every service-status state passes the Strict floor as a tree" (fun () ->
-            for name, harness in TreeViewParityTests.statusStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.statusTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            TreeViewParityTests.strictInEvery (TreeViewParityTests.statusStates ()) TreeViewParityTests.statusTree)
 
         testCase "every data-migration state passes the Strict floor as a tree" (fun () ->
-            for name, harness in TreeViewParityTests.migrationStates () do
-                try
-                    harness.AssertAccessibleView(
-                        ViewMount.mount,
-                        TreeViewParityTests.migrationTree,
-                        Accessibility.Strict
-                    )
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            TreeViewParityTests.strictInEvery
+                (TreeViewParityTests.migrationStates ())
+                TreeViewParityTests.migrationTree)
 
         testCase "the palette's tree, its overlay an island, passes the Strict floor" (fun () ->
             let html = ViewMount.mount (Components.CommandPaletteTree.Surface paletteProps)

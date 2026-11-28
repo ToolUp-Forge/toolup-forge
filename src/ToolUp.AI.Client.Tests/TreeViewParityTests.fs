@@ -160,6 +160,15 @@ let private expectThrows (body: unit -> unit) (what: string) : string =
     | Some m -> m
     | None -> failwith (what + " — but it passed. An assertion that cannot fail proves nothing.")
 
+/// Every state's tree at the Strict floor, naming the state that fails.
+let strictInEvery states tree =
+    for name, (harness: ModuleHarness<_, _>) in states do
+        try
+            harness.AssertAccessibleView(ViewMount.mount, tree, Accessibility.Strict)
+            |> ignore
+        with e ->
+            failwithf "state \"%s\": %s" name e.Message
+
 // ─── The subject: the team manager, as Feliz and as a tree ───────────
 
 let private msgs = MessageCatalog.english.TeamManager
@@ -339,12 +348,7 @@ let private visibilityTests =
     testList "the module-visibility editor as a tree" [
 
         testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
-            for name, harness in visibilityStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, visibilityTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            strictInEvery (visibilityStates ()) visibilityTree)
 
         testCase "assertion 2: a checkbox and the kind reach update, asserted on the model" (fun () ->
             (visibilityLoaded ())
@@ -506,12 +510,7 @@ let private adminTests =
     testList "Platform Management as a tree" [
 
         testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
-            for name, harness in adminStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, adminTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            strictInEvery (adminStates ()) adminTree)
 
         testCase "assertion 2: a tab, a kept row's button and a field edit reach update" (fun () ->
             (adminInit ())
@@ -665,12 +664,7 @@ let private sessionTests =
     testList "session security as a tree" [
 
         testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
-            for name, harness in sessionStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, sessionTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            strictInEvery (sessionStates ()) sessionTree)
 
         testCase "assertion 2: a kept row's button and the confirmations reach update" (fun () ->
             (sessionsLoaded ())
@@ -795,12 +789,7 @@ let private permissionsTests =
     testList "the permissions admin as a tree" [
 
         testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
-            for name, harness in permissionsStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, permissionsTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            strictInEvery (permissionsStates ()) permissionsTree)
 
         testCase "assertion 2: a checkbox, a column toggle, a tab and a member reach update" (fun () ->
             (permissionsLoaded ())
@@ -955,12 +944,7 @@ let private usersTests =
     testList "platform users as a tree" [
 
         testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
-            for name, harness in usersStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, usersTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            strictInEvery (usersStates ()) usersTree)
 
         testCase "assertion 2: the filter, a kept row's button and the dialog reach update" (fun () ->
             (usersLoaded ())
@@ -1134,12 +1118,7 @@ let private auditTests =
     testList "the audit trail as a tree" [
 
         testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
-            for name, harness in auditStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, auditTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            strictInEvery (auditStates ()) auditTree)
 
         testCase "assertion 2: a kept row's toggle, the filters and the actor reach update" (fun () ->
             (auditLoaded ())
@@ -1327,12 +1306,7 @@ let private dsrTests =
     testList "data subject requests as a tree" [
 
         testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
-            for name, harness in dsrStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, dsrTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            strictInEvery (dsrStates ()) dsrTree)
 
         testCase "assertion 2: the tabs, the fields, a policy and the preview reach update" (fun () ->
             (dsrInit ())
@@ -1503,12 +1477,7 @@ let private contactsTests =
     testList "external contacts as a tree" [
 
         testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
-            for name, harness in contactsStates () do
-                try
-                    harness.AssertAccessibleView(ViewMount.mount, contactsTree, Accessibility.Strict)
-                    |> ignore
-                with e ->
-                    failwithf "state \"%s\": %s" name e.Message)
+            strictInEvery (contactsStates ()) contactsTree)
 
         testCase "assertion 2: a kept row's button, the form and the consent controls reach update" (fun () ->
             (contactsLoaded ())
@@ -1811,15 +1780,6 @@ let private atParity
             (buttonsOf skip (outline tree))
             (buttonsOf skip (outline feliz))
             (sprintf "state \"%s\": the buttons, in tab order" name)
-
-/// Every state's tree at the Strict floor.
-let private strictInEvery states tree =
-    for name, (harness: ModuleHarness<_, _>) in states do
-        try
-            harness.AssertAccessibleView(ViewMount.mount, tree, Accessibility.Strict)
-            |> ignore
-        with e ->
-            failwithf "state \"%s\": %s" name e.Message
 
 let private tabOrderOnly (difference: TreeViewParity.Difference) =
     match difference with
@@ -2129,15 +2089,6 @@ let statusStates () = [
         )
     "the board read failed",
     (statusInit ()).Dispatch(ServiceStatusBoardUI.SnapshotLoaded(Error "the board is unreachable"))
-]
-
-let private statusSections = [
-    ServiceStatusSnapshot.HealthSection
-    ServiceStatusSnapshot.PreflightSection
-    ServiceStatusSnapshot.DriftSection
-    ServiceStatusSnapshot.RateLimitSection
-    ServiceStatusSnapshot.JobQueueSection
-    ServiceStatusSnapshot.SmokeTestSection
 ]
 
 let private statusTests =
@@ -2694,7 +2645,7 @@ let private constructedTests =
                     ))
                         .Model
 
-            for name in statusSections do
+            for name in ServiceStatusBoardUI.sections do
                 let id = "status-section-" + name
 
                 let kept =

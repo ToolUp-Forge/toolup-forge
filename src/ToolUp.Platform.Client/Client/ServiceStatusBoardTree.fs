@@ -128,15 +128,8 @@ let private panel (context: PanelContext) : Node<Msg> =
 
 /// One kept panel per section, in the board's order.
 let private panels: (string * One<PanelContext, Msg>) list = [
-    for section in
-        [
-            ServiceStatusSnapshot.HealthSection
-            ServiceStatusSnapshot.PreflightSection
-            ServiceStatusSnapshot.DriftSection
-            ServiceStatusSnapshot.RateLimitSection
-            ServiceStatusSnapshot.JobQueueSection
-            ServiceStatusSnapshot.SmokeTestSection
-        ] -> section, One(samePanel, panel)
+    for section in sections do
+        section, One(samePanel, panel)
 ]
 
 // ─── The page ────────────────────────────────────────────────────────

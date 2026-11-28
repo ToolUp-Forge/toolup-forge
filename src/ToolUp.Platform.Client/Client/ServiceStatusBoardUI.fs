@@ -13,14 +13,10 @@ open ToolUp.Platform
 // Single-page admin module that aggregates every operator-facing
 // observability surface (Health, Preflight, Drift, RateLimit, JobQueue,
 // SmokeTest) into one composite snapshot. Mirrors `HealthMonitorUI`'s
-// patterns (proxy built per call, status pill renderer, refresh button)
-// but renders six collapsible per-section panels under one top-line
+// patterns (proxy built per call, a status per section, refresh buttons)
+// and draws six collapsible per-section panels under one top-line
 // `OverallStatus` pill.
 
-/// Set of section names whose status flipped between the prior and
-/// most-recent snapshot — surfaced via Tailwind `animate-pulse` for
-/// ~1.5s so operators spot freshly-changed sections without re-reading
-/// every panel. Cleared on the next refresh.
 type Model = {
     Snapshot: Remote<ServiceStatusSnapshot, string>
     /// Sections the user has collapsed. Default empty (all expanded);
@@ -29,6 +25,10 @@ type Model = {
     /// Per-section in-flight refresh tracker — used to disable the
     /// per-section refresh button while its targeted call is pending.
     Refreshing: Set<string>
+    /// Sections whose status flipped between the prior and the most recent
+    /// snapshot: their status fades in, so an operator spots a freshly
+    /// changed section without re-reading every panel. Cleared on the next
+    /// refresh.
     RecentlyFlipped: Set<string>
     /// This module's section of `ClientModuleContext.Messages`,
     /// kept from `init` so `update` authors reader-facing text in the
@@ -122,9 +122,18 @@ let private updateSection
     | s when s = ServiceStatusSnapshot.SmokeTestSection -> { snap with SmokeTest = summary }
     | _ -> snap
 
+/// The six sections, in the board's order.
+let internal sections = [
+    ServiceStatusSnapshot.HealthSection
+    ServiceStatusSnapshot.PreflightSection
+    ServiceStatusSnapshot.DriftSection
+    ServiceStatusSnapshot.RateLimitSection
+    ServiceStatusSnapshot.JobQueueSection
+    ServiceStatusSnapshot.SmokeTestSection
+]
+
 /// Compute the set of section names whose severity / disabled state
-/// flipped between the prior and new snapshot. Used to drive the
-/// pulse-highlight on freshly-changed panels.
+/// flipped between the prior and new snapshot: their status fades in.
 let private flippedSections
     (msgs: ServiceStatusBoardMessages)
     (prev: ServiceStatusSnapshot option)
@@ -133,16 +142,7 @@ let private flippedSections
     match prev with
     | None -> Set.empty
     | Some p ->
-        let allNames = [
-            ServiceStatusSnapshot.HealthSection
-            ServiceStatusSnapshot.PreflightSection
-            ServiceStatusSnapshot.DriftSection
-            ServiceStatusSnapshot.RateLimitSection
-            ServiceStatusSnapshot.JobQueueSection
-            ServiceStatusSnapshot.SmokeTestSection
-        ]
-
-        allNames
+        sections
         |> List.choose (fun name ->
             let prevSec = sectionOf msgs p name
             let nextSec = sectionOf msgs next name

@@ -41,10 +41,9 @@ type Model = {
     /// "nothing is being refused" reading and worth showing.
     AIDenials: Remote<AIDenialRollup option, string>
     /// Names of probes whose status changed between the prior and
-    /// most recent live snapshot — surfaced via Tailwind
-    /// `animate-pulse` for ~1.5s so an admin spotting a freshly-flipped
-    /// probe doesn't have to re-read the whole table. Cleared on the
-    /// next refresh.
+    /// most recent live snapshot: their status fades in, so an admin
+    /// spotting a freshly-flipped probe doesn't have to re-read the whole
+    /// table. Cleared on the next refresh.
     RecentlyFlipped: Set<string>
 }
 
