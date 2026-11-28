@@ -1618,6 +1618,690 @@ let private contactsTests =
             Expect.isEmpty unjudged (String.concat "\n" unjudged))
     ]
 
+// ─── The subject: the health monitor ─────────────────────────────────
+
+let private healthMsgs = MessageCatalog.english.HealthMonitor
+
+let private healthFeliz (model: HealthMonitorUI.Model) (dispatch: HealthMonitorUI.Msg -> unit) : Feliz.ReactElement =
+    FelizReferenceViews.HealthMonitor.body healthMsgs model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let healthTree (model: HealthMonitorUI.Model) (dispatch: HealthMonitorUI.Msg -> unit) : Feliz.ReactElement =
+    lowerTree dispatch (HealthMonitorTree.tree healthMsgs model)
+
+let private healthAt =
+    System.DateTime(2026, 11, 1, 12, 0, 0, System.DateTimeKind.Utc)
+
+let private probe (name: string) (status: string) : HealthProbeView = {
+    Name = name
+    Kind = "Readiness"
+    TimeoutMs = 5000
+    Status = status
+    Message = (if status = "Healthy" then "" else "slow to answer")
+    ElapsedMs = 3L
+}
+
+let private snapshotOf (probes: HealthProbeView list) : HealthSnapshot = {
+    GeneratedAt = healthAt
+    Probes = probes
+}
+
+let private telemetry (missed: int) : JobSchedulerTelemetryView = {
+    HasScheduler = true
+    TickMissedCount60Min = missed
+    LastDriftMs = (if missed > 0 then Some 1840L else None)
+    LastTickMissedAt = (if missed > 0 then Some healthAt else None)
+    GeneratedAt = healthAt
+}
+
+let private degraded: DegradedCapability = {
+    Capability = "crypto-shred-cache-eviction"
+    DegradedSince = System.DateTimeOffset(healthAt)
+    Reason = "the eviction channel refused the connection"
+    Impact = "a shredded key may stay readable in another silo's cache"
+    Remediation = "check the channel's address and restart"
+}
+
+let private rollup (inWindow: int) : AIDenialRollup = {
+    GeneratedAt = healthAt
+    ScopeId = "helloworld"
+    WindowMinutes = 60
+    TotalDenialsAllTime = 7
+    TotalDenialsInWindow = inWindow
+    DenialsPerMinute = float inWindow / 60.0
+    ByToolName = [
+        {
+            Key = "delete_team"
+            Count = inWindow
+        }
+    ]
+    ByActiveModule = [
+        {
+            Key = "_sdk.TeamManager"
+            Count = inWindow
+        }
+    ]
+    ByScopeId = [ { Key = "helloworld"; Count = inWindow } ]
+    TopToolModulePairs = []
+    RecentDenials = [
+        {
+            ToolName = "delete_team"
+            ActiveModule = "_sdk.TeamManager"
+            Reason = "not on the allowlist"
+            OccurredAt = healthAt
+        }
+    ]
+}
+
+let healthInit () =
+    fromUnitInit HealthMonitorUI.init HealthMonitorUI.update
+
+let private outcome (name: string) (status: string) (message: string) : PreflightOutcomeView = {
+    Name = name
+    Status = status
+    Message = message
+    ElapsedMs = 9L
+}
+
+/// Both tabs read: two probes, three validators, no scheduler registered,
+/// nothing degraded and no AI companion.
+let healthLoaded () =
+    (healthInit ())
+        .Dispatch(
+            HealthMonitorUI.LiveLoaded(
+                Ok(snapshotOf [ probe "blob_storage" "Healthy"; probe "event_store" "Degraded" ])
+            )
+        )
+        .Dispatch(
+            HealthMonitorUI.SchedulerTelemetryLoaded(
+                Ok {
+                    telemetry 0 with
+                        HasScheduler = false
+                }
+            )
+        )
+        .Dispatch(HealthMonitorUI.DegradedLoaded(Ok []))
+        .Dispatch(HealthMonitorUI.AIDenialsLoaded(Ok None))
+        .Dispatch(
+            HealthMonitorUI.PreflightLoaded(
+                Ok {
+                    HasSnapshot = true
+                    Outcomes = [
+                        outcome "blob-storage" "Ok" ""
+                        outcome "invite-email-capability" "Warning" "no directory companion"
+                        outcome "secret-store" "Error" "unreachable"
+                    ]
+                }
+            )
+        )
+
+/// The states the health monitor is held to, each reached through `update`.
+let healthStates () = [
+    "loading", healthInit ()
+    "live health read", healthLoaded ()
+    "a capability degraded, denials in the window, a missed tick",
+    (healthLoaded ())
+        .Dispatch(HealthMonitorUI.DegradedLoaded(Ok [ degraded ]))
+        .Dispatch(HealthMonitorUI.AIDenialsLoaded(Ok(Some(rollup 3))))
+        .Dispatch(HealthMonitorUI.SchedulerTelemetryLoaded(Ok(telemetry 2)))
+    "a scheduler, no tick missed", (healthLoaded ()).Dispatch(HealthMonitorUI.SchedulerTelemetryLoaded(Ok(telemetry 0)))
+    "denials recorded, the window quiet",
+    (healthLoaded ()).Dispatch(HealthMonitorUI.AIDenialsLoaded(Ok(Some(rollup 0))))
+    "a probe's status changed",
+    (healthLoaded ())
+        .Dispatch(
+            HealthMonitorUI.LiveLoaded(Ok(snapshotOf [ probe "blob_storage" "Healthy"; probe "event_store" "Healthy" ]))
+        )
+    "no probes registered", (healthInit ()).Dispatch(HealthMonitorUI.LiveLoaded(Ok(snapshotOf [])))
+    "the live read failed", (healthInit ()).Dispatch(HealthMonitorUI.LiveLoaded(Error "the probe sweep is unreachable"))
+    "the preflight tab", (healthLoaded ()).Dispatch(HealthMonitorUI.SwitchTab HealthMonitorUI.PreflightTab)
+    "no preflight snapshot",
+    (healthInit ())
+        .Dispatch(HealthMonitorUI.PreflightLoaded(Ok { HasSnapshot = false; Outcomes = [] }))
+        .Dispatch(HealthMonitorUI.SwitchTab HealthMonitorUI.PreflightTab)
+    "the preflight read failed",
+    (healthInit ())
+        .Dispatch(HealthMonitorUI.PreflightLoaded(Error "the snapshot is unreachable"))
+        .Dispatch(HealthMonitorUI.SwitchTab HealthMonitorUI.PreflightTab)
+]
+
+/// Parity over `states`: no difference but the `judged` ones, and the same
+/// buttons in the same tab order, but for those `skip` leaves out. A state
+/// named in `felizThrows` is one the Feliz page could not draw: it is held to
+/// throwing there (a custom date format Fable does not print), and the tree,
+/// which formats the instant from its components, is held to the floor and to
+/// behaviour in it instead.
+let private atParity
+    states
+    feliz
+    tree
+    (felizThrows: string list)
+    (judged: TreeViewParity.Difference -> bool)
+    (skip: string option -> bool)
+    =
+    let compared =
+        states |> List.filter (fun (name, _) -> not (List.contains name felizThrows))
+
+    for name, (harness: ModuleHarness<_, _>) in states do
+        if List.contains name felizThrows then
+            let message =
+                expectThrows
+                    (fun () -> harness.RenderViewHtml(ViewMount.mount, feliz) |> ignore)
+                    (sprintf "state \"%s\": the Feliz page was expected to throw" name)
+
+            Expect.isTrue (message.Contains "Date print format") (sprintf "state \"%s\": why the Feliz page threw" name)
+
+    let unjudged = [
+        for name, (harness: ModuleHarness<_, _>) in compared do
+            let found =
+                harness.CheckViewParity(ViewMount.mount, feliz, tree)
+                |> List.filter (judged >> not)
+
+            if not found.IsEmpty then
+                sprintf "state \"%s\": %s" name (TreeViewParity.report found)
+    ]
+
+    Expect.isEmpty unjudged (String.concat "\n" unjudged)
+
+    for name, (harness: ModuleHarness<_, _>) in compared do
+        let outline view =
+            harness.RenderViewHtml(ViewMount.mount, view) |> TreeViewParity.ofHtml
+
+        Expect.equal
+            (buttonsOf skip (outline tree))
+            (buttonsOf skip (outline feliz))
+            (sprintf "state \"%s\": the buttons, in tab order" name)
+
+/// Every state's tree at the Strict floor.
+let private strictInEvery states tree =
+    for name, (harness: ModuleHarness<_, _>) in states do
+        try
+            harness.AssertAccessibleView(ViewMount.mount, tree, Accessibility.Strict)
+            |> ignore
+        with e ->
+            failwithf "state \"%s\": %s" name e.Message
+
+let private tabOrderOnly (difference: TreeViewParity.Difference) =
+    match difference with
+    | TreeViewParity.TabOrderDiffers _ -> true
+    | _ -> false
+
+let private healthTests =
+    testList "the health monitor as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            strictInEvery (healthStates ()) healthTree)
+
+        testCase "assertion 2: the refreshes and the tabs reach update" (fun () ->
+            (healthLoaded ())
+                .Interact(ViewMount.mountAndInteract, healthTree, Drive.click healthMsgs.Refresh)
+                .AssertModelWith("Refresh reads the live tab again", fun m -> Remote.isLoading m.Live)
+            |> ignore
+
+            (healthLoaded ())
+                .Interact(ViewMount.mountAndInteract, healthTree, Drive.click healthMsgs.PreflightTab)
+                .AssertModelWith("the preflight tab opens", fun m -> m.ActiveTab = HealthMonitorUI.PreflightTab)
+            |> ignore
+
+            (healthLoaded ())
+                .Dispatch(HealthMonitorUI.SwitchTab HealthMonitorUI.PreflightTab)
+                .Interact(ViewMount.mountAndInteract, healthTree, Drive.click healthMsgs.Refetch)
+                .AssertModelWith("Re-fetch reads the preflight snapshot again", fun m -> Remote.isLoading m.Preflight)
+            |> ignore)
+
+        // One difference, judged, and nothing else: the tabs are one tab stop
+        // with the active tab's panel after it. The buttons and their order
+        // match. The two states with a scheduler are not compared: the Feliz
+        // page threw drawing its scheduler card ("u" is not a date format
+        // Fable prints), which the tree draws from the instant's components.
+        testCase "assertion 3: parity with the Feliz page, but for the judged differences" (fun () ->
+            atParity
+                (healthStates ())
+                healthFeliz
+                healthTree
+                [
+                    "a capability degraded, denials in the window, a missed tick"
+                    "a scheduler, no tick missed"
+                ]
+                tabOrderOnly
+                (fun _ -> false))
+    ]
+
+// ─── The subject: background jobs ────────────────────────────────────
+
+let private jobsMsgs = MessageCatalog.english.JobsAdmin
+
+let private jobsFeliz (model: JobsAdminUI.Model) (dispatch: JobsAdminUI.Msg -> unit) : Feliz.ReactElement =
+    FelizReferenceViews.JobsAdmin.body jobsMsgs model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let jobsTree (model: JobsAdminUI.Model) (dispatch: JobsAdminUI.Msg -> unit) : Feliz.ReactElement =
+    lowerTree dispatch (JobsAdminTree.tree jobsMsgs model)
+
+let private jobsAt = System.DateTime(2026, 11, 1, 6, 0, 0, System.DateTimeKind.Utc)
+
+let jobDefinition (n: int) (handler: string) : JobDefinition = {
+    JobId = System.Guid(sprintf "00000000-0000-0000-0000-%012d" n)
+    ScopeId = "helloworld"
+    Handler = handler
+    Payload = "{}"
+    Trigger = CronTrigger "0 6 * * *"
+    Idempotency = None
+    RetryPolicy = JobRetryPolicy.defaults
+    ShardKey = None
+    Precision = JobPrecision.Minute
+    Status = JobStatus.Active
+    CreatedAt = jobsAt.AddDays -10.0
+    CreatedBy = "dev-admin"
+    NextRunAt = Some(jobsAt.AddDays 1.0)
+    LastRunAt = None
+    LastRunStatus = None
+    LastRunError = None
+    ConsecutiveFailures = 0
+    Tags = Map.empty
+    LastRunWarning = None
+}
+
+/// A job that failed for good, one that succeeded with a warning, and a
+/// disabled one that never ran.
+let private jobsList () = [
+    {
+        jobDefinition 1 "daily-narrative" with
+            LastRunAt = Some jobsAt
+            LastRunStatus = Some JobRunStatus.DeadLettered
+            LastRunError = Some "no usable AI provider"
+    }
+    {
+        jobDefinition 2 "nightly-rollup" with
+            LastRunAt = Some jobsAt
+            LastRunStatus = Some JobRunStatus.Succeeded
+            LastRunWarning = Some "two rows skipped"
+    }
+    {
+        jobDefinition 3 "weekly-digest" with
+            Status = JobStatus.Disabled
+    }
+]
+
+let private attempt (job: JobDefinition) (n: int) (status: JobRunStatus) : JobRun = {
+    RunId = System.Guid(sprintf "00000000-0000-0000-0001-%012d" n)
+    JobId = job.JobId
+    ScopeId = job.ScopeId
+    Attempt = n
+    StartedAt = jobsAt.AddMinutes(float -n)
+    CompletedAt = Some(jobsAt.AddMinutes(float -n).AddSeconds 2.0)
+    Status = status
+    Error =
+        (if status = JobRunStatus.Succeeded then
+             None
+         else
+             Some "provider refused")
+    DurationMs = Some 2000L
+    ExternalHandle = None
+    Warning = None
+}
+
+let jobsInit () =
+    fromUnitInit JobsAdminUI.init JobsAdminUI.update
+
+/// Three jobs and each one's attempts read.
+let jobsLoaded () =
+    let jobs = jobsList ()
+
+    jobs
+    |> List.fold
+        (fun (harness: ModuleHarness<JobsAdminUI.Model, JobsAdminUI.Msg>) job ->
+            harness.Dispatch(
+                JobsAdminUI.AttemptsLoaded(
+                    job.JobId,
+                    Ok [
+                        attempt job 1 (job.LastRunStatus |> Option.defaultValue JobRunStatus.Succeeded)
+                    ]
+                )
+            ))
+        ((jobsInit ()).Dispatch(JobsAdminUI.JobsLoaded(Ok jobs)))
+
+let private firstJobId = (jobDefinition 1 "daily-narrative").JobId
+
+let private confirmed () =
+    (jobsLoaded ()).Dispatch(JobsAdminUI.RerunRequested firstJobId).Dispatch(JobsAdminUI.RerunConfirmed firstJobId)
+
+/// The states the jobs admin is held to, each reached through `update`.
+let jobsStates () = [
+    "loading", jobsInit ()
+    "no jobs", (jobsInit ()).Dispatch(JobsAdminUI.JobsLoaded(Ok []))
+    "three jobs read", jobsLoaded ()
+    "a job's attempts open, read",
+    (jobsLoaded ())
+        .Dispatch(JobsAdminUI.ToggleAttempts firstJobId)
+        .Dispatch(
+            JobsAdminUI.AttemptsLoaded(
+                firstJobId,
+                Ok [
+                    attempt (List.head (jobsList ())) 1 JobRunStatus.DeadLettered
+                    attempt (List.head (jobsList ())) 2 JobRunStatus.Failed
+                ]
+            )
+        )
+    "a job's attempts open, in flight", (jobsLoaded ()).Dispatch(JobsAdminUI.ToggleAttempts firstJobId)
+    "a re-run awaiting confirmation", (jobsLoaded ()).Dispatch(JobsAdminUI.RerunRequested firstJobId)
+    "a re-run in flight", confirmed ()
+    "a re-run refused", (confirmed ()).Dispatch(JobsAdminUI.RerunAccepted(firstJobId, Error "the job is locked"))
+    "a poll failed",
+    (confirmed ())
+        .Dispatch(JobsAdminUI.RerunAccepted(firstJobId, Ok()))
+        .Dispatch(JobsAdminUI.JobPolled(firstJobId, Error "the scheduler is unreachable"))
+    "the list read failed", (jobsInit ()).Dispatch(JobsAdminUI.JobsLoaded(Error "the job store is unreachable"))
+]
+
+let private jobsTests =
+    testList "the background-jobs admin as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            strictInEvery (jobsStates ()) jobsTree)
+
+        testCase "assertion 2: a kept row's toggle and re-run, and the confirmation, reach update" (fun () ->
+            (jobsLoaded ())
+                .Interact(ViewMount.mountAndInteract, jobsTree, Drive.click jobsMsgs.ShowAttempts)
+                .AssertModelWith(
+                    "the first row's toggle opens its attempts",
+                    fun m -> m.Expanded = Set.singleton firstJobId
+                )
+            |> ignore
+
+            (jobsLoaded ())
+                .Interact(ViewMount.mountAndInteract, jobsTree, Drive.click jobsMsgs.RerunButton)
+                .AssertModelWith("Re-run asks for confirmation", fun m -> m.Confirming = Some firstJobId)
+            |> ignore
+
+            (jobsLoaded ())
+                .Dispatch(JobsAdminUI.RerunRequested firstJobId)
+                .Interact(ViewMount.mountAndInteract, jobsTree, Drive.click jobsMsgs.RerunConfirm)
+                .AssertModelWith(
+                    "confirming starts the re-run",
+                    fun m -> m.Reruns.TryFind firstJobId = Some JobsAdminUI.RerunProgress.Starting
+                )
+            |> ignore
+
+            (jobsLoaded ())
+                .Dispatch(JobsAdminUI.RerunRequested firstJobId)
+                .Interact(ViewMount.mountAndInteract, jobsTree, Drive.click jobsMsgs.RerunCancel)
+                .AssertModelWith("Cancel closes the confirmation", fun m -> m.Confirming.IsNone)
+            |> ignore
+
+            (jobsLoaded ())
+                .Interact(ViewMount.mountAndInteract, jobsTree, Drive.click jobsMsgs.Refresh)
+                .AssertModelWith("Refresh reads the list again", fun m -> Remote.isLoading m.Jobs)
+            |> ignore)
+
+        // Judged, and nothing else: the confirmation is the renderer's modal, a
+        // dialog with a close control and its heading at level 2, where the
+        // Feliz confirmation was a dialog headed at level 3; the tab order
+        // differs by that close control alone. The other buttons and their
+        // order match.
+        testCase "assertion 3: parity with the Feliz page, but for the judged differences" (fun () ->
+            let judged (difference: TreeViewParity.Difference) =
+                match difference with
+                | TreeViewParity.TabOrderDiffers _ -> true
+                | TreeViewParity.MissingFromTree s
+                | TreeViewParity.ExtraInTree s ->
+                    s.Role = "dialog"
+                    || (s.Role.StartsWith "heading" && s.Name = Some jobsMsgs.RerunButton)
+                    || (s.Role = "button" && s.Name = Some "Close")
+
+            atParity (jobsStates ()) jobsFeliz jobsTree [] judged ((=) (Some "Close")))
+    ]
+
+// ─── The subject: the service status board ───────────────────────────
+
+let private statusMsgs = MessageCatalog.english.ServiceStatusBoard
+
+let private statusFeliz
+    (model: ServiceStatusBoardUI.Model)
+    (dispatch: ServiceStatusBoardUI.Msg -> unit)
+    : Feliz.ReactElement =
+    FelizReferenceViews.ServiceStatusBoard.body statusMsgs model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let statusTree (model: ServiceStatusBoardUI.Model) (dispatch: ServiceStatusBoardUI.Msg -> unit) : Feliz.ReactElement =
+    lowerTree dispatch (ServiceStatusBoardTree.tree statusMsgs model)
+
+let private section (severity: StatusSeverity) (headline: string) (details: string list) : SectionSummary = {
+    Disabled = false
+    DisabledReason = ""
+    Severity = severity
+    Headline = headline
+    Details = details
+}
+
+let private statusSnapshot () : ServiceStatusSnapshot =
+    let health = section StatusSeverity.Ok "4 of 4 probes healthy" []
+
+    let preflight =
+        section StatusSeverity.Warn "56 of 60 validators ok" [ "Warning: invite-email-capability" ]
+
+    let drift = section StatusSeverity.Ok "no drift" []
+
+    let rateLimit = {
+        section StatusSeverity.Ok "" [] with
+            Disabled = true
+            DisabledReason = "no rate limiter composed"
+    }
+
+    let jobQueue = section StatusSeverity.Ok "no job waiting" []
+
+    let smoke =
+        section StatusSeverity.Error "1 of 3 smoke tests failed" [ "login: timed out" ]
+
+    {
+        GeneratedAt = System.DateTime(2026, 11, 1, 12, 0, 0, System.DateTimeKind.Utc)
+        Overall = ServiceStatusSnapshot.computeOverall health preflight drift rateLimit jobQueue smoke
+        Health = health
+        Preflight = preflight
+        Drift = drift
+        RateLimit = rateLimit
+        JobQueue = jobQueue
+        SmokeTest = smoke
+    }
+
+let statusInit () =
+    fromUnitInit (fun () -> ServiceStatusBoardUI.init ClientModuleContext.empty) ServiceStatusBoardUI.update
+
+let statusLoaded () =
+    (statusInit ()).Dispatch(ServiceStatusBoardUI.SnapshotLoaded(Ok(statusSnapshot ())))
+
+/// The states the status board is held to, each reached through `update`.
+let statusStates () = [
+    "loading", statusInit ()
+    "the board read", statusLoaded ()
+    "a section collapsed",
+    (statusLoaded ()).Dispatch(ServiceStatusBoardUI.ToggleCollapsed ServiceStatusSnapshot.PreflightSection)
+    "a section refreshing",
+    (statusLoaded ()).Dispatch(ServiceStatusBoardUI.RefreshSection ServiceStatusSnapshot.HealthSection)
+    "a section's severity changed",
+    (statusLoaded ())
+        .Dispatch(ServiceStatusBoardUI.RefreshSection ServiceStatusSnapshot.HealthSection)
+        .Dispatch(
+            ServiceStatusBoardUI.SectionLoaded(
+                ServiceStatusSnapshot.HealthSection,
+                Ok(section StatusSeverity.Error "1 of 4 probes unhealthy" [ "event_store: unhealthy" ])
+            )
+        )
+    "the board read failed",
+    (statusInit ()).Dispatch(ServiceStatusBoardUI.SnapshotLoaded(Error "the board is unreachable"))
+]
+
+let private statusSections = [
+    ServiceStatusSnapshot.HealthSection
+    ServiceStatusSnapshot.PreflightSection
+    ServiceStatusSnapshot.DriftSection
+    ServiceStatusSnapshot.RateLimitSection
+    ServiceStatusSnapshot.JobQueueSection
+    ServiceStatusSnapshot.SmokeTestSection
+]
+
+let private statusTests =
+    testList "the service status board as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            strictInEvery (statusStates ()) statusTree)
+
+        testCase "assertion 2: a section's toggle and refresh, and Refresh all, reach update" (fun () ->
+            (statusLoaded ())
+                .Interact(ViewMount.mountAndInteract, statusTree, Drive.click ServiceStatusSnapshot.HealthSection)
+                .AssertModelWith(
+                    "the section's toggle collapses it",
+                    fun m -> m.Collapsed = Set.singleton ServiceStatusSnapshot.HealthSection
+                )
+            |> ignore
+
+            (statusLoaded ())
+                .Interact(ViewMount.mountAndInteract, statusTree, Drive.click statusMsgs.Refresh)
+                .AssertModelWith(
+                    "the first section's refresh re-reads that section",
+                    fun m -> m.Refreshing = Set.singleton ServiceStatusSnapshot.HealthSection
+                )
+            |> ignore
+
+            (statusLoaded ())
+                .Interact(ViewMount.mountAndInteract, statusTree, Drive.click statusMsgs.RefreshAll)
+                .AssertModelWith("Refresh all reads the board again", fun m -> Remote.isLoading m.Snapshot)
+            |> ignore)
+
+        // Nothing judged but the tab order. Only the board's loading and failed
+        // states are compared: the Feliz page threw drawing a read board's
+        // generated instant ("u" is not a date format Fable prints), so it never
+        // drew a section; the tree, which formats the instant from its
+        // components, is held to the floor and to behaviour in every read state.
+        testCase "assertion 3: parity with the Feliz page, but for the judged differences" (fun () ->
+            atParity
+                (statusStates ())
+                statusFeliz
+                statusTree
+                [
+                    "the board read"
+                    "a section collapsed"
+                    "a section refreshing"
+                    "a section's severity changed"
+                ]
+                tabOrderOnly
+                (fun _ -> false))
+    ]
+
+// ─── The subject: data migrations ────────────────────────────────────
+
+let private migrationMsgs = MessageCatalog.english.MigrationStatus
+
+let private migrationFeliz
+    (model: MigrationStatusUI.Model)
+    (dispatch: MigrationStatusUI.Msg -> unit)
+    : Feliz.ReactElement =
+    FelizReferenceViews.MigrationStatus.body migrationMsgs model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let migrationTree (model: MigrationStatusUI.Model) (dispatch: MigrationStatusUI.Msg -> unit) : Feliz.ReactElement =
+    lowerTree dispatch (MigrationStatusTree.tree migrationMsgs model)
+
+let private dataType (id: string) (version: int) (problem: string option) : MigrationDataTypeInfo = {
+    DataTypeId = id
+    DisplayName = id + " data"
+    CurrentVersion = version
+    ChainProblem = problem
+}
+
+let migrationStatus (id: string) (state: MigrationRunState) (failed: int) : MigrationStatus = {
+    TeamId = "helloworld"
+    DataTypeId = id
+    TargetVersion = 3
+    TotalObjects = 120
+    MigratedObjects = 47
+    AlreadyCurrentObjects = 10
+    FailedObjects = failed
+    State = state
+    StartedAt = None
+    CompletedAt = None
+    Failures = [
+        for i in 1..failed ->
+            {
+                ObjectId = sprintf "obj-%d" i
+                AtVersion = 2
+                Error = "a field the migrator did not expect"
+                OccurredAt = System.DateTime(2026, 11, 1, 12, 0, 0, System.DateTimeKind.Utc)
+            }
+    ]
+}
+
+let migrationInit () =
+    fromUnitInit MigrationStatusUI.init MigrationStatusUI.update
+
+/// Three data types: one never migrated, one with failures, one whose chain
+/// is incomplete.
+let migrationLoaded () =
+    (migrationInit ())
+        .Dispatch(
+            MigrationStatusUI.DataTypesLoaded(
+                Ok [
+                    dataType "media" 3 None
+                    dataType "forecast" 3 None
+                    dataType "survey" 4 (Some "no migrator from V2 to V3")
+                ]
+            )
+        )
+        .Dispatch(MigrationStatusUI.StatusesLoaded [ migrationStatus "forecast" MigrationCompleteWithFailures 2 ])
+
+/// The states the data-migration admin is held to, each reached through `update`.
+let migrationStates () = [
+    "loading", migrationInit ()
+    "no data types", (migrationInit ()).Dispatch(MigrationStatusUI.DataTypesLoaded(Ok []))
+    "three data types read", migrationLoaded ()
+    "a type's failures open", (migrationLoaded ()).Dispatch(MigrationStatusUI.ToggleFailures "forecast")
+    "a migration in flight", (migrationLoaded ()).Dispatch(MigrationStatusUI.TriggerClicked "media")
+    "a migration under way",
+    (migrationLoaded ())
+        .Dispatch(MigrationStatusUI.TriggerClicked "media")
+        .Dispatch(MigrationStatusUI.TriggerComplete("media", Ok(migrationStatus "media" MigrationInProgress 0)))
+    "a migration refused",
+    (migrationLoaded ())
+        .Dispatch(MigrationStatusUI.TriggerClicked "media")
+        .Dispatch(MigrationStatusUI.TriggerComplete("media", Error "migrations require a persistent scope"))
+    "the read failed",
+    (migrationInit ()).Dispatch(MigrationStatusUI.DataTypesLoaded(Error "the registry is unreachable"))
+]
+
+let private migrationTests =
+    testList "the data-migration admin as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            strictInEvery (migrationStates ()) migrationTree)
+
+        testCase "assertion 2: a kept row's trigger and failures toggle, and the notice, reach update" (fun () ->
+            (migrationLoaded ())
+                .Interact(ViewMount.mountAndInteract, migrationTree, Drive.click migrationMsgs.MigrateNow)
+                .AssertModelWith(
+                    "Migrate now starts the first type's pass",
+                    fun m -> m.Triggering = Set.singleton "media"
+                )
+            |> ignore
+
+            (migrationLoaded ())
+                .Interact(ViewMount.mountAndInteract, migrationTree, Drive.click (migrationMsgs.FailuresButton 2))
+                .AssertModelWith(
+                    "the failures toggle opens that type's log",
+                    fun m -> m.ExpandedFailures = Some "forecast"
+                )
+            |> ignore
+
+            (migrationLoaded ())
+                .Dispatch(MigrationStatusUI.TriggerClicked "media")
+                .Dispatch(MigrationStatusUI.TriggerComplete("media", Error "refused"))
+                .Interact(ViewMount.mountAndInteract, migrationTree, Drive.click migrationMsgs.Dismiss)
+                .AssertModelWith("Dismiss clears the notice", fun m -> m.LastError.IsNone)
+            |> ignore)
+
+        testCase "assertion 3: parity with the Feliz page, but for the judged differences" (fun () ->
+            atParity (migrationStates ()) migrationFeliz migrationTree [] tabOrderOnly (fun _ -> false))
+    ]
+
 // ─── What a dispatch constructs ──────────────────────────────────────
 
 /// Of the nodes of `after`, how many are new objects, built for this dispatch,
@@ -1666,6 +2350,13 @@ let private rowsOf (prefix: string) (root: Node<'Msg>) : int =
         own + (Fuaran.UI.Generated.children node |> List.sumBy count)
 
     count root
+
+/// The node of `root` whose id is `id`.
+let rec private findNode (id: string) (node: Node<'Msg>) : Node<'Msg> option =
+    if node.Id = id then
+        Some node
+    else
+        Fuaran.UI.Generated.children node |> List.tryPick (findNode id)
 
 let private manyTeams (count: int) : TeamInfo list =
     List.init count (fun i -> team (sprintf "t%03d" i) (sprintf "Team %03d" i))
@@ -1950,6 +2641,98 @@ let private constructedTests =
                 | _ -> false
 
             Expect.isTrue kept "the preview panel is served again")
+
+        testCase "the health monitor: the degraded set arriving serves every probe row again" (fun () ->
+            let tree m = HealthMonitorTree.tree healthMsgs m
+            let harness = healthLoaded ()
+            let before = tree harness.Model
+
+            let after =
+                tree (harness.Dispatch(HealthMonitorUI.DegradedLoaded(Ok [ degraded ]))).Model
+
+            for id in [ "health-probe-blob_storage"; "health-probe-event_store" ] do
+                let kept =
+                    match findNode id before, findNode id after with
+                    | Some a, Some b -> obj.ReferenceEquals(a, b)
+                    | _ -> false
+
+                Expect.isTrue kept (id + " is served again"))
+
+        testCase "background jobs: one job's attempts arriving among 100 builds that row" (fun () ->
+            let many = List.init 100 (fun i -> jobDefinition i (sprintf "job-%03d" i))
+            let tree m = JobsAdminTree.tree jobsMsgs m
+            let harness = (jobsInit ()).Dispatch(JobsAdminUI.JobsLoaded(Ok many))
+            let seventh = (List.item 7 many).JobId
+
+            let built, total = across tree harness (JobsAdminUI.AttemptsLoaded(seventh, Ok []))
+
+            let oneRow, _ =
+                across
+                    tree
+                    ((jobsInit ()).Dispatch(JobsAdminUI.JobsLoaded(Ok [ List.item 7 many ])))
+                    (JobsAdminUI.AttemptsLoaded(seventh, Ok []))
+
+            Expect.isTrue (built <= oneRow) (sprintf "built %d of %d (a one-row page builds %d)" built total oneRow)
+            Expect.isTrue (total > 1000) (sprintf "the page holds the 100 rows (%d nodes)" total))
+
+        testCase "the service status board: one section's answer serves the other five panels again" (fun () ->
+            let tree m =
+                ServiceStatusBoardTree.tree statusMsgs m
+
+            let harness =
+                (statusLoaded ()).Dispatch(ServiceStatusBoardUI.RefreshSection ServiceStatusSnapshot.HealthSection)
+
+            let before = tree harness.Model
+
+            let after =
+                tree
+                    (harness.Dispatch(
+                        ServiceStatusBoardUI.SectionLoaded(
+                            ServiceStatusSnapshot.HealthSection,
+                            Ok(section StatusSeverity.Warn "3 of 4 probes healthy" [])
+                        )
+                    ))
+                        .Model
+
+            for name in statusSections do
+                let id = "status-section-" + name
+
+                let kept =
+                    match findNode id before, findNode id after with
+                    | Some a, Some b -> obj.ReferenceEquals(a, b)
+                    | _ -> false
+
+                Expect.equal
+                    kept
+                    (name <> ServiceStatusSnapshot.HealthSection)
+                    (id + ": kept unless it is the one answered"))
+
+        testCase "data migrations: one type's trigger answered among 100 builds that row" (fun () ->
+            let many = List.init 100 (fun i -> dataType (sprintf "type-%03d" i) 3 None)
+
+            let tree m =
+                MigrationStatusTree.tree migrationMsgs m
+
+            let harness =
+                (migrationInit ())
+                    .Dispatch(MigrationStatusUI.DataTypesLoaded(Ok many))
+                    .Dispatch(MigrationStatusUI.TriggerClicked "type-007")
+
+            let answer =
+                MigrationStatusUI.TriggerComplete("type-007", Ok(migrationStatus "type-007" MigrationInProgress 0))
+
+            let built, total = across tree harness answer
+
+            let oneRow, _ =
+                across
+                    tree
+                    ((migrationInit ())
+                        .Dispatch(MigrationStatusUI.DataTypesLoaded(Ok [ List.item 7 many ]))
+                        .Dispatch(MigrationStatusUI.TriggerClicked "type-007"))
+                    answer
+
+            Expect.isTrue (built <= oneRow) (sprintf "built %d of %d (a one-row page builds %d)" built total oneRow)
+            Expect.isTrue (total > 1000) (sprintf "the page holds the 100 rows (%d nodes)" total))
     ]
 
 // ─── The kit's own go-red proofs ─────────────────────────────────────
@@ -2174,6 +2957,10 @@ let tests =
         auditTests
         dsrTests
         contactsTests
+        healthTests
+        jobsTests
+        statusTests
+        migrationTests
         constructedTests
         goRedTests
         nameTests

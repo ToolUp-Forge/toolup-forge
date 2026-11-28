@@ -437,6 +437,42 @@ let private treeSurfaceTests =
                 with e ->
                     failwithf "state \"%s\": %s" name e.Message)
 
+        testCase "every health-monitor state passes the Strict floor as a tree" (fun () ->
+            for name, harness in TreeViewParityTests.healthStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.healthTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "every background-jobs state passes the Strict floor as a tree" (fun () ->
+            for name, harness in TreeViewParityTests.jobsStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.jobsTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "every service-status state passes the Strict floor as a tree" (fun () ->
+            for name, harness in TreeViewParityTests.statusStates () do
+                try
+                    harness.AssertAccessibleView(ViewMount.mount, TreeViewParityTests.statusTree, Accessibility.Strict)
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
+        testCase "every data-migration state passes the Strict floor as a tree" (fun () ->
+            for name, harness in TreeViewParityTests.migrationStates () do
+                try
+                    harness.AssertAccessibleView(
+                        ViewMount.mount,
+                        TreeViewParityTests.migrationTree,
+                        Accessibility.Strict
+                    )
+                    |> ignore
+                with e ->
+                    failwithf "state \"%s\": %s" name e.Message)
+
         testCase "the palette's tree, its overlay an island, passes the Strict floor" (fun () ->
             let html = ViewMount.mount (Components.CommandPaletteTree.Surface paletteProps)
             let node = Accessibility.ofHtml html
@@ -565,6 +601,37 @@ let private treeSurfaceTests =
                     (name + " shows the loading state until its tree arrives")
 
                 Expect.isFalse (page.Contains heading) (name + " draws nothing of the tree synchronously"))
+
+        testCase "the fourth batch's views mount their trees on demand, not at boot" (fun () ->
+            let pageOf (view: BuiltInView<'Model, 'Msg>) (model: 'Model) =
+                match view with
+                | BuiltInView.Page view ->
+                    match view model (RenderContext.create MessageCatalog.english ignore) with
+                    | PageContent.FullWidth element -> ViewMount.mount element
+                    | other -> failwithf "a full-width page, not %A" other
+                | BuiltInView.Pages _ -> failwith "one page"
+
+            let pages = [
+                "the health monitor",
+                pageOf HealthMonitorUI.builtIn.View (TreeViewParityTests.healthLoaded ()).Model,
+                MessageCatalog.english.HealthMonitor.ProbesFootnote
+                "background jobs",
+                pageOf JobsAdminUI.builtIn.View (TreeViewParityTests.jobsLoaded ()).Model,
+                MessageCatalog.english.JobsAdmin.Subheading
+                "the service status board",
+                pageOf ServiceStatusBoardUI.builtIn.View (TreeViewParityTests.statusLoaded ()).Model,
+                MessageCatalog.english.ServiceStatusBoard.Subheading
+                "data migrations",
+                pageOf MigrationStatusUI.builtIn.View (TreeViewParityTests.migrationLoaded ()).Model,
+                MessageCatalog.english.MigrationStatus.Subheading
+            ]
+
+            for name, page, text in pages do
+                Expect.isTrue
+                    (page.Contains "role=\"status\"" && page.Contains "aria-busy=\"true\"")
+                    (name + " shows the loading state until its tree arrives")
+
+                Expect.isFalse (page.Contains text) (name + " draws nothing of the tree synchronously"))
     ]
 
 // ─── Cases ───────────────────────────────────────────────────────────
