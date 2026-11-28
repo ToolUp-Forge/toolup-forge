@@ -13,6 +13,49 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
+## [0.43.1] — 2026-11-28
+
+Migration notes:
+
+- [1190-class-a-first-batch](docs/migrations/1190-class-a-first-batch.md)
+- [1419-class-a-second-batch](docs/migrations/1419-class-a-second-batch.md)
+- [1420-class-a-third-batch](docs/migrations/1420-class-a-third-batch.md)
+- [1421-class-a-fourth-batch](docs/migrations/1421-class-a-fourth-batch.md)
+- [1422-class-a-fifth-batch](docs/migrations/1422-class-a-fifth-batch.md)
+
+### `core` 0.43.1
+
+_Surface since `v0.43.0`: **additive** — 3 packages moved; 19 members added, 0 members changed, 0 members removed._
+
+#### Added
+
+- `ToolUp.Platform.Client` — 3 members:
+  - `ToolUp.Platform.RemoteEffect.delay`1(System.String, System.Int32, msg) : ToolUp.Platform.RemoteEffect`1[msg]`
+  - `ToolUp.Platform.RemoteEffect.legacy`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]) : ToolUp.Platform.RemoteEffect`1[msg]  (obsolete)`
+  - `ToolUp.Platform.RemoteEffect.readFile`1(System.String, Browser.Types.File, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.Exception], msg]) : ToolUp.Platform.RemoteEffect`1[msg]`
+- `ToolUp.Platform.Server.Audit` — 9 members:
+  - `ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews (class)`
+  - `ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews..ctor()`
+  - `ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews..ctor(System.TimeSpan, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])`
+  - `ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews.Count : System.Int32 { get }`
+  - `ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews.DefaultTtl : System.TimeSpan { get }`
+  - `ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews.Put(System.String, ToolUp.Platform.DataSubjectRequest) : System.Void`
+  - `ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews.Remove(System.String, System.String) : System.Void`
+  - `ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews.TryFind(System.String, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSubjectRequest]`
+  - `ToolUp.Platform.Audit.DataSubjectRequestApiHandler.createWithPreviews(ToolUp.Platform.Audit.DataSubjectRequestApiHandler+PendingErasurePreviews, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Audit.IDataExporter+IDataExporter], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Audit.IDataExporter+IErasureHandler], ToolUp.Platform.ErasurePolicy, System.String, System.String, ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAuditEvent, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Audit.DataSubjectRequestApiHandler+DsrAsyncDeps]) : ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi`
+- `ToolUp.Platform.UI` — 7 members:
+  - `Toolup.UIToolkit.Nodes+Table (class)`
+  - `Toolup.UIToolkit.Nodes+Table+Column (class)`
+  - `Toolup.UIToolkit.Nodes+Table.cell`1(System.String, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Generated+Node`1[Msg]]) : Fuaran.UI.Generated+Node`1[Msg]`
+  - `Toolup.UIToolkit.Nodes+Table.column(System.String, System.String, System.Int32) : Toolup.UIToolkit.Nodes+Table+Column`
+  - `Toolup.UIToolkit.Nodes+Table.row`1(System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.UIToolkit.Nodes+Table+Column], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Generated+Node`1[Msg]]) : Fuaran.UI.Generated+Node`1[Msg]`
+  - `Toolup.UIToolkit.Nodes+Table.table`1(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.UIToolkit.Nodes+Table+Column], Microsoft.FSharp.Collections.FSharpList`1[Fuaran.UI.Generated+Node`1[Msg]]) : Fuaran.UI.Generated+Node`1[Msg]`
+  - `Toolup.UIToolkit.Nodes+Table.template(Microsoft.FSharp.Collections.FSharpList`1[Toolup.UIToolkit.Nodes+Table+Column]) : System.String`
+
+### `hosts` 0.39.5
+
+_Surface since `v0.43.0`: **unchanged** — 2 packages moved; 0 members added, 0 members changed, 0 members removed._
+
 ## [0.43.0] — 2026-11-25
 
 Migration notes:
@@ -6366,7 +6409,7 @@ Migration notes:
 - [991-scoped-report-subscriptions-by-default](docs/migrations/991-scoped-report-subscriptions-by-default.md)
 - [9x-self-hosted-observability-module](docs/migrations/9x-self-hosted-observability-module.md)
 
-_Surface since `v0.23.0`: **breaking** — 46 packages moved; 4320 members added, 89 members changed, 617 members removed; 12 packages new._
+_Surface since `v0.23.0`: **breaking** — 46 packages moved; 4300 members added, 89 members changed, 606 members removed; 12 packages new._
 
 ### Added
 
@@ -6473,16 +6516,6 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4320 members added
 - `ToolUp.AIProviders.OpenAI` — 2 members:
   - `OpenAIProvider.canServeModel(System.String) : System.Boolean`
   - `OpenAIProvider.resolveCallModel(System.String, ToolUp.Platform.AI.AIProviderCallOptions) : System.Tuple`2[System.String, ToolUp.Platform.AI.ModelOverrideOutcome]`
-- `ToolUp.ArtefactSigning.AwsKms` — 2 members:
-  - `ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSigner..ctor(Amazon.KeyManagementService.IAmazonKeyManagementService, System.String)`
-  - `ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSignerModule.create(Amazon.KeyManagementService.IAmazonKeyManagementService, System.String) : ToolUp.ArtefactSigning.IArtefactSigner`
-- `ToolUp.ArtefactSigning.AzureKeyVault` — 2 members:
-  - `ToolUp.ArtefactSigning.AzureKeyVault.AzureKeyVaultArtefactSigner..ctor(Azure.Core.TokenCredential, System.Uri)`
-  - `ToolUp.ArtefactSigning.AzureKeyVault.AzureKeyVaultArtefactSigner..ctor(Azure.Security.KeyVault.Keys.Cryptography.CryptographyClient, Azure.Security.KeyVault.Keys.KeyClient, System.String)`
-- `ToolUp.ArtefactSigning.GoogleCloudKms` — 3 members:
-  - `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSigner..ctor(Google.Cloud.Kms.V1.KeyManagementServiceClient, Google.Cloud.Kms.V1.CryptoKeyVersionName)`
-  - `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSignerModule.create(Google.Cloud.Kms.V1.KeyManagementServiceClient, Google.Cloud.Kms.V1.CryptoKeyVersionName) : ToolUp.ArtefactSigning.IArtefactSigner`
-  - `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSignerModule.createFromName(Google.Cloud.Kms.V1.KeyManagementServiceClient, System.String) : ToolUp.ArtefactSigning.IArtefactSigner`
 - `ToolUp.AuthProviders.Oidc` — 31 members:
   - `ToolUp.AuthProviders.OidcAuthProvider.applyAdmission(ToolUp.Platform.ClaimMapping, ToolUp.Platform.Auth+AuthenticatedUser) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Auth+AuthenticatedUser, System.String]`
   - `ToolUp.AuthProviders.OidcSsrSignIn (class)`
@@ -6556,22 +6589,6 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4320 members added
   - `ToolUp.DataSources.Parquet.ParquetDataSource.datasetDType(Parquet.Schema.DataField) : ToolUp.Platform.DatasetDType`
   - `ToolUp.DataSources.Parquet.ParquetDataSource.datasetSchemaOf(System.Collections.Generic.IEnumerable`1[Parquet.Schema.DataField]) : ToolUp.Platform.DatasetSchema`
   - `ToolUp.DataSources.Parquet.ParquetDataSource.payloadReader() : ToolUp.Platform.IPayloadReader`
-- `ToolUp.Encryption.AwsKms` — 4 members:
-  - `ToolUp.Encryption.AwsKms.AwsKmsKeyResolver..ctor(Amazon.KeyManagementService.IAmazonKeyManagementService, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String])`
-  - `ToolUp.Encryption.AwsKms.AwsKmsKeyResolver..ctor(Amazon.KeyManagementService.IAmazonKeyManagementService, System.String)`
-  - `ToolUp.Encryption.AwsKms.AwsKmsKeyResolverModule.create(Amazon.KeyManagementService.IAmazonKeyManagementService, System.String) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver`
-  - `ToolUp.Encryption.AwsKms.AwsKmsKeyResolverModule.createPerScope(Amazon.KeyManagementService.IAmazonKeyManagementService, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String]) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver`
-- `ToolUp.Encryption.AzureKeyVault` — 5 members:
-  - `ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolver..ctor(Azure.Core.TokenCredential, System.String)`
-  - `ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolver..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Azure.Security.KeyVault.Keys.Cryptography.CryptographyClient], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String], Azure.Security.KeyVault.Keys.Cryptography.KeyWrapAlgorithm)`
-  - `ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolverModule.create(Azure.Core.TokenCredential, System.String) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver`
-  - `ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolverModule.createPerScope(Azure.Core.TokenCredential, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String]) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver`
-  - `ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolverModule.createWith(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Azure.Security.KeyVault.Keys.Cryptography.CryptographyClient], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String], Azure.Security.KeyVault.Keys.Cryptography.KeyWrapAlgorithm) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver`
-- `ToolUp.Encryption.GoogleCloudKms` — 4 members:
-  - `ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolver..ctor(Google.Cloud.Kms.V1.KeyManagementServiceClient, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String])`
-  - `ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolver..ctor(Google.Cloud.Kms.V1.KeyManagementServiceClient, System.String)`
-  - `ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolverModule.create(Google.Cloud.Kms.V1.KeyManagementServiceClient, System.String) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver`
-  - `ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolverModule.createPerScope(Google.Cloud.Kms.V1.KeyManagementServiceClient, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String]) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver`
 - `ToolUp.FactStores.Postgres` — new package (175 public members)
 - `ToolUp.Facts.Client` — new package (109 public members)
 - `ToolUp.Facts.Core` — 252 members:
@@ -6993,23 +7010,6 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4320 members added
   - `ToolUp.Platform.RetryPolicyModule.delayFor(ToolUp.Platform.RetryPolicy, System.Int32) : System.TimeSpan`
   - `ToolUp.Platform.RetryPolicyModule.noRetry : ToolUp.Platform.RetryPolicy { get }`
   - `ToolUp.Platform.RetryPolicyModule.timeoutDescription(ToolUp.Platform.RetryPolicy) : System.String`
-- `ToolUp.ArtefactSigning.AwsKms` — 2 members:
-  - `ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSigner  # <members unavailable: FileNotFoundException>`
-  - `ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSignerModule  # <members unavailable: FileNotFoundException>`
-- `ToolUp.ArtefactSigning.AzureKeyVault` — 1 member:
-  - `ToolUp.ArtefactSigning.AzureKeyVault.AzureKeyVaultArtefactSigner  # <members unavailable: FileNotFoundException>`
-- `ToolUp.ArtefactSigning.GoogleCloudKms` — 2 members:
-  - `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSigner  # <members unavailable: FileNotFoundException>`
-  - `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSignerModule  # <members unavailable: FileNotFoundException>`
-- `ToolUp.Encryption.AwsKms` — 2 members:
-  - `ToolUp.Encryption.AwsKms.AwsKmsKeyResolver  # <members unavailable: FileNotFoundException>`
-  - `ToolUp.Encryption.AwsKms.AwsKmsKeyResolverModule  # <members unavailable: FileNotFoundException>`
-- `ToolUp.Encryption.AzureKeyVault` — 2 members:
-  - `ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolver  # <members unavailable: FileNotFoundException>`
-  - `ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolverModule  # <members unavailable: FileNotFoundException>`
-- `ToolUp.Encryption.GoogleCloudKms` — 2 members:
-  - `ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolver  # <members unavailable: FileNotFoundException>`
-  - `ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolverModule  # <members unavailable: FileNotFoundException>`
 - `ToolUp.KnowledgeBase.Server` — 1 member:
   - `KnowledgeBase.ServerIndexStorage.progressCache : System.Collections.Concurrent.ConcurrentDictionary`2[System.String, System.Int32] { get }`
 - `ToolUp.Platform.Client` — 425 members:
@@ -9655,7 +9655,7 @@ Migration notes:
 - [nested-sidebar-modules](docs/migrations/nested-sidebar-modules.md)
 - [vectorscope-user-per-user-isolation](docs/migrations/vectorscope-user-per-user-isolation.md)
 
-_Surface since `v0.9.4`: **breaking** — 53 packages moved; 4891 members added, 66 members changed, 139 members removed; 25 packages new._
+_Surface since `v0.9.4`: **breaking** — 53 packages moved; 4891 members added, 69 members changed, 139 members removed; 25 packages new._
 
 ### Added
 
@@ -9751,8 +9751,8 @@ _Surface since `v0.9.4`: **breaking** — 53 packages moved; 4891 members added,
   - `ToolUp.ArtefactSigning.SignedRevocationList (class)`
   - `ToolUp.ArtefactSigning.SignedRevocationList.loadSigned(System.Byte[], ToolUp.ArtefactSigning.SigningAlgorithm, System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IBindingRevocationList, System.String]`
   - `ToolUp.ArtefactSigning.SignedRevocationList.verifyAndParse(System.Byte[], ToolUp.ArtefactSigning.SigningAlgorithm, System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IBindingRevocationList, System.String]`
-- `ToolUp.ArtefactSigning.AzureKeyVault` — new package (4 public members)
-- `ToolUp.ArtefactSigning.GoogleCloudKms` — new package (4 public members)
+- `ToolUp.ArtefactSigning.AzureKeyVault` — new package (3 public members)
+- `ToolUp.ArtefactSigning.GoogleCloudKms` — new package (2 public members)
 - `ToolUp.AuthProviders.ClerkUI` — 2 members:
   - `ToolUp.AuthProviders.ClerkRegister.Tag : System.String (literal)`
   - `ToolUp.AuthProviders.ClerkRegister.authUI(ToolUp.Platform.ClerkUIConfig) : ToolUp.Platform.AuthUIMode`
@@ -10070,6 +10070,11 @@ _Surface since `v0.9.4`: **breaking** — 53 packages moved; 4891 members added,
   - `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor` — `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor(ToolUp.AI.AIAssistantBranding, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])` → `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor(ToolUp.AI.AIAssistantBranding, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.AI.AISurfaceDerivationMode)`
 - `ToolUp.ArtefactSigning` — 1 member:
   - `ToolUp.ArtefactSigning.DefaultModuleBindingVerifier..ctor` — `ToolUp.ArtefactSigning.DefaultModuleBindingVerifier..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor])` → `ToolUp.ArtefactSigning.DefaultModuleBindingVerifier..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.ArtefactSigning.ModuleBindingAnchor], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IBindingRevocationList], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IBindingTransparencyLog])`
+- `ToolUp.ArtefactSigning.AzureKeyVault` — 1 member:
+  - `ToolUp.ArtefactSigning.AzureKeyVault.AzureKeyVaultArtefactSigner  # <members unavailable: FileNotFoundException>` — `ToolUp.ArtefactSigning.AzureKeyVault.AzureKeyVaultArtefactSigner  # <members unavailable: FileNotFoundException>` → `ToolUp.ArtefactSigning.AzureKeyVault.AzureKeyVaultArtefactSigner  # <members unavailable: FileNotFoundException>`
+- `ToolUp.ArtefactSigning.GoogleCloudKms` — 2 members:
+  - `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSigner  # <members unavailable: FileNotFoundException>` — `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSigner  # <members unavailable: FileNotFoundException>` → `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSigner  # <members unavailable: FileNotFoundException>`
+  - `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSignerModule  # <members unavailable: FileNotFoundException>` — `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSignerModule  # <members unavailable: FileNotFoundException>` → `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSignerModule  # <members unavailable: FileNotFoundException>`
 - `ToolUp.KnowledgeBase.Core` — 1 member:
   - `SharedTypes+KnowledgeDocument..ctor` — `SharedTypes+KnowledgeDocument..ctor(System.String, System.String, System.String, System.DateTimeOffset, System.String, SharedTypes+IngestionStatus, System.Int64, System.Int32, SharedTypes+KnowledgeSource)` → `SharedTypes+KnowledgeDocument..ctor(System.String, System.String, System.String, System.DateTimeOffset, System.String, SharedTypes+IngestionStatus, System.Int64, System.Int32, SharedTypes+KnowledgeSource, Microsoft.FSharp.Core.FSharpOption`1[System.String])`
 - `ToolUp.KnowledgeBase.Server` — 1 member:
@@ -10525,7 +10530,7 @@ Migration notes:
 - [224-client-toolkit-theming-contract-tests](docs/migrations/224-client-toolkit-theming-contract-tests.md)
 - [boot-data-prefetch](docs/migrations/boot-data-prefetch.md)
 
-_Surface since `v0.6.1`: **additive** — 89 packages moved; 0 members added, 0 members changed, 0 members removed; 89 packages new._
+_Surface since `v0.6.1`: **breaking** — 89 packages moved; 0 members added, 10 members changed, 0 members removed; 89 packages new._
 
 ### Added
 
@@ -10542,7 +10547,7 @@ _Surface since `v0.6.1`: **additive** — 89 packages moved; 0 members added, 0 
 - `ToolUp.AIProviders.OpenAI` — new package (15 public members)
 - `ToolUp.AgGridEnterprise` — new package (307 public members)
 - `ToolUp.ArtefactSigning` — new package (117 public members)
-- `ToolUp.ArtefactSigning.AwsKms` — new package (4 public members)
+- `ToolUp.ArtefactSigning.AwsKms` — new package (2 public members)
 - `ToolUp.AssetStore` — new package (319 public members)
 - `ToolUp.AuditSinks.AzureBlobArchive` — new package (11 public members)
 - `ToolUp.AuditSinks.DatadogLogs` — new package (13 public members)
@@ -10565,14 +10570,14 @@ _Surface since `v0.6.1`: **additive** — 89 packages moved; 0 members added, 0 
 - `ToolUp.ContentAuthoring` — new package (74 public members)
 - `ToolUp.EmbeddingProviders.Local` — new package (7 public members)
 - `ToolUp.EmbeddingProviders.OpenAI` — new package (11 public members)
-- `ToolUp.Encryption.AwsKms` — new package (4 public members)
-- `ToolUp.Encryption.AzureKeyVault` — new package (4 public members)
-- `ToolUp.Encryption.GoogleCloudKms` — new package (4 public members)
+- `ToolUp.Encryption.AwsKms` — new package (2 public members)
+- `ToolUp.Encryption.AzureKeyVault` — new package (2 public members)
+- `ToolUp.Encryption.GoogleCloudKms` — new package (2 public members)
 - `ToolUp.Forms.Client` — new package (18 public members)
 - `ToolUp.Forms.Core` — new package (507 public members)
 - `ToolUp.Forms.Server` — new package (130 public members)
-- `ToolUp.Hosts.AwsLambda` — new package (2 public members)
-- `ToolUp.Hosts.AzureFunctions` — new package (2 public members)
+- `ToolUp.Hosts.AwsLambda` — new package (1 public member)
+- `ToolUp.Hosts.AzureFunctions` — new package (1 public member)
 - `ToolUp.Hosts.Docker` — new package (0 public members)
 - `ToolUp.Hosts.GoogleCloudFunctions` — new package (4 public members)
 - `ToolUp.KnowledgeBase.Client` — new package (247 public members)
@@ -10618,6 +10623,25 @@ _Surface since `v0.6.1`: **additive** — 89 packages moved; 0 members added, 0 
 - `ToolUp.Stripe.Webhook` — new package (83 public members)
 - `ToolUp.Tabular` — new package (256 public members)
 - `ToolUp.VectorStores.Hnsw` — new package (26 public members)
+
+### Changed
+
+- `ToolUp.ArtefactSigning.AwsKms` — 2 members:
+  - `ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSigner  # <members unavailable: FileNotFoundException>` — `ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSigner  # <members unavailable: FileNotFoundException>` → `ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSigner  # <members unavailable: FileNotFoundException>`
+  - `ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSignerModule  # <members unavailable: FileNotFoundException>` — `ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSignerModule  # <members unavailable: FileNotFoundException>` → `ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSignerModule  # <members unavailable: FileNotFoundException>`
+- `ToolUp.Encryption.AwsKms` — 2 members:
+  - `ToolUp.Encryption.AwsKms.AwsKmsKeyResolver  # <members unavailable: FileNotFoundException>` — `ToolUp.Encryption.AwsKms.AwsKmsKeyResolver  # <members unavailable: FileNotFoundException>` → `ToolUp.Encryption.AwsKms.AwsKmsKeyResolver  # <members unavailable: FileNotFoundException>`
+  - `ToolUp.Encryption.AwsKms.AwsKmsKeyResolverModule  # <members unavailable: FileNotFoundException>` — `ToolUp.Encryption.AwsKms.AwsKmsKeyResolverModule  # <members unavailable: FileNotFoundException>` → `ToolUp.Encryption.AwsKms.AwsKmsKeyResolverModule  # <members unavailable: FileNotFoundException>`
+- `ToolUp.Encryption.AzureKeyVault` — 2 members:
+  - `ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolver  # <members unavailable: FileNotFoundException>` — `ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolver  # <members unavailable: FileNotFoundException>` → `ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolver  # <members unavailable: FileNotFoundException>`
+  - `ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolverModule  # <members unavailable: FileNotFoundException>` — `ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolverModule  # <members unavailable: FileNotFoundException>` → `ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolverModule  # <members unavailable: FileNotFoundException>`
+- `ToolUp.Encryption.GoogleCloudKms` — 2 members:
+  - `ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolver  # <members unavailable: FileNotFoundException>` — `ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolver  # <members unavailable: FileNotFoundException>` → `ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolver  # <members unavailable: FileNotFoundException>`
+  - `ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolverModule  # <members unavailable: FileNotFoundException>` — `ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolverModule  # <members unavailable: FileNotFoundException>` → `ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolverModule  # <members unavailable: FileNotFoundException>`
+- `ToolUp.Hosts.AwsLambda` — 1 member:
+  - `ToolUp.Hosts.AwsLambda.AwsLambdaHost  # <members unavailable: FileNotFoundException>` — `ToolUp.Hosts.AwsLambda.AwsLambdaHost  # <members unavailable: FileNotFoundException>` → `ToolUp.Hosts.AwsLambda.AwsLambdaHost  # <members unavailable: FileNotFoundException>`
+- `ToolUp.Hosts.AzureFunctions` — 1 member:
+  - `ToolUp.Hosts.AzureFunctions.AzureFunctionHost  # <members unavailable: FileNotFoundException>` — `ToolUp.Hosts.AzureFunctions.AzureFunctionHost  # <members unavailable: FileNotFoundException>` → `ToolUp.Hosts.AzureFunctions.AzureFunctionHost  # <members unavailable: FileNotFoundException>`
 
 ## [0.6.1] — 2026-06-20
 
