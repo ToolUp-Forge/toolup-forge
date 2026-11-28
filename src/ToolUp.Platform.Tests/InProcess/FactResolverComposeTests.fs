@@ -285,7 +285,7 @@ let private builtProviderUnder (knob: FeatureMode) : ServiceProvider =
                         }
                 }
         }
-        |> FactsCompose.withFactStore
+        |> FactsCompose.withOptions FactsComposeOptions.defaults
 
     let services = ServiceCollection()
 

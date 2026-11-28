@@ -166,7 +166,7 @@ let private composedServices (knob: FeatureMode) : ServiceCollection =
                         }
                 }
         }
-        |> FactsCompose.withFactStore
+        |> FactsCompose.withOptions FactsComposeOptions.defaults
 
     let services = ServiceCollection()
 
@@ -338,8 +338,7 @@ let tests =
                                     }
                             }
                     }
-                    |> FactsCompose.withFactStore
-                    |> FactsCompose.withFactStore
+                    |> FactsCompose.withOptions FactsComposeOptions.defaults
 
                 match ServerApp.serviceConfig app with
                 | Some register -> register services |> ignore

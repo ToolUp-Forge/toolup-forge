@@ -831,7 +831,14 @@ let tests =
         testCase "a deployment with no fact store composes no import door"
         <| fun () ->
             let before = ServerApp.empty
-            let after = FactsCompose.withFactImport [] before
+
+            let after =
+                FactsCompose.withOptions
+                    {
+                        FactsComposeOptions.defaults with
+                            FactImport = Some []
+                    }
+                    before
 
             Expect.isNone (ServerApp.serviceConfig after) "a FeatureMode.Disabled app registers nothing"
 

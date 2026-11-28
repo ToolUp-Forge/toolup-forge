@@ -324,7 +324,7 @@ let private factsApp () : ServerApp =
                     }
             }
     }
-    |> FactsCompose.withFactStore
+    |> FactsCompose.withOptions FactsComposeOptions.defaults
 
 // ─── 1. The profile is the tool list ────────────────────────────────
 
@@ -417,16 +417,26 @@ let private profileTests =
             Expect.isEmpty profile.Tools "nothing to call"
 
             Expect.equal
-                (factsApp () |> FactsCompose.withMethods profile).AITools.Length
+                (factsApp ()
+                 |> FactsCompose.withOptions {
+                     FactsComposeOptions.defaults with
+                         Methods = Some profile
+                 })
+                    .AITools.Length
                 (factsApp ()).AITools.Length
                 "the composition is unchanged"
         }
 
-        test "withMethods declares every tool beside the fact tools, and refuses a name already declared" {
+        test "Methods declares every tool beside the fact tools, and refuses a name already declared" {
             let profile = registered [ meanBinding () ]
 
             let names =
-                (factsApp () |> FactsCompose.withMethods profile).AITools
+                (factsApp ()
+                 |> FactsCompose.withOptions {
+                     FactsComposeOptions.defaults with
+                         Methods = Some profile
+                 })
+                    .AITools
                 |> List.map (fun (d, _) -> d.Name)
 
             Expect.contains names "subject_mean" "the card's tool"
@@ -436,12 +446,25 @@ let private profileTests =
             Expect.throws
                 (fun () ->
                     factsApp ()
-                    |> FactsCompose.withMethods profile
-                    |> FactsCompose.withMethods profile
+                    |> FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            Methods = Some profile
+                    }
+                    |> FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            Methods = Some profile
+                    }
                     |> ignore)
                 "a tool name declared twice"
 
-            Expect.isEmpty (ServerApp.empty |> FactsCompose.withMethods profile).AITools "no fact store: nothing"
+            Expect.isEmpty
+                (ServerApp.empty
+                 |> FactsCompose.withOptions {
+                     FactsComposeOptions.defaults with
+                         Methods = Some profile
+                 })
+                    .AITools
+                "no fact store: nothing"
         }
     ]
 

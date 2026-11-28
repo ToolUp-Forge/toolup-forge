@@ -635,8 +635,10 @@ let private composedUnder (knob: FeatureMode) : ServerApp * ServiceProvider * IB
                         }
                 }
         }
-        |> FactsCompose.withFactStore
-        |> FactsCompose.withFactTableWriter
+        |> FactsCompose.withOptions {
+            FactsComposeOptions.defaults with
+                FactTableWriter = true
+        }
 
     let storage = InMemoryBlobStorage() :> IBlobStorage
     let services = ServiceCollection()
@@ -742,7 +744,7 @@ let private compositionTests =
             Expect.equal (row.GetProperty("rowCount").GetInt32()) 6 "its committed rows, in this scope"
         }
 
-        test "withFactTablesOptions hands the cap to the executor as a value" {
+        test "FactTables hands the cap to the executor as a value" {
             let app, sp, _ = composedUnder FeatureMode.Enabled
             let scope = newScope ()
             seed (sp.GetRequiredService<IFactTableWriter>()) scope trade "revenue"
@@ -758,10 +760,24 @@ let private compositionTests =
                 "\"names\":[\"s1\",\"s2\"]"
                 "composed plainly, the default cap lists the sites"
 
-            let capped = FactsCompose.withFactTablesOptions { MemberCap = 1 } app
+            let capped =
+                FactsCompose.withOptions
+                    {
+                        FactsComposeOptions.defaults with
+                            FactTables = Some { MemberCap = 1 }
+                    }
+                    app
+
             Expect.stringContains (run capped) "\"listed\":false" "a cap of one counts only"
 
-            let off = FactsCompose.withFactTablesOptions FactTablesOptions.membersOff app
+            let off =
+                FactsCompose.withOptions
+                    {
+                        FactsComposeOptions.defaults with
+                            FactTables = Some FactTablesOptions.membersOff
+                    }
+                    app
+
             Expect.isFalse ((run off).Contains "\"members\"") "a cap of zero lists none"
 
             Expect.equal
@@ -770,7 +786,7 @@ let private compositionTests =
                 "the same tools, in the same order"
         }
 
-        test "withFactTablesOptions is refused before withFactStore and inert without a store" {
+        test "FactTables composes with the store in one record, and is inert without a store" {
             let enabled = {
                 ServerApp.empty with
                     Config = {
@@ -782,12 +798,20 @@ let private compositionTests =
                     }
             }
 
-            Expect.throwsT<CompositionRefused>
-                (fun () -> FactsCompose.withFactTablesOptions FactTablesOptions.defaults enabled |> ignore)
-                "the tool is not declared yet"
+            let withTables = {
+                FactsComposeOptions.defaults with
+                    FactTables = Some FactTablesOptions.defaults
+            }
+
+            Expect.equal
+                ((FactsCompose.withOptions withTables enabled).AITools
+                 |> List.filter (fun (d, _) -> d.Name = FactTablesTool.Name)
+                 |> List.length)
+                1
+                "the store declares the tool and the options bind its executor, in either order of writing"
 
             Expect.isEmpty
-                (FactsCompose.withFactTablesOptions FactTablesOptions.defaults ServerApp.empty).AITools
+                (FactsCompose.withOptions withTables ServerApp.empty).AITools
                 "no fact store, nothing declared"
         }
     ]

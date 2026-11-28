@@ -964,9 +964,11 @@ let private composeDemo () : DemoApp =
                         }
                 }
         }
-        |> FactsCompose.withFactStore
-        |> FactsCompose.withFactTableWriter
-        |> FactsCompose.withDelegateFacts [ skuTable.Id ]
+        |> FactsCompose.withOptions {
+            FactsComposeOptions.defaults with
+                FactTableWriter = true
+                DelegateFacts = [ skuTable.Id ]
+        }
         |> FactBrowseHandler.withFactBrowse
 
     let services = ServiceCollection() :> IServiceCollection

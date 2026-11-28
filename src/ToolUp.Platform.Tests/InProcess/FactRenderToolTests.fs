@@ -711,8 +711,10 @@ let private composedContext () : HttpContext =
                         }
                 }
         }
-        |> FactsCompose.withFactStore
-        |> FactsCompose.withFactTableWriter
+        |> FactsCompose.withOptions {
+            FactsComposeOptions.defaults with
+                FactTableWriter = true
+        }
 
     let services = ServiceCollection() :> IServiceCollection
     services.AddSingleton<IBlobStorage>(InMemoryBlobStorage()) |> ignore

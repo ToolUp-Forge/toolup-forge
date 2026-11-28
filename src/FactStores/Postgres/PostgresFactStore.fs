@@ -1801,7 +1801,7 @@ module PostgresFactStore =
 module PostgresFactStoreCompose =
 
     /// Replace the composed fact store with a `PostgresFactStore` over
-    /// `connectionString` — `FactsCompose.withFactStoreImplementation` with
+    /// `connectionString` — `FactsComposeOptions.StoreImplementation` with
     /// the store built on first use from the composed `IEventStore`, the
     /// metric registry when one is registered, and `DateTime.UtcNow` as the
     /// transaction-time clock. Every registration the fact tier builds over
@@ -1812,13 +1812,13 @@ module PostgresFactStoreCompose =
     /// a later request.
     ///
     /// Requires the fact tier (`ServerConfig.Stores.FactStore = FeatureMode.Enabled`)
-    /// and goes straight after `FactsCompose.withFactStore`; under
-    /// `FeatureMode.Disabled` the app is returned unchanged.
+    /// and goes after the root's `FactsCompose.withOptions`, which it adds the
+    /// replacement to; under `FeatureMode.Disabled` the app is returned unchanged.
     ///
     /// ```fsharp
     /// ServerApp.empty
     /// |> ServerApp.withStorage blob
-    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withOptions FactsComposeOptions.defaults
     /// |> PostgresFactStoreCompose.withPostgresFactStore connectionString PostgresFactStoreOptions.defaults
     /// |> ServerApp.run
     /// ```
@@ -1827,17 +1827,18 @@ module PostgresFactStoreCompose =
         (options: PostgresFactStoreOptions)
         (app: ServerApp)
         : ServerApp =
-        app
-        |> FactsCompose.withFactStoreImplementation "postgres" (fun sp ->
+        let store (sp: IServiceProvider) =
             let registry =
                 match sp.GetService(typeof<Grounding.IMetricRegistry>) with
                 | :? Grounding.IMetricRegistry as r -> Some r
                 | _ -> None
 
-            PostgresFactStore.create
-                connectionString
-                options
-                (sp.GetRequiredService<IEventStore>())
-                registry
-                (fun () -> DateTime.UtcNow)
-            :> IFactStore)
+            PostgresFactStore.create connectionString options (sp.GetRequiredService<IEventStore>()) registry (fun () ->
+                DateTime.UtcNow)
+            :> IFactStore
+
+        app
+        |> FactsCompose.withOptions {
+            FactsComposeOptions.defaults with
+                StoreImplementation = Some(FactStoreReplacement.create "postgres" store)
+        }

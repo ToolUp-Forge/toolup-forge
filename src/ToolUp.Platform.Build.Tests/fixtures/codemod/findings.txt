@@ -1,4 +1,4 @@
-Codemod: 154 site(s) in 27 file(s) need human review (not rewritten):
+Codemod: 155 site(s) in 27 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] Auth.DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -152,6 +152,8 @@ Codemod: 154 site(s) in 27 file(s) need human review (not rewritten):
       -> Phase 1157: an implementer of a fact-tier seam: delete the `string` scope members and keep the `ResolvedScope` ones; an `IFactStore` answers `Result<_, FactStoreError>` from every member, and wraps a read in `FactStoreResult.ofRead` so a fault is `StorageFault`, never absence
     L14 [1157-coherence-scopes] let app = app |> FactsCompose.withCoherenceChecks daily
       -> Phase 1157: coherence sweeps and their health probe name DECLARED PRINCIPALS now (`withCoherenceChecks cadence principal`, `withCoherenceChecksConfig config cadence principals`, `CoherenceConfig.HealthPrincipal`), each resolved through the platform's `DeclaredPrincipalResolver`; the `_platform` default sweep is gone
+    L14 [1159-knob] let app = app |> FactsCompose.withCoherenceChecks daily
+      -> Phase 1159: a `FactsCompose` knob the codemod could not fold (its arguments span lines, it is applied to an argument, or the chain sets one option twice): state it as a field of the `FactsComposeOptions` record passed to `FactsCompose.withOptions`, by the knob map
   src/Server/Guarded.fs
     L12 [815-remoting-permission-guarded-api] let handler = RemotingHelpers.makePermissionGuardedApi "SkuAnalysis" apiFactory
       -> Phase 815: `RemotingHelpers.makePermissionGuardedApi name factory` is removed: compose the module as `ServerModule.create name |> ServerModule.withGuardedApi factory` (the same module-access gate) and declare method-level authorisation with `[<RequiresRole>]` / `[<TenantScoped>]` / `[<AllowAnonymous>]` per docs/migrations/69d-authorization-metadata.md
@@ -356,6 +358,7 @@ Codemod: 154 site(s) in 27 file(s) need human review (not rewritten):
     Phase 1095 — docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md
     Phase 11.C.5 — docs/migrations/11-C-5-public-api-stability-cluster.md
     Phase 1157 — docs/migrations/1157-one-scope-form.md
+    Phase 1159 — docs/migrations/1159-factscompose-options.md
     Phase 66 — docs/migrations/0.X.0-platform-mode-to-surfaces.md
     Phase 73 — docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md
     Phase 815 — docs/migrations/815-remove-open-deprecations.md

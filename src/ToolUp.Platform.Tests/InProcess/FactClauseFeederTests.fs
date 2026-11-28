@@ -672,7 +672,7 @@ let private composedUnder (knob: FeatureMode) : ServiceProvider =
                         }
                 }
         }
-        |> FactsCompose.withFactStore
+        |> FactsCompose.withOptions FactsComposeOptions.defaults
 
     let services = ServiceCollection()
     services.AddSingleton<IBlobStorage>(InMemoryBlobStorage()) |> ignore

@@ -798,7 +798,13 @@ let private deployShaped
         |> ServerApp.withStorage storage
         |> withRAG (
             RagOptions.create (factoryFor model) stubProfile constantEmbedder
-            |> RagOptions.withFacts FactsCompose.withFactTier
+            |> RagOptions.withFacts (
+                FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        EnableStore = true
+                        FactTableWriter = true
+                }
+            )
         )
         |> GroundedNarratives.compose options [ definition ]
         |> NarrativePromptHandler.withPromptAdmin

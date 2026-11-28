@@ -601,7 +601,7 @@ let private factApp () : ServerApp =
                     }
             }
     }
-    |> FactsCompose.withFactStore
+    |> FactsCompose.withOptions FactsComposeOptions.defaults
 
 let private composed (app: ServerApp) (services: IServiceCollection) : IServiceCollection =
     match ServerApp.serviceConfig app with
@@ -631,8 +631,11 @@ let private compositionTests =
 
             let app =
                 factApp ()
-                |> FactsCompose.withFactTableWriter
-                |> FactsCompose.withDeliveryTrigger runsFor
+                |> FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        FactTableWriter = true
+                        DeliveryTrigger = Some(runsFor)
+                }
 
             use provider = (composed app services).BuildServiceProvider()
             let writer = provider.GetRequiredService<IFactTableWriter>()
@@ -657,15 +660,27 @@ let private compositionTests =
             Expect.isTrue (writer :? IFactTableOrphanSweep) "the decorated writer still sweeps"
         }
 
-        test "composed before withFactTableWriter, the composition is refused naming the order" {
-            let app = factApp () |> FactsCompose.withDeliveryTrigger runsFor
-
-            Expect.throwsC (fun () -> composed app (ServiceCollection()) |> ignore) (fun ex ->
-                Expect.stringContains ex.Message "FactsCompose.withDeliveryTrigger" "refused, naming the builder")
+        test "with no table writer the options are refused once, naming the field" {
+            Expect.throwsC
+                (fun () ->
+                    factApp ()
+                    |> FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            DeliveryTrigger = Some runsFor
+                    }
+                    |> ignore)
+                (fun ex ->
+                    Expect.stringContains ex.Message "FactsComposeOptions.DeliveryTrigger" "refused, naming the field")
         }
 
         test "with the fact store disabled the app is unchanged" {
-            let app = ServerApp.empty |> FactsCompose.withDeliveryTrigger runsFor
+            let app =
+                ServerApp.empty
+                |> FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        DeliveryTrigger = Some runsFor
+                }
+
             Expect.isEmpty app.Contributions "nothing composed"
         }
     ]

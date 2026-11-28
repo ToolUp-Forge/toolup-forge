@@ -698,7 +698,15 @@ let tests =
             }
 
             let after =
-                FactsCompose.withCoherenceChecks (Trigger.CronTrigger "0 3 * * *") sweepPrincipal app
+                FactsCompose.withOptions
+                    {
+                        FactsComposeOptions.defaults with
+                            CoherenceChecks =
+                                Some(
+                                    CoherenceCheckSchedule.forPrincipal (Trigger.CronTrigger "0 3 * * *") sweepPrincipal
+                                )
+                    }
+                    app
 
             Expect.isTrue
                 (Object.ReferenceEquals(after, app))

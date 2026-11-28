@@ -532,17 +532,17 @@ let offlineTests =
 
         testCase "withFactStore registers the guard only when more than one replica is configured"
         <| fun _ ->
-            let _, single = composed 1 FactsCompose.withFactStore
+            let _, single = composed 1 (FactsCompose.withOptions FactsComposeOptions.defaults)
             Expect.isEmpty (scaleValidators single) "one replica composes exactly as before (GP 11)"
 
-            let _, many = composed 3 FactsCompose.withFactStore
+            let _, many = composed 3 (FactsCompose.withOptions FactsComposeOptions.defaults)
             Expect.hasLength (scaleValidators many) 1 "three replicas compose the guard"
 
         // Phase 946 — the blob fact store's index check (Phase 890) reaches
         // /dev/inspect through the DI-registered inspector seam.
         testCaseAsync "the fact store's index check is one of /dev/inspect's inspectors (Phase 946)"
         <| async {
-            let _, sp = composed 1 FactsCompose.withFactStore
+            let _, sp = composed 1 (FactsCompose.withOptions FactsComposeOptions.defaults)
             let inspectors = DevDiagnosticsHandler.indexInspectors [] sp
 
             Expect.hasLength inspectors 1 "the facts companion registers one inspector"
@@ -560,8 +560,10 @@ let offlineTests =
             let _, replaced =
                 composed
                     1
-                    (FactsCompose.withFactStore
-                     >> FactsCompose.withFactStoreImplementation "test" (fun _ -> replacement))
+                    (FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            StoreImplementation = Some(FactStoreReplacement.create "test" (fun _ -> replacement))
+                    })
 
             match DevDiagnosticsHandler.indexInspectors [] replaced with
             | [ inspector ] ->
@@ -576,7 +578,8 @@ let offlineTests =
         // raise at preflight instead of validating.
         testCaseAsync "a multi-replica composition's preflight runs the guard instead of raising (Phase 946)"
         <| async {
-            let services, sp = composed 3 FactsCompose.withFactStore
+            let services, sp =
+                composed 3 (FactsCompose.withOptions FactsComposeOptions.defaults)
 
             let outcomes =
                 try
@@ -603,15 +606,17 @@ let offlineTests =
             | other -> failtestf "expected the guard to warn, got %A" other
         }
 
-        testCaseAsync "withFactStoreImplementation replaces the store every fact registration resolves"
+        testCaseAsync "StoreImplementation replaces the store every fact registration resolves"
         <| async {
             let replacement = (blobIndexed None (fun () -> DateTime.UtcNow)).Target
 
             let services, sp =
                 composed
                     3
-                    (FactsCompose.withFactStore
-                     >> FactsCompose.withFactStoreImplementation "test" (fun _ -> replacement))
+                    (FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            StoreImplementation = Some(FactStoreReplacement.create "test" (fun _ -> replacement))
+                    })
 
             Expect.isTrue
                 (obj.ReferenceEquals(sp.GetRequiredService<IFactStore>(), replacement))
@@ -635,7 +640,7 @@ let offlineTests =
             | other -> failtestf "expected one guard, got %d" other.Length
         }
 
-        testCase "withFactStoreImplementation under FeatureMode.Disabled changes nothing"
+        testCase "StoreImplementation under FeatureMode.Disabled changes nothing"
         <| fun _ ->
             let app = {
                 ServerApp.empty with
@@ -649,7 +654,13 @@ let offlineTests =
             }
 
             let after =
-                FactsCompose.withFactStoreImplementation "test" (fun _ -> failwith "never built") app
+                FactsCompose.withOptions
+                    {
+                        FactsComposeOptions.defaults with
+                            StoreImplementation =
+                                Some(FactStoreReplacement.create "test" (fun _ -> failwith "never built"))
+                    }
+                    app
 
             Expect.isNone (ServerApp.serviceConfig after) "no registration"
 

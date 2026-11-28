@@ -1224,7 +1224,12 @@ let private auditTests =
             }
 
             let composed =
-                FactsCompose.withFactPublication (FactPublicationConfig.create [ groupTarget ]) app
+                FactsCompose.withOptions
+                    {
+                        FactsComposeOptions.defaults with
+                            FactPublication = Some(FactPublicationConfig.create [ groupTarget ])
+                    }
+                    app
 
             Expect.isTrue (obj.ReferenceEquals(app, composed)) "FeatureMode.Disabled: the very same app"
         }
@@ -1807,13 +1812,19 @@ let startupTests =
                                 }
                         }
                 }
-                |> FactsCompose.withCoherenceChecksConfig CoherenceConfig.defaults (Trigger.CronTrigger "0 3 * * *") [
-                    {
-                        Name = north
-                        UserId = UserId("svc-" + north)
-                        DisplayName = "the north sweep principal"
-                    }
-                ]
+                |> FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        CoherenceChecks =
+                            Some(
+                                CoherenceCheckSchedule.create CoherenceConfig.defaults (Trigger.CronTrigger "0 3 * * *") [
+                                    {
+                                        Name = north
+                                        UserId = UserId("svc-" + north)
+                                        DisplayName = "the north sweep principal"
+                                    }
+                                ]
+                            )
+                }
 
             // The platform's declared-principal resolver, bound to a resolver
             // that resolves the sweep principal to the north shard.

@@ -287,7 +287,13 @@ let compositionTests =
 
             let app =
                 ragApp (RecordingFactory(CompilingProvider "{}"))
-                |> RagOptions.withFacts FactsCompose.withFactTier
+                |> RagOptions.withFacts (
+                    FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            EnableStore = true
+                            FactTableWriter = true
+                    }
+                )
                 |> deploy storage
                 |> ServerApp.withConfig config
 
@@ -309,7 +315,13 @@ let compositionTests =
                 |> ServerApp.withConfig config
                 |> withRAG (
                     ragApp (RecordingFactory(CompilingProvider "{}"))
-                    |> RagOptions.withFacts FactsCompose.withFactTier
+                    |> RagOptions.withFacts (
+                        FactsCompose.withOptions {
+                            FactsComposeOptions.defaults with
+                                EnableStore = true
+                                FactTableWriter = true
+                        }
+                    )
                 )
 
             let _, sp = build storage app
@@ -341,8 +353,10 @@ let compositionTests =
                                 FactStore = FeatureMode.Enabled
                         }
                 }
-                |> FactsCompose.withFactStore
-                |> FactsCompose.withFactTableWriter
+                |> FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        FactTableWriter = true
+                }
                 |> withRAG (ragApp (RecordingFactory(CompilingProvider "{}")))
 
             let _, sp = build storage app
@@ -363,7 +377,13 @@ let pushDoorTests =
 
             let app =
                 ragApp factory
-                |> RagOptions.withFacts FactsCompose.withFactTier
+                |> RagOptions.withFacts (
+                    FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            EnableStore = true
+                            FactTableWriter = true
+                    }
+                )
                 |> deploy storage
                 |> ServerApp.withConfig config
 
@@ -411,7 +431,13 @@ let pushDoorTests =
 
             let app =
                 ragApp refusing
-                |> RagOptions.withFacts FactsCompose.withFactTier
+                |> RagOptions.withFacts (
+                    FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            EnableStore = true
+                            FactTableWriter = true
+                    }
+                )
                 |> deploy storage
 
             let _, sp = build storage app
@@ -441,8 +467,12 @@ let pushDoorTests =
             let app =
                 ragApp factory
                 |> RagOptions.withFacts (
-                    FactsCompose.withFactTier
-                    >> FactsCompose.withQuestionCompiler AnswerPlanner.noQuestionCompiler
+                    FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            EnableStore = true
+                            FactTableWriter = true
+                            QuestionCompiler = Some AnswerPlanner.noQuestionCompiler
+                    }
                 )
                 |> deploy storage
 
@@ -468,7 +498,17 @@ let pushDoorTests =
 /// The fact tier on a plain `ServerApp` — no AI tier, no provider.
 let private bareFactTier (app: ServerApp) : IServiceCollection =
     let storage = InMemoryBlobStorage() :> IBlobStorage
-    let services, _ = build storage (FactsCompose.withFactTier app)
+
+    let services, _ =
+        build
+            storage
+            ((FactsCompose.withOptions {
+                FactsComposeOptions.defaults with
+                    EnableStore = true
+                    FactTableWriter = true
+            })
+                app)
+
     services
 
 let warningTests =
@@ -480,7 +520,7 @@ let warningTests =
                 Expect.stringContains message "no question compiler" "it says what is missing"
                 Expect.stringContains message "push door" "and which door that leaves dormant"
                 Expect.stringContains message "IAIProviderFactory" "and names the AI-tier remedy"
-                Expect.stringContains message "FactsCompose.withQuestionCompiler" "and the explicit one"
+                Expect.stringContains message "FactsComposeOptions.QuestionCompiler" "and the explicit one"
             | other -> failtestf "expected a Warning, got %A" other
         }
 
@@ -489,7 +529,13 @@ let warningTests =
 
             let app =
                 ragApp (RecordingFactory(CompilingProvider "{}"))
-                |> RagOptions.withFacts FactsCompose.withFactTier
+                |> RagOptions.withFacts (
+                    FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            EnableStore = true
+                            FactTableWriter = true
+                    }
+                )
                 |> deploy storage
 
             let services, _ = build storage app
@@ -504,7 +550,10 @@ let warningTests =
             let services =
                 bareFactTier (
                     ServerApp.empty
-                    |> FactsCompose.withQuestionCompiler AnswerPlanner.noQuestionCompiler
+                    |> FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            QuestionCompiler = Some(AnswerPlanner.noQuestionCompiler)
+                    }
                 )
 
             Expect.equal
@@ -514,7 +563,15 @@ let warningTests =
         }
 
         test "applying the fact tier twice registers ONE guard (preflight names must stay unique)" {
-            let services = bareFactTier (FactsCompose.withFactTier ServerApp.empty)
+            let services =
+                bareFactTier (
+                    (FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            EnableStore = true
+                            FactTableWriter = true
+                    })
+                        ServerApp.empty
+                )
 
             match compilerVerdict services with
             | ConfigValidation.ValidationResult.Warning _ -> ()

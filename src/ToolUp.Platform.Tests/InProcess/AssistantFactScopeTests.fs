@@ -152,7 +152,7 @@ let private servicesWith (model: IAIProvider) : ServiceProvider =
                         }
                 }
         }
-        |> FactsCompose.withFactStore
+        |> FactsCompose.withOptions FactsComposeOptions.defaults
 
     let services = ServiceCollection() :> IServiceCollection
     services.AddSingleton<IBlobStorage>(InMemoryBlobStorage()) |> ignore

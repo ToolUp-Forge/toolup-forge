@@ -86,7 +86,7 @@ let tests =
                                 }
                         }
                 }
-                |> FactsCompose.withFactStore
+                |> FactsCompose.withOptions FactsComposeOptions.defaults
 
             let services = ServiceCollection()
 
@@ -107,7 +107,7 @@ let tests =
 
         test "withFactStore is a no-op under FeatureMode.Disabled (byte-identical)" {
             let before = ServerApp.empty
-            let after = before |> FactsCompose.withFactStore
+            let after = before |> (FactsCompose.withOptions FactsComposeOptions.defaults)
             Expect.isTrue (ServerApp.serviceConfig after).IsNone "no service registration under FeatureMode.Disabled"
             Expect.isTrue (Object.ReferenceEquals(after, before)) "the app is returned unchanged"
         }

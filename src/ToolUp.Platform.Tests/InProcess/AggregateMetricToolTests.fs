@@ -135,7 +135,7 @@ let private factsApp () : ServerApp =
                     }
             }
     }
-    |> FactsCompose.withFactStore
+    |> FactsCompose.withOptions FactsComposeOptions.defaults
 
 let private composed () : ServerApp * ServiceProvider =
     let app = factsApp ()

@@ -914,27 +914,52 @@ let private enabledApp () = {
 
 let private compositionTests =
     testList "composition" [
-        test "a composition with no delegate is the same app" {
-            let app = enabledApp ()
-            Expect.isTrue (obj.ReferenceEquals(app, FactsCompose.withDelegateFacts [] app)) "no table named"
+        test "a composition with no delegate binds no table, and one with no fact store is the same app" {
+            let app =
+                FactsCompose.withOptions
+                    {
+                        FactsComposeOptions.defaults with
+                            DelegateFacts = []
+                    }
+                    (enabledApp ())
+
+            Expect.isEmpty app.FactTableBindings "no table named, none bound"
             let off = ServerApp.empty
-            Expect.isTrue (obj.ReferenceEquals(off, FactsCompose.withDelegateFacts [ "sku-sales" ] off)) "no fact store"
+
+            Expect.isTrue
+                (obj.ReferenceEquals(
+                    off,
+                    FactsCompose.withOptions
+                        {
+                            FactsComposeOptions.defaults with
+                                DelegateFacts = [ "sku-sales" ]
+                        }
+                        off
+                ))
+                "no fact store"
         }
 
-        test "withDelegateFacts binds the table and decorates the store and the writer, end to end" {
-            let app = FactsCompose.withDelegateFacts [ "sku-sales" ] (enabledApp ())
-
-            Expect.contains
-                app.FactTableBindings
-                (BindFactTable("sku-sales", DelegateFact.Destination))
-                "the table is bound to the delegate destination"
-
+        test "DelegateFacts binds the table and decorates the store and the writer, end to end" {
             let clock = tickingClock ()
             let storage = InMemoryBlobStorage() :> IBlobStorage
             let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
             let inner =
                 BlobFactStore.createWithRegistryAndClock storage events (Some registry) clock
+
+            let app =
+                FactsCompose.withOptions
+                    {
+                        FactsComposeOptions.defaults with
+                            StoreImplementation = Some(FactStoreReplacement.create "test" (fun _ -> inner))
+                            DelegateFacts = [ "sku-sales" ]
+                    }
+                    (enabledApp ())
+
+            Expect.contains
+                app.FactTableBindings
+                (BindFactTable("sku-sales", DelegateFact.Destination))
+                "the table is bound to the delegate destination"
 
             let tables = tablesFor FactTableHistoryMode.Replace DelegateFact.Destination
             let services = ServiceCollection() :> IServiceCollection
@@ -973,7 +998,14 @@ let private compositionTests =
         // Phase 946 — the two ways a table cannot be delegated surface at
         // the fact-table preflight, not at the first DI resolution.
         test "a delegated table no module declares fails the fact-table preflight (Phase 946)" {
-            let app = FactsCompose.withDelegateFacts [ "undeclared-table" ] (enabledApp ())
+            let app =
+                FactsCompose.withOptions
+                    {
+                        FactsComposeOptions.defaults with
+                            DelegateFacts = [ "undeclared-table" ]
+                    }
+                    (enabledApp ())
+
             let composition = ServerApp.factTableComposition app
 
             let undeclared =
@@ -1009,7 +1041,10 @@ let private compositionTests =
             let app =
                 enabledApp ()
                 |> ServerApp.addModules [ ServerModule.create "sales" |> ServerModule.declareFactTables [ geo ] ]
-                |> FactsCompose.withDelegateFacts [ "geo-sales" ]
+                |> FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        DelegateFacts = [ "geo-sales" ]
+                }
 
             let codes =
                 FactTablePreflight.defects (ServerApp.factTableComposition app)

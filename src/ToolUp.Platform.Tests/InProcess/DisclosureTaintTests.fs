@@ -1703,7 +1703,7 @@ module private ReachFixtures =
                             }
                     }
             }
-            |> FactsCompose.withFactStore
+            |> FactsCompose.withOptions FactsComposeOptions.defaults
 
         let app =
             if renderTools then

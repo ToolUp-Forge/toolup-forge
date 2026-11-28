@@ -1958,7 +1958,10 @@ let preflightTests =
                         skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Required
                     ]
                 ]
-                |> FactsCompose.withFactTableWriter
+                |> FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        FactTableWriter = true
+                }
 
             Expect.isEmpty (codes app) "no defects"
             Expect.equal (validate app) ConfigValidation.Ok "the validator passes"
@@ -1990,7 +1993,13 @@ let preflightTests =
 
             // withFactTableWriter without the fact store binds nothing, so the
             // hole stays — it is not papered over.
-            let noStore = app |> FactsCompose.withFactTableWriter
+            let noStore =
+                app
+                |> (FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        FactTableWriter = true
+                })
+
             Expect.equal (codes noStore) [ FactTablePreflight.UnboundRequiredRule, DefectError ] "still unbound"
 
             // An Optional table with no store is not a hole.

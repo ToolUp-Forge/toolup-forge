@@ -267,7 +267,7 @@ let private compose
                         }
                 }
         }
-        |> FactsCompose.withFactStore
+        |> FactsCompose.withOptions FactsComposeOptions.defaults
 
     let services = ServiceCollection()
     let blob = InMemoryBlobStorage() :> IBlobStorage
@@ -821,10 +821,12 @@ let zeroCostTests =
             // must return the very object it was handed, so no field is
             // rebuilt and nothing is allocated (GP 13).
             Expect.isTrue
-                (Object.ReferenceEquals(FactsCompose.withFactStore app, app))
-                "withFactStore is the identity on a deployment that did not ask for facts"
+                (Object.ReferenceEquals((FactsCompose.withOptions FactsComposeOptions.defaults) app, app))
+                "withOptions is the identity on a deployment that did not ask for facts"
 
-            Expect.isNone (ServerApp.serviceConfig (FactsCompose.withFactStore app)) "no service config was contributed"
+            Expect.isNone
+                (ServerApp.serviceConfig ((FactsCompose.withOptions FactsComposeOptions.defaults) app))
+                "no service config was contributed"
         }
 
         test "FeatureMode.Disabled registers no hosted service, no recomputer, and does not wrap the data-object store" {
@@ -1005,37 +1007,36 @@ let doubleRunTests =
 let refusalTests =
     testList "a missing composition dependency is a typed refusal" [
 
-        test "team output visibility composed without the fact store's gate names what is missing" {
-            let app =
-                {
-                    ServerApp.empty with
-                        Config = {
-                            ServerConfig.defaults with
-                                Stores = {
-                                    ServerConfig.defaults.Stores with
-                                        FactStore = FeatureMode.Enabled
-                                }
-                        }
-                }
-                |> FactsCompose.withTeamOutputVisibility TeamVisible [ TeamVisible ]
-
-            let services = ServiceCollection()
+        test "a delivery trigger composed without a table writer names what is missing, once, by its field" {
+            let enabled = {
+                ServerApp.empty with
+                    Config = {
+                        ServerConfig.defaults with
+                            Stores = {
+                                ServerConfig.defaults.Stores with
+                                    FactStore = FeatureMode.Enabled
+                            }
+                    }
+            }
 
             let raised =
                 try
-                    match ServerApp.serviceConfig app with
-                    | Some cfg -> cfg services |> ignore
-                    | None -> ()
+                    enabled
+                    |> FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            DeliveryTrigger = Some(fun _ -> [])
+                    }
+                    |> ignore
 
                     None
                 with ex ->
                     Some ex
 
             match raised with
-            | Some(CompositionRefused(CompositionRefusal.MissingDependency(builder, service, _)) as ex) ->
-                Expect.equal builder "FactsCompose.withTeamOutputVisibility" "the refusal names the builder"
-                Expect.equal service "IFactDisclosureGate" "and the missing dependency"
-                Expect.stringContains ex.Message "FactsCompose.withFactStore" "and the step that registers it"
+            | Some(CompositionRefused(CompositionRefusal.MissingDependency(field, service, _)) as ex) ->
+                Expect.equal field "FactsComposeOptions.DeliveryTrigger" "the refusal names the field"
+                Expect.equal service "IFactTableWriter" "and the missing dependency"
+                Expect.stringContains ex.Message "FactTableWriter = true" "and the field that composes it"
             | other -> failtestf "a refusal is typed data a caller can match, not a raw failwith string; got %A" other
         }
     ]

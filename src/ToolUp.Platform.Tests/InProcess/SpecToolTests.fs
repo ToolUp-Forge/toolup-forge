@@ -529,12 +529,18 @@ let private factsApp () : ServerApp =
                     }
             }
     }
-    |> FactsCompose.withFactStore
+    |> FactsCompose.withOptions FactsComposeOptions.defaults
 
 let private registrationTests =
     testList "registration" [
         test "the tool is declared beside the fact tools" {
-            let app = factsApp () |> FactsCompose.withSpecTool totalsTool
+            let app =
+                factsApp ()
+                |> FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        SpecTools = [ FactsComposeOptions.specTool totalsTool ]
+                }
+
             let names = app.AITools |> List.map (fun (d, _) -> d.Name)
             Expect.contains names "total_metric" "declared"
             Expect.contains names "query_facts" "beside the fact tools"
@@ -544,14 +550,24 @@ let private registrationTests =
             Expect.throws
                 (fun () ->
                     factsApp ()
-                    |> FactsCompose.withSpecTool totalsTool
-                    |> FactsCompose.withSpecTool totalsTool
+                    |> FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            SpecTools =
+                                [ FactsComposeOptions.specTool totalsTool ]
+                                @ [ FactsComposeOptions.specTool totalsTool ]
+                    }
                     |> ignore)
                 "one tool per name"
         }
 
         test "no fact store: nothing is declared" {
-            let app = ServerApp.empty |> FactsCompose.withSpecTool totalsTool
+            let app =
+                ServerApp.empty
+                |> FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        SpecTools = [ FactsComposeOptions.specTool totalsTool ]
+                }
+
             Expect.isEmpty app.AITools "unchanged"
         }
     ]

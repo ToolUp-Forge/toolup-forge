@@ -135,6 +135,10 @@ type CodemodMigration =
     /// `BudgetDenial` and `BudgetUsage`; the AI budgets declare a
     /// `BudgetPosture`, and the task-status registry is a DI singleton.
     | OneBudgetVocabulary
+    /// A composition root states its facts configuration as one
+    /// `FactsComposeOptions` record composed by `FactsCompose.withOptions`;
+    /// the `FactsCompose.with*` knob chain is retired.
+    | FactsComposeOptions
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -185,6 +189,7 @@ module CodemodMigration =
             "docs/migrations/1075-redesign-e-one-view-contract-toolkit-locale-and-appshell.md"
         | CodemodMigration.OneBudgetVocabulary ->
             "docs/migrations/1081-redesign-f-budget-posture-and-the-compute-twins-retired.md"
+        | CodemodMigration.FactsComposeOptions -> "docs/migrations/1159-factscompose-options.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -222,6 +227,7 @@ module CodemodMigration =
         | CodemodMigration.KnowledgePolicies -> "Phase 1087"
         | CodemodMigration.OneViewContract -> "Phase 1075"
         | CodemodMigration.OneBudgetVocabulary -> "Phase 1081"
+        | CodemodMigration.FactsComposeOptions -> "Phase 1159"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -2302,6 +2308,12 @@ module Codemod =
             CodemodFileClass.Source
             @"\bAITaskStatusRegistry\.Shared\b"
             "`AITaskStatusRegistry.Shared` is gone: `AICompose` registers one registry per composed server; resolve it from DI (`services.GetService(typeof<AITaskStatusRegistry>)`), or register `AITaskStatusRegistry()` in a hand-built container"
+        review
+            "1159-knob"
+            CodemodMigration.FactsComposeOptions
+            CodemodFileClass.Source
+            @"^(?!\s*//).*\bFactsCompose\.with(?!Options\b)[A-Z]\w*"
+            "a `FactsCompose` knob the codemod could not fold (its arguments span lines, it is applied to an argument, or the chain sets one option twice): state it as a field of the `FactsComposeOptions` record passed to `FactsCompose.withOptions`, by the knob map"
     ]
 
 
@@ -3201,6 +3213,289 @@ module Codemod =
 
         out, List.ofSeq rewrites
 
+    // ── Phase 1159 — the `FactsCompose` knob chain into one options record ──
+    //
+    // A run of consecutive `|> FactsCompose.withX …` pipeline lines, each whole
+    // on its line, becomes ONE `|> FactsCompose.withOptions { … }` line whose
+    // record sets the field each knob named. A knob that takes no argument
+    // (`withFactStore`, `withFactTableWriter`, `withFactTier`) is also a value
+    // anywhere else on a line, so its token becomes the parenthesised
+    // `withOptions` application wherever it stands. Everything else (a knob
+    // whose arguments span lines, a run setting one option twice, a knob
+    // applied to an argument mid-line) is reported, never guessed.
+
+    /// How a knob's arguments become a field of the record.
+    type private KnobField =
+        /// The knob composes the store alone and sets no field.
+        | StoreOnly
+        /// The knob sets these fields to these literal values.
+        | Fixed of (string * string) list
+        /// `Field = Some(<args>)`.
+        | SomeOf of field: string
+        /// `Field = Some(<helper> <args>)`.
+        | SomeVia of field: string * helper: string
+        /// `Field = <args>`, a list; a second knob appends to it.
+        | ListOf of field: string
+        /// `Field = [ <item> ]`, the item built from the arguments; a second
+        /// knob appends to it.
+        | ItemOf of field: string * item: (string -> string option)
+
+    /// The top-level arguments of `text`, split on whitespace outside
+    /// brackets and string literals, or `None` when a bracket is unbalanced.
+    let private topLevelArgs (text: string) : string list option =
+        let args = ResizeArray<string>()
+        let current = StringBuilder()
+        let mutable depth = 0
+        let mutable inString = false
+        let mutable i = 0
+
+        let flush () =
+            if current.Length > 0 then
+                args.Add(current.ToString())
+                current.Clear() |> ignore
+
+        while i < text.Length do
+            let c = text[i]
+
+            if inString then
+                current.Append c |> ignore
+
+                if c = '\\' && i + 1 < text.Length then
+                    current.Append text[i + 1] |> ignore
+                    i <- i + 1
+                elif c = '"' then
+                    inString <- false
+            elif c = '"' then
+                inString <- true
+                current.Append c |> ignore
+            elif c = '(' || c = '[' || c = '{' then
+                depth <- depth + 1
+                current.Append c |> ignore
+            elif c = ')' || c = ']' || c = '}' then
+                depth <- depth - 1
+                current.Append c |> ignore
+            elif Char.IsWhiteSpace c && depth = 0 then
+                flush ()
+            else
+                current.Append c |> ignore
+
+            i <- i + 1
+
+        flush ()
+
+        if depth = 0 && not inString then
+            Some(List.ofSeq args)
+        else
+            None
+
+    /// The knobs and the field each sets. The table is the migration doc's map.
+    let private factsKnobs: Map<string, KnobField> =
+        Map [
+            "withFactStore", StoreOnly
+            "withFactTableWriter", Fixed [ "FactTableWriter", "true" ]
+            "withFactTier", Fixed [ "EnableStore", "true"; "FactTableWriter", "true" ]
+            "withNarrativeCalculations", SomeOf "NarrativeCalculations"
+            "withPipelineProfile", SomeOf "PipelineProfile"
+            "withMethods", SomeOf "Methods"
+            "withFactTablesOptions", SomeOf "FactTables"
+            "withDisclosurePurposes", SomeOf "DisclosurePurposes"
+            "withDeclassificationBudgetConfig", SomeOf "DeclassificationBudgets"
+            "withDisclosureFanOut", SomeOf "DisclosureFanOut"
+            "withFactImport", SomeOf "FactImport"
+            "withCoverageNarratives", SomeOf "CoverageNarratives"
+            "withDeliveryTrigger", SomeOf "DeliveryTrigger"
+            "withQuestionCompiler", SomeOf "QuestionCompiler"
+            "withFactPublication", SomeOf "FactPublication"
+            "withDatasetModels", SomeVia("DatasetModels", "DatasetModelsDeclaration.create")
+            "withDeclassificationBudgets", SomeVia("DeclassificationBudgets", "DeclassificationBudgetConfig.create")
+            "withGroundingEnvelopeSeal", SomeVia("GroundingEnvelopeSeal", "GroundingEnvelopeSealDeclaration.create")
+            "withCoherenceChecksConfig", SomeVia("CoherenceChecks", "CoherenceCheckSchedule.create")
+            "withCoherenceChecks", SomeVia("CoherenceChecks", "CoherenceCheckSchedule.forPrincipal")
+            "withFactStoreImplementation", SomeVia("StoreImplementation", "FactStoreReplacement.create")
+            "withTeamOutputVisibility", SomeVia("TeamOutputVisibility", "TeamOutputVisibilityDeclaration.create")
+            "withToleranceTriggers", ListOf "ToleranceTriggers"
+            "withDelegateFacts", ListOf "DelegateFacts"
+            "withSpecTool", ItemOf("SpecTools", (fun args -> Some("FactsComposeOptions.specTool " + args)))
+            "withWithholdingSurface",
+            ItemOf(
+                "WithholdingSurfaces",
+                fun args ->
+                    match topLevelArgs args with
+                    | Some [ name; surface ] -> Some(name + ", " + surface)
+                    | _ -> None
+            )
+        ]
+
+    /// The record a knob chain states, or `None` when the chain cannot be
+    /// folded without a guess: an argument the table cannot place, or one
+    /// option set twice.
+    let private optionsRecord (knobs: (string * string) list) : string option =
+        let fields = ResizeArray<string * string>()
+
+        let set field value =
+            match fields |> Seq.tryFindIndex (fun (f, _) -> f = field) with
+            | Some _ -> false
+            | None ->
+                fields.Add(field, value)
+                true
+
+        let append field value =
+            match fields |> Seq.tryFindIndex (fun (f, _) -> f = field) with
+            | Some i ->
+                let _, existing = fields[i]
+                fields[i] <- field, existing + " @ " + value
+                true
+            | None ->
+                fields.Add(field, value)
+                true
+
+        let folded =
+            knobs
+            |> List.forall (fun (knob, args) ->
+                (topLevelArgs args).IsSome
+                && match factsKnobs.TryFind knob, args.Trim() with
+                   | Some StoreOnly, ""
+                   | Some(Fixed _), "" ->
+                       match factsKnobs[knob] with
+                       | Fixed values -> values |> List.forall (fun (f, v) -> set f v || fields.Contains((f, v)))
+                       | _ -> true
+                   | Some(SomeOf field), args when args <> "" -> set field ("Some(" + args + ")")
+                   | Some(SomeVia(field, helper)), args when args <> "" ->
+                       set field ("Some(" + helper + " " + args + ")")
+                   | Some(ListOf field), args when args <> "" -> append field args
+                   | Some(ItemOf(field, item)), args when args <> "" ->
+                       match item args with
+                       | Some value -> append field ("[ " + value + " ]")
+                       | None -> false
+                   | _ -> false)
+
+        if not folded then
+            None
+        elif fields.Count = 0 then
+            Some "FactsComposeOptions.defaults"
+        else
+            fields
+            |> Seq.map (fun (f, v) -> f + " = " + v)
+            |> String.concat "; "
+            |> sprintf "{ FactsComposeOptions.defaults with %s }"
+            |> Some
+
+    let private knobLine =
+        Regex(
+            @"^(?<indent>\s*)\|>\s*FactsCompose\.(?<knob>with(?!Options\b)\w+)\b(?<args>.*)$",
+            RegexOptions.CultureInvariant
+        )
+
+    let private knobValue =
+        Regex(
+            @"\bFactsCompose\.(?<knob>withFactStore|withFactTableWriter|withFactTier)\b",
+            RegexOptions.CultureInvariant
+        )
+
+    /// Whether `index` in `line` falls inside a string literal.
+    let private inStringAt (line: string) (index: int) =
+        let mutable inString = false
+        let mutable i = 0
+
+        while i < index do
+            if inString && line[i] = '\\' then
+                i <- i + 1
+            elif line[i] = '"' then
+                inString <- not inString
+
+            i <- i + 1
+
+        inString
+
+    /// Folds every knob chain in `segments` (alternating content / terminator)
+    /// into one `withOptions` line, and rewrites the argument-free knobs used
+    /// as values. Answers the rewritten segments and one rewrite per line.
+    let private foldFactsComposeChains (segments: string[]) : string[] * CodemodRewrite list =
+        let out = Array.copy segments
+        let rewrites = ResizeArray<CodemodRewrite>()
+
+        let knobAt i =
+            if i >= segments.Length then
+                None
+            else
+                let m = knobLine.Match segments[i]
+
+                if
+                    m.Success
+                    && not (m.Groups["args"].Value.Contains "//")
+                    && (optionsRecord [ m.Groups["knob"].Value, m.Groups["args"].Value ]).IsSome
+                then
+                    Some m
+                else
+                    None
+
+        let mutable i = 0
+
+        while i < segments.Length do
+            match knobAt i with
+            | Some first ->
+                let indent = first.Groups["indent"].Value
+
+                let run =
+                    Seq.initInfinite (fun k -> i + 2 * k)
+                    |> Seq.takeWhile (fun j ->
+                        match knobAt j with
+                        | Some m -> m.Groups["indent"].Value = indent
+                        | None -> false)
+                    |> List.ofSeq
+
+                let knobs =
+                    run
+                    |> List.map (fun j ->
+                        let m = (knobAt j).Value
+                        m.Groups["knob"].Value, m.Groups["args"].Value)
+
+                match optionsRecord knobs with
+                | Some record ->
+                    let after = indent + "|> FactsCompose.withOptions " + record
+                    out[i] <- after
+
+                    for j in List.tail run do
+                        out[j] <- ""
+                        out[j - 1] <- ""
+
+                    rewrites.Add {
+                        RuleId = "1159-knob-chain"
+                        Line = i / 2 + 1
+                        Before = segments[i]
+                        After = after
+                    }
+                | None -> ()
+
+                i <- List.last run + 2
+            | None ->
+                let line = segments[i]
+
+                if not (line.TrimStart().StartsWith "//") && knobValue.IsMatch line then
+                    let after =
+                        knobValue.Replace(
+                            line,
+                            fun m ->
+                                match optionsRecord [ m.Groups["knob"].Value, "" ] with
+                                | Some record when not (inStringAt line m.Index) ->
+                                    "(FactsCompose.withOptions " + record + ")"
+                                | _ -> m.Value
+                        )
+
+                    if after <> line then
+                        out[i] <- after
+
+                        rewrites.Add {
+                            RuleId = "1159-knob-value"
+                            Line = i / 2 + 1
+                            Before = line
+                            After = after
+                        }
+
+                i <- i + 2
+
+        out, List.ofSeq rewrites
+
     // ── Per-file decision ─────────────────────────────────────────────
 
     /// The file class a path belongs to, or `None` when the walk skips it.
@@ -3297,10 +3592,16 @@ module Codemod =
                 else
                     clientNested, []
 
+            let folded, chains =
+                if selected CodemodMigration.FactsComposeOptions then
+                    foldFactsComposeChains withMembers
+                else
+                    withMembers, []
+
             let withNamespaces, derived =
                 if selected CodemodMigration.SubsystemNamespaces then
                     let segments, moves =
-                        SubsystemNamespaces.rewrite SubsystemNamespaces.embeddedIndex.Value reach withMembers
+                        SubsystemNamespaces.rewrite SubsystemNamespaces.embeddedIndex.Value reach folded
 
                     segments,
                     moves
@@ -3311,10 +3612,10 @@ module Codemod =
                         After = after
                     })
                 else
-                    withMembers, []
+                    folded, []
 
             String.concat "" withNamespaces,
-            List.ofSeq rewrites @ nestedRewrites @ clientRewrites @ added @ derived
+            List.ofSeq rewrites @ nestedRewrites @ clientRewrites @ added @ chains @ derived
             |> List.sortBy _.Line
         | CodemodFileClass.Project -> rewritten, List.ofSeq rewrites
 
@@ -3534,6 +3835,7 @@ module Codemod =
             CodemodMigration.KnowledgePolicies
             CodemodMigration.OneViewContract
             CodemodMigration.OneBudgetVocabulary
+            CodemodMigration.FactsComposeOptions
         ]
         |> List.tryFind (fun m -> CodemodMigration.label m = "Phase " + phase.Trim())
 

@@ -707,12 +707,24 @@ let tests =
 
         test "the seal composes over the fact store, and a FeatureMode.Disabled deployment is unchanged" {
             let bare =
-                FactsCompose.withGroundingEnvelopeSeal CompositionProfile.Verified None ServerApp.empty
+                FactsCompose.withOptions
+                    {
+                        FactsComposeOptions.defaults with
+                            GroundingEnvelopeSeal =
+                                Some(GroundingEnvelopeSealDeclaration.create CompositionProfile.Verified None)
+                    }
+                    ServerApp.empty
 
             Expect.isNone (ServerApp.serviceConfig bare) "a FeatureMode.Disabled deployment composes nothing (GP 11/13)"
 
             let composed =
-                FactsCompose.withGroundingEnvelopeSeal CompositionProfile.Verified None (groundedApp None)
+                FactsCompose.withOptions
+                    {
+                        FactsComposeOptions.defaults with
+                            GroundingEnvelopeSeal =
+                                Some(GroundingEnvelopeSealDeclaration.create CompositionProfile.Verified None)
+                    }
+                    (groundedApp None)
 
             let services = ServiceCollection()
             services.AddSingleton<IAuditLog>(TestAuditLog()) |> ignore

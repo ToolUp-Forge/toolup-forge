@@ -51,7 +51,10 @@ module PresentationCompose =
 
             let app =
                 app
-                |> FactsCompose.withWithholdingSurface "the fact render tools" FactToolResult
+                |> FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        WithholdingSurfaces = [ "the fact render tools", FactToolResult ]
+                }
 
             match
                 RenderTools.tools
@@ -122,7 +125,10 @@ module PresentationCompose =
                 app with
                     Extensions.Handlers = app.Extensions.Handlers @ [ PageRequestRoute.handler ]
             }
-            |> FactsCompose.withWithholdingSurface "the page requests" FactBrowse
+            |> FactsCompose.withOptions {
+                FactsComposeOptions.defaults with
+                    WithholdingSurfaces = [ "the page requests", FactBrowse ]
+            }
             |> ServerApp.addContribution (Contribution.service owner PageRequestResolvers.register)
 
     /// The layout tools' runtime is contributed under its own slot, so that

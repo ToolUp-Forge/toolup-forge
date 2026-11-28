@@ -135,7 +135,7 @@ type internal FactStoreBackend = { Backend: string }
 /// well, in stronger terms past the upper threshold, naming
 /// `ToolUp.FactStores.Postgres` as the remedy. Warn-only in this release
 /// (operator decision, 2026-09-29) — it never refuses startup. Registered
-/// by `FactsCompose.withFactStore` only when `ServerConfig.MultiInstance.ReplicaCount > 1`.
+/// by `FactsCompose.withOptions` only when `ServerConfig.MultiInstance.ReplicaCount > 1`.
 type BlobFactStoreScaleValidator
     /// The guard over `storage`'s census of the scopes `scopes` enumerates,
     /// at explicit thresholds. `isBlobStore` is whether the composed store
@@ -247,7 +247,7 @@ type internal BlobFactStoreScaleGuard(replicaCount: int, services: IServiceColle
         }
 
 /// Phase 986 — a deployment's explicit question-compiler choice, registered
-/// by `FactsCompose.withQuestionCompiler`. Its presence outranks every
+/// by `FactsComposeOptions.QuestionCompiler`. Its presence outranks every
 /// derived compiler, and it is what tells the startup guard below that a
 /// compiler-less planner was chosen rather than forgotten.
 [<Sealed>]
@@ -282,7 +282,7 @@ type internal FactQuestionCompilerGuard(services: IServiceCollection) =
                     ConfigValidation.ValidationResult.Ok
                 else
                     ConfigValidation.ValidationResult.Warning
-                        "The fact tier is composed but its answer planner has no question compiler, so fact clause planning (the push door: facts placed in the prompt ahead of retrieved passages) refuses every question and never pushes a fact; only the fact tools reach the store. Remedy: compose the AI tier (the planner then compiles through its IAIProviderFactory), register an IAIProvider, or supply a compiler with FactsCompose.withQuestionCompiler. To leave the push door off on purpose, compose FactsCompose.withQuestionCompiler AnswerPlanner.noQuestionCompiler."
+                        "The fact tier is composed but its answer planner has no question compiler, so fact clause planning (the push door: facts placed in the prompt ahead of retrieved passages) refuses every question and never pushes a fact; only the fact tools reach the store. Remedy: compose the AI tier (the planner then compiles through its IAIProviderFactory), register an IAIProvider, or supply a compiler as FactsComposeOptions.QuestionCompiler. To leave the push door off on purpose, set QuestionCompiler = Some AnswerPlanner.noQuestionCompiler."
         }
 
 /// Refuses to start a composition whose tolerance triggers name a table or metric
@@ -308,7 +308,7 @@ type internal ToleranceTriggerGuard(triggers: ToleranceTrigger list, services: I
             | problems ->
                 return
                     ConfigValidation.ValidationResult.Error(
-                        "FactsCompose.withToleranceTriggers: " + String.concat "; " problems
+                        "FactsComposeOptions.ToleranceTriggers: " + String.concat "; " problems
                     )
         }
 

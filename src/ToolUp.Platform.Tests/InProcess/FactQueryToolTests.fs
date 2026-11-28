@@ -98,7 +98,7 @@ let private composedUnder (knob: FeatureMode) (registry: IMetricRegistry option)
                         }
                 }
         }
-        |> FactsCompose.withFactStore
+        |> FactsCompose.withOptions FactsComposeOptions.defaults
 
     let services = ServiceCollection()
 
@@ -218,7 +218,7 @@ let registrationTests =
                     }
             }
 
-            let after = FactsCompose.withFactStore before
+            let after = (FactsCompose.withOptions FactsComposeOptions.defaults) before
 
             Expect.isTrue (obj.ReferenceEquals(before, after)) "withFactStore returns the app itself unchanged"
             Expect.isEmpty after.AITools "no query_facts declaration"

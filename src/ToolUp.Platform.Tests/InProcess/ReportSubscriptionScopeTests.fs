@@ -601,7 +601,13 @@ let private deploy () : Deployment =
         |> ServerApp.withStorage storage
         |> withRAG (
             RagOptions.create (ScriptedFactory(model)) stubProfile constantEmbedder
-            |> RagOptions.withFacts FactsCompose.withFactTier
+            |> RagOptions.withFacts (
+                FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        EnableStore = true
+                        FactTableWriter = true
+                }
+            )
         )
         |> GroundedNarratives.compose (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools) [ summaryRun ]
 

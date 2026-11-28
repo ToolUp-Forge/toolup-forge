@@ -954,15 +954,32 @@ let private recordTests =
 
 // ─── Composition ─────────────────────────────────────────────────────
 
+/// Team output visibility at `defaultLevel` from `allowed`, composed over
+/// `store` when one is named (the gate is then the platform's, over it).
+let private withVisibility
+    (store: IFactStore option)
+    (defaultLevel: TeamVisibilityLevel)
+    (allowed: TeamVisibilityLevel list)
+    (app: ServerApp)
+    =
+    FactsCompose.withOptions
+        {
+            FactsComposeOptions.defaults with
+                StoreImplementation =
+                    store
+                    |> Option.map (fun store -> FactStoreReplacement.create "test" (fun _ -> store))
+                TeamOutputVisibility = Some(TeamOutputVisibilityDeclaration.create defaultLevel allowed)
+        }
+        app
+
 let private composeTests =
     testList "composition" [
 
-        test "withTeamOutputVisibility validates its declaration, and a deployment without a fact store is unchanged" {
+        test "TeamOutputVisibility validates its declaration, and a deployment without a fact store is unchanged" {
             let noFacts = ServerApp.empty
 
             Expect.equal
-                (FactsCompose.withTeamOutputVisibility TeamAdmins [ TeamAdmins ] noFacts)
-                    .Extensions.PreMiddleware.Length
+                (withVisibility None TeamAdmins [ TeamAdmins ] noFacts).Extensions.PreMiddleware.Length
                 noFacts.Extensions.PreMiddleware.Length
                 "FeatureMode.Disabled: nothing composed"
 
@@ -978,13 +995,10 @@ let private composeTests =
             }
 
             Expect.throws
-                (fun () ->
-                    FactsCompose.withTeamOutputVisibility TeamAdmins [ TeamVisible ] withFacts
-                    |> ignore)
+                (fun () -> withVisibility None TeamAdmins [ TeamVisible ] withFacts |> ignore)
                 "a default outside the allowed set fails composition"
 
-            let composed =
-                FactsCompose.withTeamOutputVisibility TeamVisible [ TeamVisible; TeamAdmins ] withFacts
+            let composed = withVisibility None TeamVisible [ TeamVisible; TeamAdmins ] withFacts
 
             Expect.equal
                 composed.Extensions.PreMiddleware.Length
@@ -1014,15 +1028,12 @@ let private composeTests =
                         ServerApp.empty.Extensions with
                             ServiceConfig =
                                 Some(fun s ->
-                                    s.AddSingleton<IFactDisclosureGate>(
-                                        Func<IServiceProvider, IFactDisclosureGate>(fun _ ->
-                                            FactDisclosureGate(store, events, taint = taint) :> IFactDisclosureGate)
-                                    ))
+                                    s.AddSingleton<IEventStore>(events).AddSingleton<DisclosureTaintConfig>(taint))
                     }
             }
 
             let composed =
-                FactsCompose.withTeamOutputVisibility TeamAdmins [ TeamVisible; TeamAdmins ] withGate
+                withVisibility (Some store) TeamAdmins [ TeamVisible; TeamAdmins ] withGate
 
             let services = ServiceCollection()
 
@@ -1094,16 +1105,12 @@ let private composeWith
             Extensions = {
                 ServerApp.empty.Extensions with
                     ServiceConfig =
-                        Some(fun s ->
-                            s.AddSingleton<IFactDisclosureGate>(
-                                Func<IServiceProvider, IFactDisclosureGate>(fun _ ->
-                                    FactDisclosureGate(store, events, taint = taint) :> IFactDisclosureGate)
-                            ))
+                        Some(fun s -> s.AddSingleton<IEventStore>(events).AddSingleton<DisclosureTaintConfig>(taint))
             }
     }
 
     let composed =
-        FactsCompose.withTeamOutputVisibility defaultLevel [ TeamVisible; TeamAdmins ] withGate
+        withVisibility (Some store) defaultLevel [ TeamVisible; TeamAdmins ] withGate
 
     let services = ServiceCollection()
     services.AddSingleton<IBlobStorage>(world.Storage) |> ignore
@@ -1338,8 +1345,7 @@ let private platformTierTests =
             // Composing the axis twice registers one check, not two.
             let composed, _ = composeWith world store events TeamVisible None true
 
-            let twice =
-                FactsCompose.withTeamOutputVisibility TeamVisible [ TeamVisible ] composed
+            let twice = withVisibility None TeamVisible [ TeamVisible ] composed
 
             let services = ServiceCollection()
             services.AddSingleton<IBlobStorage>(world.Storage) |> ignore
@@ -1373,7 +1379,7 @@ let private platformTierTests =
             Expect.isEmpty (knobsOf withFacts) "not composed: no knob, the manifest is unchanged"
 
             Expect.equal
-                (knobsOf (FactsCompose.withTeamOutputVisibility TeamAdmins [ TeamAdmins; TeamVisible ] withFacts))
+                (knobsOf (withVisibility None TeamAdmins [ TeamAdmins; TeamVisible ] withFacts))
                 [
                     "TeamOutputVisibility.Default", "TeamAdmins"
                     "TeamOutputVisibility.Allowed", "TeamVisible, TeamAdmins"

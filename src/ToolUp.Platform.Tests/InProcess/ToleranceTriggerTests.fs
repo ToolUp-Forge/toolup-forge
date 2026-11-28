@@ -798,7 +798,7 @@ let private factApp () : ServerApp =
                     }
             }
     }
-    |> FactsCompose.withFactStore
+    |> FactsCompose.withOptions FactsComposeOptions.defaults
 
 let private composed (app: ServerApp) (services: IServiceCollection) : IServiceCollection =
     match ServerApp.serviceConfig app with
@@ -809,8 +809,11 @@ let private compositionTests =
     let validate (triggers: ToleranceTrigger list) (services: IServiceCollection) =
         let app =
             factApp ()
-            |> FactsCompose.withFactTableWriter
-            |> FactsCompose.withToleranceTriggers triggers
+            |> FactsCompose.withOptions {
+                FactsComposeOptions.defaults with
+                    FactTableWriter = true
+                    ToleranceTriggers = triggers
+            }
 
         composed app services
         |> Seq.choose (fun d ->
@@ -826,7 +829,7 @@ let private compositionTests =
     let refusedNaming (fragment: string) (result: ConfigValidation.ValidationResult) =
         match result with
         | ConfigValidation.ValidationResult.Error message ->
-            Expect.stringContains message "FactsCompose.withToleranceTriggers" "names the builder"
+            Expect.stringContains message "FactsComposeOptions.ToleranceTriggers" "names the field"
             Expect.stringContains message fragment "names what is wrong"
         | other -> failtestf "expected a refusal naming %s, got %A" fragment other
 
@@ -851,8 +854,11 @@ let private compositionTests =
 
             let app =
                 factApp ()
-                |> FactsCompose.withFactTableWriter
-                |> FactsCompose.withToleranceTriggers [ trigger (Tolerance.Absolute 1m) ]
+                |> FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        FactTableWriter = true
+                        ToleranceTriggers = [ trigger (Tolerance.Absolute 1m) ]
+                }
 
             use provider = (composed app services).BuildServiceProvider()
             let writer = provider.GetRequiredService<IFactTableWriter>()
@@ -881,19 +887,29 @@ let private compositionTests =
             Expect.isTrue (writer :? IFactTableOrphanSweep) "the sweep passes through"
         }
 
-        test "composed before withFactTableWriter, the composition is refused naming the order" {
-            let app =
-                factApp ()
-                |> FactsCompose.withToleranceTriggers [ trigger (Tolerance.Absolute 1m) ]
-
-            Expect.throwsC (fun () -> composed app (ServiceCollection()) |> ignore) (fun ex ->
-                Expect.stringContains ex.Message "FactsCompose.withToleranceTriggers" "refused, naming the builder")
+        test "with no table writer the options are refused once, naming the field" {
+            Expect.throwsC
+                (fun () ->
+                    factApp ()
+                    |> FactsCompose.withOptions {
+                        FactsComposeOptions.defaults with
+                            ToleranceTriggers = [ trigger (Tolerance.Absolute 1m) ]
+                    }
+                    |> ignore)
+                (fun ex ->
+                    Expect.stringContains
+                        ex.Message
+                        "FactsComposeOptions.ToleranceTriggers"
+                        "refused, naming the field")
         }
 
         test "with the fact store disabled the app is unchanged" {
             let app =
                 ServerApp.empty
-                |> FactsCompose.withToleranceTriggers [ trigger (Tolerance.Absolute 1m) ]
+                |> FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        ToleranceTriggers = [ trigger (Tolerance.Absolute 1m) ]
+                }
 
             Expect.isEmpty app.Contributions "nothing composed"
         }
@@ -983,7 +999,13 @@ let private compositionTests =
                     "negative"
                 ] do
                 Expect.throwsC
-                    (fun () -> factApp () |> FactsCompose.withToleranceTriggers [ wrong ] |> ignore)
+                    (fun () ->
+                        factApp ()
+                        |> FactsCompose.withOptions {
+                            FactsComposeOptions.defaults with
+                                ToleranceTriggers = [ wrong ]
+                        }
+                        |> ignore)
                     (fun ex -> Expect.stringContains ex.Message fragment "names the reason")
         }
 

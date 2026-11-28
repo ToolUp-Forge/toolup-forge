@@ -71,7 +71,13 @@ let build (deps: Dependencies) : ServerApp =
         |> withRAG (
             RagOptions.create deps.AIProviderFactory deps.ProviderProfile deps.Embedder
             |> RagOptions.withVectorStore (ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore.create deps.Storage None)
-            |> RagOptions.withFacts FactsCompose.withFactTier
+            |> RagOptions.withFacts (
+                FactsCompose.withOptions {
+                    FactsComposeOptions.defaults with
+                        EnableStore = true
+                        FactTableWriter = true
+                }
+            )
         )
         |> Narratives.compose
         |> PublishedPages.captureServices

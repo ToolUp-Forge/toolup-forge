@@ -503,8 +503,10 @@ let private composedContext (pages: bool) : HttpContext * IServiceProvider =
                         }
                 }
         }
-        |> FactsCompose.withFactStore
-        |> FactsCompose.withFactTableWriter
+        |> FactsCompose.withOptions {
+            FactsComposeOptions.defaults with
+                FactTableWriter = true
+        }
         |> fun app ->
             if pages then
                 PresentationCompose.withPageRequests app

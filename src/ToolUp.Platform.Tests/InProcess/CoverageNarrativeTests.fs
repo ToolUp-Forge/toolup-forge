@@ -756,24 +756,23 @@ let private composed
     (ingestor: INarrativeIngestor option)
     (options: CoverageNarrative.CoverageNarrativeOptions)
     : ServiceProvider =
-    let baseApp =
-        {
-            ServerApp.empty with
-                Config = {
-                    ServerConfig.defaults with
-                        Stores = {
-                            ServerConfig.defaults.Stores with
-                                FactStore = FeatureMode.Enabled
-                        }
-                }
-        }
-        |> FactsCompose.withFactStore
+    let baseApp = {
+        ServerApp.empty with
+            Config = {
+                ServerConfig.defaults with
+                    Stores = {
+                        ServerConfig.defaults.Stores with
+                            FactStore = FeatureMode.Enabled
+                    }
+            }
+    }
 
     let app =
-        if armed then
-            FactsCompose.withCoverageNarratives options baseApp
-        else
-            baseApp
+        baseApp
+        |> FactsCompose.withOptions {
+            FactsComposeOptions.defaults with
+                CoverageNarratives = if armed then Some options else None
+        }
 
     let services = ServiceCollection()
     services.AddSingleton<IBlobStorage>(InMemoryBlobStorage()) |> ignore

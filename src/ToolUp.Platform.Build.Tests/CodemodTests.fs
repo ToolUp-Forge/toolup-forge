@@ -271,7 +271,7 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 30 file(s) visited, 170 rewrite(s) in 25 file(s), 154 site(s) for review."
+                        "Codemod: 30 file(s) visited, 170 rewrite(s) in 25 file(s), 155 site(s) for review."
                         "summary")
         ]
 
@@ -959,5 +959,117 @@ let tests =
                 ]
 
                 Expect.isEmpty unresolved "every migration is reachable by --phase"
+        ]
+
+        testList "Phase 1159 — the FactsCompose knob chain into one options record" [
+            let rewriteChains (text: string) =
+                Codemod.rewriteTextFor [ CodemodMigration.FactsComposeOptions ] CodemodFileClass.Source text
+
+            let findChains (text: string) =
+                Codemod.reviewTextFor [ CodemodMigration.FactsComposeOptions ] CodemodFileClass.Source text
+                |> List.map (fun f -> f.RuleId, f.Line)
+
+            testCase "a knob chain becomes one withOptions record, and nothing around it moves"
+            <| fun () ->
+                let source =
+                    String.concat "\n" [
+                        "let app ="
+                        "    ServerApp.empty"
+                        "    |> ServerApp.withStorage blob"
+                        "    |> FactsCompose.withFactStore"
+                        "    |> FactsCompose.withFactTableWriter"
+                        "    |> FactsCompose.withDelegateFacts [ \"sku-sales\" ]"
+                        "    |> FactsCompose.withTeamOutputVisibility TeamVisible [ TeamVisible; TeamAdmins ]"
+                        "    |> FactsCompose.withWithholdingSurface \"the page requests\" FactBrowse"
+                        "    |> FactsCompose.withSpecTool totals"
+                        "    |> FactsCompose.withSpecTool shares"
+                        "    |> ServerApp.run"
+                        ""
+                    ]
+
+                let rewritten, rewrites = rewriteChains source
+
+                Expect.equal
+                    rewritten
+                    (String.concat "\n" [
+                        "let app ="
+                        "    ServerApp.empty"
+                        "    |> ServerApp.withStorage blob"
+                        "    |> FactsCompose.withOptions { FactsComposeOptions.defaults with FactTableWriter = true; DelegateFacts = [ \"sku-sales\" ]; TeamOutputVisibility = Some(TeamOutputVisibilityDeclaration.create TeamVisible [ TeamVisible; TeamAdmins ]); WithholdingSurfaces = [ \"the page requests\", FactBrowse ]; SpecTools = [ FactsComposeOptions.specTool totals ] @ [ FactsComposeOptions.specTool shares ] }"
+                        "    |> ServerApp.run"
+                        ""
+                    ])
+                    "seven knobs, one record; a list field appends"
+
+                Expect.equal (rewrites |> List.map (fun r -> r.RuleId, r.Line)) [ "1159-knob-chain", 4 ] "one rewrite"
+                Expect.isEmpty (findChains rewritten) "nothing left to review"
+
+                let again, none = rewriteChains rewritten
+                Expect.equal again rewritten "a second run is a no-op"
+                Expect.isEmpty none "and plans no rewrite"
+
+            testCase "the store alone is the defaults, and an argument-free knob used as a value is applied in place"
+            <| fun () ->
+                let source =
+                    String.concat "\r\n" [
+                        "let a = app |> FactsCompose.withFactStore"
+                        "    |> FactsCompose.withFactStore"
+                        "let b = RagOptions.withFacts FactsCompose.withFactTier"
+                        "let c = FactsCompose.withFactTableWriter app"
+                        "Expect.stringContains message \"FactsCompose.withFactStore\" \"named\""
+                        "// |> FactsCompose.withFactStore"
+                    ]
+
+                let rewritten, _ = rewriteChains source
+
+                Expect.equal
+                    rewritten
+                    (String.concat "\r\n" [
+                        "let a = app |> (FactsCompose.withOptions FactsComposeOptions.defaults)"
+                        "    |> FactsCompose.withOptions FactsComposeOptions.defaults"
+                        "let b = RagOptions.withFacts (FactsCompose.withOptions { FactsComposeOptions.defaults with EnableStore = true; FactTableWriter = true })"
+                        "let c = (FactsCompose.withOptions { FactsComposeOptions.defaults with FactTableWriter = true }) app"
+                        "Expect.stringContains message \"FactsCompose.withFactStore\" \"named\""
+                        "// |> FactsCompose.withFactStore"
+                    ])
+                    "values become the applied record; a string literal, a comment and the CRLF terminators are kept"
+
+            testCase "a chain the codemod cannot fold without a guess is reported and left alone"
+            <| fun () ->
+                let source =
+                    String.concat "\n" [
+                        "let twice ="
+                        "    app"
+                        "    |> FactsCompose.withMethods first"
+                        "    |> FactsCompose.withMethods second"
+                        "let spanning ="
+                        "    app"
+                        "    |> FactsCompose.withCoverageNarratives ("
+                        "        CoverageNarrativeOptions.everyScope \"reader\""
+                        "    )"
+                        "let applied = FactsCompose.withDelegateFacts [ \"t\" ] app"
+                    ]
+
+                let rewritten, rewrites = rewriteChains source
+
+                Expect.equal rewritten source "nothing is rewritten"
+                Expect.isEmpty rewrites "no rewrite"
+
+                Expect.equal
+                    (findChains rewritten)
+                    [ "1159-knob", 3; "1159-knob", 4; "1159-knob", 7; "1159-knob", 10 ]
+                    "an option set twice, an argument spanning lines and a knob applied mid-line are each reported"
+
+            testCase "the migration is reachable by its phase and cites its migration doc"
+            <| fun () ->
+                Expect.equal
+                    (Codemod.migrationOfPhase "1159")
+                    (Some CodemodMigration.FactsComposeOptions)
+                    "Codemod --phase 1159"
+
+                Expect.equal
+                    (CodemodMigration.doc CodemodMigration.FactsComposeOptions)
+                    "docs/migrations/1159-factscompose-options.md"
+                    "the doc it cites"
         ]
     ]
