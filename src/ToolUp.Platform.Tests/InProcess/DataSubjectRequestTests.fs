@@ -272,20 +272,61 @@ let private adminInTeam (team: string) : AccessContext = {
         PlatformRole = Some PlatformRole.PlatformAdmin
 }
 
-/// A handler over `previews` in `scope`, built the way the route builds one.
-let private apiOver (previews: DataSubjectRequestApiHandler.PendingErasurePreviews) (scope: string) =
+/// A handler over `previews` in `scope` with `erasers` registered, built the
+/// way the route builds one.
+let private apiWith
+    (erasers: IDataExporter.IErasureHandler list)
+    (previews: DataSubjectRequestApiHandler.PendingErasurePreviews)
+    (scope: string)
+    =
     let access = adminInTeam scope
 
     DataSubjectRequestApiHandler.createWithPreviews
         previews
         []
-        []
+        erasers
         ErasurePolicy.Tombstone
         scope
         access.UserId
         access
         DataSubjectRequestApiHandler.noOpAuditCallback
         None
+
+/// A handler over `previews` in `scope`, with no erasure handler registered.
+let private apiOver previews scope = apiWith [] previews scope
+
+/// An erasure handler that counts its runs, takes `hold` over each, and
+/// throws on its first `failFirst` runs.
+type private CountingEraser(hold: System.TimeSpan, failFirst: int) =
+    let mutable runs = 0
+
+    member _.Runs = runs
+
+    interface IDataExporter.IErasureHandler with
+        member _.Name = "counting"
+
+        member _.Erase(_, _, _) = async {
+            let run = System.Threading.Interlocked.Increment &runs
+            do! Async.Sleep(int hold.TotalMilliseconds)
+
+            if run <= failFirst then
+                failwith "the store went away"
+
+            return
+                Ok {
+                    HandlerName = "counting"
+                    RecordsAffected = 1
+                    Note = None
+                }
+        }
+
+        member _.Preview(_, _, _) = async {
+            return {
+                HandlerName = "counting"
+                RecordsAffected = 1
+                Note = None
+            }
+        }
 
 let private previewOn (api: IDataSubjectRequestApi) = async {
     match! api.PreviewErasure eraseInput with
@@ -380,5 +421,43 @@ let previewHolderTests =
             | Ok outcome -> failtestf "a non-admin confirm must be denied; got %A" outcome
 
             Expect.equal previews.Count 1 "the denied confirm leaves the preview in place"
+        }
+
+        testCaseAsync "two confirms of one preview arriving together run the erasure once"
+        <| async {
+            let previews = DataSubjectRequestApiHandler.PendingErasurePreviews()
+            let eraser = CountingEraser(System.TimeSpan.FromMilliseconds 300.0, 0)
+            let api = apiWith [ eraser ] previews "team-a"
+            let! id = previewOn api
+
+            let! cases = Async.Parallel [ confirmCaseOn api id; confirmCaseOn api id ]
+
+            Expect.equal eraser.Runs 1 "the erasure ran once"
+
+            Expect.equal
+                (List.sort (List.ofArray cases))
+                [ "Completed"; "Refused" ]
+                "one confirm runs it, the other is refused as an absent preview is"
+
+            Expect.equal previews.Count 0 "the confirmed preview is removed"
+        }
+
+        testCaseAsync "a confirm whose erasure throws leaves the preview confirmable"
+        <| async {
+            let previews = DataSubjectRequestApiHandler.PendingErasurePreviews()
+            let eraser = CountingEraser(System.TimeSpan.Zero, 1)
+            let api = apiWith [ eraser ] previews "team-a"
+            let! id = previewOn api
+
+            match! api.ConfirmErasure id with
+            | Error msg -> Expect.equal msg "the store went away" "the thrown erasure answers its error"
+            | Ok outcome -> failtestf "the first confirm's erasure throws; got %A" outcome
+
+            Expect.equal previews.Count 1 "the preview waits for a retry"
+
+            let! retried = confirmCaseOn api id
+            Expect.equal retried "Completed" "the admin's retry confirms the same preview"
+            Expect.equal eraser.Runs 2 "the retry ran the erasure again"
+            Expect.equal previews.Count 0 "the confirmed preview is removed"
         }
     ]

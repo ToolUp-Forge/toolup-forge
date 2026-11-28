@@ -278,6 +278,22 @@ type PendingErasurePreviews(ttl: TimeSpan, clock: unit -> DateTimeOffset) =
     member _.Remove(scopeId: string, requestId: DataSubjectRequestId) =
         entries.TryRemove(struct (scopeId, requestId)) |> ignore
 
+    /// Claim the preview of `requestId` under `scopeId` for one confirm: it
+    /// is removed and returned with its expiry in one step, so of two
+    /// confirms arriving together exactly one has it. An expired one is
+    /// removed and reads as absent.
+    member internal _.TryClaim
+        (scopeId: string, requestId: DataSubjectRequestId)
+        : (DataSubjectRequest * DateTimeOffset) option =
+        match entries.TryRemove(struct (scopeId, requestId)) with
+        | true, (request, expiresAt) when expiresAt > clock () -> Some(request, expiresAt)
+        | _ -> None
+
+    /// Give a claimed preview back, with the expiry it was claimed with, when
+    /// its confirm did not run: the admin can confirm it again.
+    member internal _.Release(scopeId: string, request: DataSubjectRequest, expiresAt: DateTimeOffset) =
+        entries.TryAdd(struct (scopeId, request.Id), (request, expiresAt)) |> ignore
+
     /// How many previews the holder carries, expired ones not yet swept included.
     member _.Count = entries.Count
 
@@ -415,42 +431,52 @@ let createWithPreviews
 
                     // Keyed by scope: a preview is confirmed only in the
                     // scope that made it. An expired one reads as absent.
-                    match previews.TryFind(scopeId, requestId) with
+                    // The confirm claims it before the erasure runs, so a
+                    // second confirm arriving meanwhile finds it absent.
+                    match previews.TryClaim(scopeId, requestId) with
                     | None ->
                         return
                             Result.Ok(Refused $"No preview found for request {requestId}. Re-run PreviewErasure first.")
-                    | Some request ->
+                    | Some(request, expiresAt) ->
+                        // A confirm that does not complete (it throws or is
+                        // cancelled) gives the preview back for a retry.
+                        let completed = ref false
+
                         try
-                            let! outcome = executeErase handlers request scopeId
+                            try
+                                let! outcome = executeErase handlers request scopeId
 
-                            let kind =
-                                if outcome.OverallSuccess then
-                                    ErasureCompleted
-                                else
-                                    ErasureFailed
+                                let kind =
+                                    if outcome.OverallSuccess then
+                                        ErasureCompleted
+                                    else
+                                        ErasureFailed
 
-                            let totalAffected =
-                                outcome.PerHandler.Values
-                                |> Seq.sumBy (fun r ->
-                                    match r with
-                                    | Result.Ok s -> s.RecordsAffected
-                                    | _ -> 0)
+                                let totalAffected =
+                                    outcome.PerHandler.Values
+                                    |> Seq.sumBy (fun r ->
+                                        match r with
+                                        | Result.Ok s -> s.RecordsAffected
+                                        | _ -> 0)
 
-                            do!
-                                emitAudit
-                                    kind
-                                    request
-                                    (Map [
-                                        "totalAffected", string totalAffected
-                                        "handlerCount", string outcome.PerHandler.Count
-                                    ])
+                                do!
+                                    emitAudit
+                                        kind
+                                        request
+                                        (Map [
+                                            "totalAffected", string totalAffected
+                                            "handlerCount", string outcome.PerHandler.Count
+                                        ])
 
-                            // One-shot — drop the preview so a second confirm
-                            // doesn't re-run. A run that throws keeps it.
-                            previews.Remove(scopeId, requestId)
-                            return Result.Ok(Completed outcome)
-                        with ex ->
-                            return Result.Error ex.Message
+                                // One-shot: the claimed preview stays gone, so a
+                                // second confirm does not re-run it.
+                                completed.Value <- true
+                                return Result.Ok(Completed outcome)
+                            with ex ->
+                                return Result.Error ex.Message
+                        finally
+                            if not completed.Value then
+                                previews.Release(scopeId, request, expiresAt)
             }
 
         // ─── Phase 9h.A — async export surface ─────────────────────────
