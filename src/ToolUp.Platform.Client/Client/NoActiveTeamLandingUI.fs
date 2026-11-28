@@ -4,8 +4,8 @@
 module ToolUp.Platform.NoActiveTeamLandingUI
 
 open Fuaran.MVU
-open Feliz
-open Toolup.UIToolkit
+open Fable.Core
+open Fable.Core.JsInterop
 
 // SDK built-in no-active-team landing module — the parameterized
 // alternative to a consumer hand-rolling a landing module and pointing
@@ -127,55 +127,36 @@ let internal update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<M
         },
         []
 
-let private statusLine (msgs: NoActiveTeamLandingMessages) (state: CheckState) : ReactElement =
-    match state with
-    | CheckState.Idle -> Html.none
-    | CheckState.Checking -> Html.p [ prop.className $"{Tokens.Text.secondary} text-sm"; prop.text msgs.Checking ]
-    | CheckState.NothingPending ->
-        Html.p [
-            prop.className $"{Tokens.Text.secondary} text-sm"
-            prop.text msgs.NothingPending
-        ]
-    | CheckState.Joined teamName ->
-        Html.p [
-            prop.className $"{Tokens.Text.secondary} text-sm"
-            prop.text (msgs.Joined teamName)
-        ]
-    // The failure text is the server's own message, echoed — not a
-    // literal this file authors, so there is nothing here to translate.
-    | CheckState.Failed message -> Html.p [ prop.className $"{Tokens.Colours.error} text-sm"; prop.text message ]
+/// What the deferred tree component takes. The heading and body stay
+/// `cfg`-supplied: they are the DEPLOYMENT's words about its own product, not
+/// SDK chrome.
+type internal SurfaceProps = {|
+    Model: Model
+    Dispatch: Msg -> unit
+    Messages: NoActiveTeamLandingMessages
+    Title: string
+    Body: string
+    Locale: string
+|}
 
-/// The page. The heading, body and rail label stay `cfg`-supplied: they
-/// are the DEPLOYMENT's words about its own product, not SDK chrome.
+[<Emit("$0.then(m => m.Surface)")>]
+let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
+
+/// The tree's file, fetched on demand with the node vocabulary and the
+/// renderer, so the shell's first load pays nothing for them.
+let private loadSurface () : JS.Promise<obj> =
+    surfaceOf (importDynamic "./NoActiveTeamLandingTree.fs")
+
 let private landingView (cfg: NoActiveTeamLandingConfig) (model: Model) (ctx: RenderContext<Msg>) : PageContent =
-    let msgs = ctx.Messages.NoActiveTeamLanding
-    let dispatch = ctx.Dispatch
-
     PageContent.FullWidth(
-
-        Html.div [
-            prop.className "flex items-center justify-center h-full p-8"
-            prop.children [
-                Html.div [
-                    prop.className "max-w-md text-center space-y-4"
-                    prop.children [
-                        Html.h2 [
-                            prop.className [ "text-xl font-semibold"; Tokens.Text.primary ]
-                            prop.text cfg.Title
-                        ]
-                        Html.p [
-                            prop.className [ "text-sm leading-relaxed"; Tokens.Text.secondary ]
-                            prop.text cfg.Body
-                        ]
-                        statusLine msgs model.State
-                        Forms.Button.primaryWith
-                            (Forms.Button.stateOf (model.State = CheckState.Checking) msgs.Checking false)
-                            msgs.CheckForInvitations
-                            (fun () -> dispatch CheckInvites)
-                    ]
-                ]
-            ]
-        ]
+        TreeSurface.deferred "NoActiveTeamLandingTree.Surface" loadSurface {|
+            Model = model
+            Dispatch = ctx.Dispatch
+            Messages = ctx.Messages.NoActiveTeamLanding
+            Title = cfg.Title
+            Body = cfg.Body
+            Locale = ctx.Locale
+        |}
     )
 
 /// The SDK built-in no-active-team landing from its parameterized config

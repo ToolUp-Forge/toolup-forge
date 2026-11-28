@@ -2541,7 +2541,7 @@ module AuditLog =
         // Each visible <label> sits BESIDE its control rather than wrapping
         // it and this tier has no `for`/`id` pairing convention, so every
         // control carries its own accessible name read from the SAME
-        // binding as the label — see `UsageDashboard.renderControls` for the
+        // binding as the label — see this file's `UsageDashboard.renderControls` for the
         // full rationale.
         let field (label: string) (control: ReactElement) =
             Html.div [
@@ -4653,5 +4653,193 @@ module MigrationStatus =
                 | Remote.Failed message ->
                     StateViews.notice noticeMsgs (Some(Notice.Problem message)) (fun () -> dispatch DismissError)
                 | Remote.Loaded dataTypes -> dataTypesTable msgs model dispatch dataTypes
+            ]
+        ]
+
+/// The usage dashboard's page as Feliz (`UsageDashboard`'s view before its tree).
+module UsageDashboard =
+    open ToolUp.Platform.Usage
+    open UsageDashboard
+
+    let private groupingLabel (msgs: UsageGroupingMessages) =
+        function
+        | ByDay -> msgs.ByDay
+        | ByMonth -> msgs.ByMonth
+        | ByResourceKind -> msgs.ByResourceKind
+        | ByUser -> msgs.ByUser
+
+    let private allGroupings = [ ByDay; ByMonth; ByResourceKind; ByUser ]
+
+    let private formatQuantity (q: decimal) : string = if q = 0M then "0" else q.ToString "N2"
+
+    let private renderRow (row: UsageAggregateRow) =
+        Html.tr [
+            Html.td [
+                prop.className "px-3 py-2 text-sm text-gray-700 font-mono"
+                prop.text row.Bucket
+            ]
+            Html.td [
+                prop.className "px-3 py-2 text-sm text-gray-700 text-right font-mono"
+                prop.text (formatQuantity row.Quantity)
+            ]
+        ]
+
+    let private renderTable (msgs: UsageDashboardMessages) (rows: UsageAggregateRow list) =
+        if List.isEmpty rows then
+            Html.div [
+                prop.className "p-8 text-center text-sm text-gray-500"
+                prop.text msgs.NoRecords
+            ]
+        else
+            Html.table [
+                prop.className "min-w-full divide-y divide-gray-200 border border-gray-200 rounded"
+                prop.children [
+                    Html.thead [
+                        prop.className "bg-gray-50"
+                        prop.children [
+                            Html.tr [
+                                Html.th [
+                                    prop.className
+                                        "px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider"
+                                    prop.text msgs.ColumnBucket
+                                ]
+                                Html.th [
+                                    prop.className
+                                        "px-3 py-2 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider"
+                                    prop.text msgs.ColumnQuantity
+                                ]
+                            ]
+                        ]
+                    ]
+                    Html.tbody [
+                        prop.className "bg-white divide-y divide-gray-200"
+                        prop.children (rows |> List.map renderRow)
+                    ]
+                ]
+            ]
+
+    let private renderControls (msgs: UsageDashboardMessages) (model: Model) (dispatch: Msg -> unit) =
+        // The visible <label> sits BESIDE the select rather than wrapping it, and
+        // this tier has no `for`/`id` pairing convention to associate them — so the
+        // select carries its own accessible name. Without it the control is an
+        // unnamed combo box: it looks labelled to anyone who can see the text, but
+        // a screen reader announces no name and voice control has nothing to say.
+        // Both read from one binding so the visible and announced names cannot drift.
+        let groupByLabel = msgs.GroupByLabel
+
+        Html.div [
+            prop.className "flex flex-wrap items-end gap-4 mb-4"
+            prop.children [
+                Html.div [
+                    prop.className "flex flex-col"
+                    prop.children [
+                        Html.label [ prop.className "text-xs text-gray-600 mb-1"; prop.text groupByLabel ]
+                        Html.select [
+                            prop.ariaLabel groupByLabel
+                            prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
+                            prop.value (groupingLabel msgs.Grouping model.Grouping)
+                            prop.onChange (fun (v: string) ->
+                                allGroupings
+                                |> List.tryFind (fun g -> groupingLabel msgs.Grouping g = v)
+                                |> Option.iter (SetGrouping >> dispatch))
+                            prop.children (
+                                allGroupings
+                                |> List.map (fun g ->
+                                    Html.option [
+                                        prop.value (groupingLabel msgs.Grouping g)
+                                        prop.text (groupingLabel msgs.Grouping g)
+                                    ])
+                            )
+                        ]
+                    ]
+                ]
+                Html.button [
+                    prop.className "px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded"
+                    prop.onClick (fun _ -> dispatch Refresh)
+                    prop.text msgs.Refresh
+                ]
+                Html.button [
+                    prop.className
+                        "px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
+                    prop.disabled model.Exporting
+                    prop.onClick (fun _ -> dispatch ExportCsv)
+                    prop.text (if model.Exporting then msgs.Exporting else msgs.ExportCsv)
+                ]
+            ]
+        ]
+
+    /// The module's page, over the catalog section the view hands it.
+    let body (msgs: UsageDashboardMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
+        Html.div [
+            prop.className "p-4"
+            prop.children [
+                Html.h2 [
+                    prop.className "text-lg font-semibold text-gray-800 mb-2"
+                    prop.text msgs.Heading
+                ]
+                Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
+                renderControls msgs model dispatch
+
+                match model.Aggregate with
+                | Remote.NotAsked -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.ClickRefresh ]
+                | Remote.Loading
+                | Remote.Reloading _ -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
+                | Remote.Loaded rows -> renderTable msgs rows
+                | Remote.Failed err -> StateViews.noticeStatic (Notice.Problem err)
+            ]
+        ]
+
+
+/// The no-active-team landing as Feliz (`NoActiveTeamLandingUI`'s view before its tree).
+module NoActiveTeamLanding =
+    open ToolUp.Platform.NoActiveTeamLandingUI
+
+    let private statusLine (msgs: NoActiveTeamLandingMessages) (state: CheckState) : ReactElement =
+        match state with
+        | CheckState.Idle -> Html.none
+        | CheckState.Checking -> Html.p [ prop.className $"{Tokens.Text.secondary} text-sm"; prop.text msgs.Checking ]
+        | CheckState.NothingPending ->
+            Html.p [
+                prop.className $"{Tokens.Text.secondary} text-sm"
+                prop.text msgs.NothingPending
+            ]
+        | CheckState.Joined teamName ->
+            Html.p [
+                prop.className $"{Tokens.Text.secondary} text-sm"
+                prop.text (msgs.Joined teamName)
+            ]
+        // The failure text is the server's own message, echoed — not a
+        // literal this file authors, so there is nothing here to translate.
+        | CheckState.Failed message -> Html.p [ prop.className $"{Tokens.Colours.error} text-sm"; prop.text message ]
+
+    /// The page, under the deployment's heading and body.
+    let internal body
+        (msgs: NoActiveTeamLandingMessages)
+        (title: string)
+        (body: string)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        : ReactElement =
+        Html.div [
+            prop.className "flex items-center justify-center h-full p-8"
+            prop.children [
+                Html.div [
+                    prop.className "max-w-md text-center space-y-4"
+                    prop.children [
+                        Html.h2 [
+                            prop.className [ "text-xl font-semibold"; Tokens.Text.primary ]
+                            prop.text title
+                        ]
+                        Html.p [
+                            prop.className [ "text-sm leading-relaxed"; Tokens.Text.secondary ]
+                            prop.text body
+                        ]
+                        statusLine msgs model.State
+                        Forms.Button.primaryWith
+                            (Forms.Button.stateOf (model.State = CheckState.Checking) msgs.Checking false)
+                            msgs.CheckForInvitations
+                            (fun () -> dispatch CheckInvites)
+                    ]
+                ]
             ]
         ]

@@ -22,7 +22,11 @@ module ToolUp.AI.Client.Tests.ModuleViewA11yTests
 //
 //     fromUnitInit UsageDashboard.init UsageDashboard.update
 //         |> _.Dispatch(UsageDashboard.AggregateLoaded(Ok rows))
-//         |> _.AssertAccessibleView(ViewMount.mount, UsageDashboard.view)
+//         |> _.AssertAccessibleView(ViewMount.mount, usageView)
+//
+// The dashboard's view mounts its tree through a deferred surface, which a
+// synchronous mount cannot wait for, so `usageView` draws the tree through
+// the renderer's component directly, as the tree's own file draws it.
 //
 // ── Where the seam is, and why jsdom is not in the shipped package ──
 // `ModuleHarness.AssertAccessibleView` takes a `mount: 'View -> string`.
@@ -98,12 +102,9 @@ let private initial () =
 /// constructs a `Model` literally — a hand-built model is a state the
 /// module might never reach, and the point of running the floor through
 /// the harness is that every state it checks is one a user can get to.
-/// The dashboard's page element under the English catalog: its view takes
-/// the shell's `RenderContext` and returns a full-width page.
+/// The dashboard's page under the English catalog: the tree its view mounts.
 let private usageView (model: UsageDashboard.Model) (dispatch: UsageDashboard.Msg -> unit) : ReactElement =
-    match UsageDashboard.view model (RenderContext.create MessageCatalog.english dispatch) with
-    | PageContent.FullWidth element -> element
-    | other -> failwithf "UsageDashboard renders a full-width page, not %A" other
+    TreeViewParityTests.usageTree model dispatch
 
 let private viewStates: ViewState list = [
     {
@@ -167,20 +168,13 @@ type private KnownGap = {
 }
 
 /// The floor found a real defect on its first ordinary module view, which
-/// is the outcome that justifies wiring it: `UsageDashboard.renderControls`
-/// draws its grouping `<select>` beside a `<label>` that neither wraps it
+/// is the outcome that justifies wiring it: the dashboard's Feliz controls
+/// drew its grouping `<select>` beside a `<label>` that neither wraps it
 /// nor carries a `for`, so the control has no programmatic label at all —
 /// a screen reader announces an unnamed combo box, and voice control has
 /// nothing to say. The visible "Group by" text makes it look labelled to
 /// everyone who can see it, which is why it survived to here.
 ///
-/// Pinned rather than fixed because the fix is a one-line edit in
-/// `ToolUp.Platform.Client/Client/UsageDashboard.fs` (give the select an
-/// `id` and the label a `for`, or an `aria-label`), which is a different
-/// lease from this one. Filed as a Tidy-Up item in the same pass.
-///
-/// The guard below refuses to carry a pin that has stopped firing, so
-/// when that edit lands this entry FAILS the pack until it is deleted.
 /// Empty, and that is the point. This pack shipped with one pin —
 /// `UsageDashboard`'s grouping `<select>`, labelled only by a sibling
 /// `<label>` with no `for`, so an unnamed combo box in all six of the
@@ -188,9 +182,9 @@ type private KnownGap = {
 /// the first ordinary module view it was pointed at, which is the argument
 /// for the floor existing.
 ///
-/// Fixed in `UsageDashboard.renderControls` (the select now carries its own
-/// `aria-label`, bound to the same string as the visible label so the two
-/// cannot drift). The pin was deleted in that same commit — required, not
+/// Fixed in the Feliz controls (the select carried its own `aria-label`,
+/// bound to the same string as the visible label so the two could not
+/// drift); the tree's select is wrapped by its label. The pin was deleted in that same commit — required, not
 /// tidy-up: the `every pinned known gap still fires somewhere` case below
 /// goes RED the moment a pinned finding stops firing, because an exemption
 /// that no longer fires is one that has silently stopped checking a class
@@ -406,6 +400,12 @@ let private treeSurfaceTests =
                 (TreeViewParityTests.migrationStates ())
                 TreeViewParityTests.migrationTree)
 
+        testCase "every usage-dashboard state passes the Strict floor as a tree" (fun () ->
+            TreeViewParityTests.strictInEvery (TreeViewParityTests.usageStates ()) TreeViewParityTests.usageTree)
+
+        testCase "every no-active-team landing state passes the Strict floor as a tree" (fun () ->
+            TreeViewParityTests.strictInEvery (TreeViewParityTests.landingStates ()) TreeViewParityTests.landingTree)
+
         testCase "the palette's tree, its overlay an island, passes the Strict floor" (fun () ->
             let html = ViewMount.mount (Components.CommandPaletteTree.Surface paletteProps)
             let node = Accessibility.ofHtml html
@@ -565,6 +565,48 @@ let private treeSurfaceTests =
                     (name + " shows the loading state until its tree arrives")
 
                 Expect.isFalse (page.Contains text) (name + " draws nothing of the tree synchronously"))
+
+        testCase "the fifth batch's views mount their trees on demand, not at boot" (fun () ->
+            let render (view: BuiltInView<'Model, 'Msg>) (model: 'Model) =
+                let ctx = RenderContext.create MessageCatalog.english ignore
+
+                let content =
+                    match view with
+                    | BuiltInView.Page view -> [ view model ctx ]
+                    | BuiltInView.Pages pages -> [ for _, view in pages -> view model ctx ]
+
+                [
+                    for page in content ->
+                        match page with
+                        | PageContent.FullWidth element -> ViewMount.mount element
+                        | other -> failwithf "a full-width page, not %A" other
+                ]
+
+            let landing: NoActiveTeamLandingConfig = {
+                Label = "Welcome"
+                Title = "You're not on a team yet"
+                Body = "Ask a team owner to invite you."
+                Icon = None
+            }
+
+            let pages = [
+                "the usage dashboard",
+                render UsageDashboard.builtIn.View (TreeViewParityTests.usageLoaded ()).Model,
+                MessageCatalog.english.UsageDashboard.Subheading
+                "the no-active-team landing",
+                render
+                    (ToolUp.Platform.NoActiveTeamLandingUI.builtIn landing).View
+                    (TreeViewParityTests.landingInit ()).Model,
+                landing.Body
+            ]
+
+            for name, rendered, text in pages do
+                for page in rendered do
+                    Expect.isTrue
+                        (page.Contains "role=\"status\"" && page.Contains "aria-busy=\"true\"")
+                        (name + " shows the loading state until its tree arrives")
+
+                    Expect.isFalse (page.Contains text) (name + " draws nothing of the tree synchronously"))
     ]
 
 // ─── Cases ───────────────────────────────────────────────────────────
@@ -586,11 +628,11 @@ let tests =
             if not (List.isEmpty failures) then
                 failwith (
                     Accessibility.reportStates Accessibility.Strict failures
-                    + "\n\nEach finding is a control `UsageDashboard.view` renders in that state with \
+                    + "\n\nEach finding is a control the dashboard's tree renders in that state with \
                        no accessible name, no alt text, no label, or invalid ARIA. The rules are \
                        Phase 180's, unchanged; what this pack adds is running them over a MODULE's \
                        own view instead of a hand-built tree. Fix the control in \
-                       `ToolUp.Platform.Client/Client/UsageDashboard.fs`."
+                       `ToolUp.Platform.Client/Client/UsageDashboardTree.fs`."
                 ))
 
         // The half a rule cannot do: a rule reports what is present and
@@ -647,7 +689,7 @@ let tests =
                     ("state \""
                      + st.Name
                      + "\" is missing the view's own copy — the markup captured is \
-                      not `UsageDashboard.view`'s")
+                      not the dashboard tree's")
 
             // And the state-dependent arms really differ, so the states
             // are not six captures of one tree.
@@ -661,8 +703,8 @@ let tests =
                 |> List.find (fun s -> s.Name = "no usage records for this scope")
                 |> fun s -> s.Harness.RenderViewHtml(ViewMount.mount, usageView)
 
-            Expect.isTrue (loaded.Contains "<table") "the loaded state renders the aggregate table"
-            Expect.isFalse (empty.Contains "<table") "the empty state renders the empty copy, not a table")
+            Expect.isTrue (loaded.Contains "role=\"table\"") "the loaded state renders the aggregate table"
+            Expect.isFalse (empty.Contains "role=\"table\"") "the empty state renders the empty copy, not a table")
 
         // The pins have to be load-bearing in both directions: a pinned
         // gap that has been FIXED is a stale pin, and a stale pin is how a

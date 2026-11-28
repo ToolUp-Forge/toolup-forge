@@ -2253,6 +2253,162 @@ let private migrationTests =
             atParity (migrationStates ()) migrationFeliz migrationTree [] tabOrderOnly (fun _ -> false))
     ]
 
+// ─── The subject: the usage dashboard ────────────────────────────────
+
+let private usageMsgs = MessageCatalog.english.UsageDashboard
+
+let private usageFeliz (model: UsageDashboard.Model) (dispatch: UsageDashboard.Msg -> unit) : Feliz.ReactElement =
+    FelizReferenceViews.UsageDashboard.body usageMsgs model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let usageTree (model: UsageDashboard.Model) (dispatch: UsageDashboard.Msg -> unit) : Feliz.ReactElement =
+    lowerTree dispatch (UsageDashboardTree.tree usageMsgs model)
+
+/// The grouping select's accessible name in the tree: its wrapping label,
+/// then its options' text.
+let private groupingName =
+    let g = usageMsgs.Grouping
+    usageMsgs.GroupByLabel + g.ByDay + g.ByMonth + g.ByResourceKind + g.ByUser
+
+let usageRow (bucket: string) (quantity: decimal) : ToolUp.Platform.Usage.UsageAggregateRow = {
+    Bucket = bucket
+    Quantity = quantity
+}
+
+let usageInit () =
+    fromUnitInit UsageDashboard.init UsageDashboard.update
+
+let usageLoaded () =
+    (usageInit ())
+        .Dispatch(
+            UsageDashboard.AggregateLoaded(
+                Ok [
+                    usageRow "ai.tokens" 128500M
+                    usageRow "storage.bytes" 4294967296M
+                    usageRow "ingestion.rows" 0M
+                ]
+            )
+        )
+
+/// The states the usage dashboard is held to, each reached through `update`.
+let usageStates () = [
+    "the first read in flight", usageInit ()
+    "three buckets read", usageLoaded ()
+    "no usage records", (usageInit ()).Dispatch(UsageDashboard.AggregateLoaded(Ok []))
+    "the read failed", (usageInit ()).Dispatch(UsageDashboard.AggregateLoaded(Error "the usage service is unreachable"))
+    "a CSV export in flight", (usageLoaded ()).Dispatch(UsageDashboard.ExportCsv)
+    "regrouped by user, the read in flight",
+    (usageLoaded ()).Dispatch(UsageDashboard.SetGrouping ToolUp.Platform.Usage.ByUser)
+]
+
+let private usageTests =
+    testList "the usage dashboard as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            strictInEvery (usageStates ()) usageTree)
+
+        testCase "assertion 2: the grouping, the reload and the export reach update" (fun () ->
+            (usageLoaded ())
+                .Interact(ViewMount.mountAndInteract, usageTree, Drive.edit groupingName "user")
+                .AssertModelWith(
+                    "the grouping regroups and reads again",
+                    fun m -> m.Grouping = ToolUp.Platform.Usage.ByUser && Remote.isLoading m.Aggregate
+                )
+            |> ignore
+
+            (usageLoaded ())
+                .Interact(ViewMount.mountAndInteract, usageTree, Drive.click usageMsgs.Refresh)
+                .AssertModelWith("Refresh reads the aggregate again", fun m -> Remote.isLoading m.Aggregate)
+            |> ignore
+
+            (usageLoaded ())
+                .Interact(ViewMount.mountAndInteract, usageTree, Drive.click usageMsgs.ExportCsv)
+                .AssertModelWith("Export CSV starts the export", fun m -> m.Exporting)
+            |> ignore)
+
+        // Two differences, both judged, and nothing else. (1) The grouping is a
+        // select its label wraps, so it is named by the label and then its
+        // options, where the Feliz page's was named by an aria-label alone. (2)
+        // The tab order, which differs only by that name. The buttons and their
+        // order match.
+        testCase "assertion 3: parity with the Feliz page, but for the judged differences" (fun () ->
+            let judged (difference: TreeViewParity.Difference) =
+                match difference with
+                | TreeViewParity.TabOrderDiffers _ -> true
+                | _ -> selectRenamed usageMsgs.GroupByLabel difference
+
+            atParity (usageStates ()) usageFeliz usageTree [] judged (fun _ -> false))
+    ]
+
+// ─── The subject: the no-active-team landing ─────────────────────────
+
+let private landingMsgs = MessageCatalog.english.NoActiveTeamLanding
+let private landingTitle = "You're not on a team yet"
+
+let private landingBody =
+    "Ask a team owner to invite you, then check for the invitation here."
+
+let private landingFeliz
+    (model: ToolUp.Platform.NoActiveTeamLandingUI.Model)
+    (dispatch: ToolUp.Platform.NoActiveTeamLandingUI.Msg -> unit)
+    : Feliz.ReactElement =
+    FelizReferenceViews.NoActiveTeamLanding.body landingMsgs landingTitle landingBody model dispatch
+
+/// The module's own tree, drawn as its deferred surface draws it.
+let internal landingTree
+    (model: ToolUp.Platform.NoActiveTeamLandingUI.Model)
+    (dispatch: ToolUp.Platform.NoActiveTeamLandingUI.Msg -> unit)
+    : Feliz.ReactElement =
+    lowerTree dispatch (ToolUp.Platform.NoActiveTeamLandingTree.tree landingMsgs landingTitle landingBody model)
+
+let internal landingInit () =
+    fromUnitInit
+        (fun () -> ToolUp.Platform.NoActiveTeamLandingUI.init ClientModuleContext.empty)
+        ToolUp.Platform.NoActiveTeamLandingUI.update
+
+/// The states the landing is held to, each reached through `update`.
+let internal landingStates () = [
+    "the first check in flight", landingInit ()
+    "nothing pending", (landingInit ()).Dispatch(ToolUp.Platform.NoActiveTeamLandingUI.InvitesChecked(Ok None))
+    "an invitation consumed",
+    (landingInit ())
+        .Dispatch(
+            ToolUp.Platform.NoActiveTeamLandingUI.InvitesChecked(
+                Ok(
+                    Some {
+                        TeamId = "t1"
+                        Name = "Alpha"
+                        CreatedAt = System.DateTime(2026, 11, 1)
+                        Archived = false
+                    }
+                )
+            )
+        )
+    "the check failed",
+    (landingInit ())
+        .Dispatch(ToolUp.Platform.NoActiveTeamLandingUI.InvitesChecked(Error "the invitation service is unreachable"))
+]
+
+let private landingTests =
+    testList "the no-active-team landing as a tree" [
+
+        testCase "assertion 1: every state's tree passes the Strict floor" (fun () ->
+            strictInEvery (landingStates ()) landingTree)
+
+        testCase "assertion 2: Check for invitations reaches update" (fun () ->
+            (landingInit ())
+                .Dispatch(ToolUp.Platform.NoActiveTeamLandingUI.InvitesChecked(Ok None))
+                .Interact(ViewMount.mountAndInteract, landingTree, Drive.click landingMsgs.CheckForInvitations)
+                .AssertModelWith(
+                    "the button checks again",
+                    fun m -> m.State = ToolUp.Platform.NoActiveTeamLandingUI.CheckState.Checking
+                )
+            |> ignore)
+
+        testCase "assertion 3: parity with the Feliz page in every state" (fun () ->
+            atParity (landingStates ()) landingFeliz landingTree [] (fun _ -> false) (fun _ -> false))
+    ]
+
 // ─── What a dispatch constructs ──────────────────────────────────────
 
 /// Of the nodes of `after`, how many are new objects, built for this dispatch,
@@ -2684,6 +2840,23 @@ let private constructedTests =
 
             Expect.isTrue (built <= oneRow) (sprintf "built %d of %d (a one-row page builds %d)" built total oneRow)
             Expect.isTrue (total > 1000) (sprintf "the page holds the 100 rows (%d nodes)" total))
+
+        testCase "the usage dashboard: an export started over 100 buckets builds no row" (fun () ->
+            let many = List.init 100 (fun i -> usageRow (sprintf "bucket-%03d" i) (decimal i))
+
+            let tree m = UsageDashboardTree.tree usageMsgs m
+
+            let built, total =
+                across tree ((usageInit ()).Dispatch(UsageDashboard.AggregateLoaded(Ok many))) UsageDashboard.ExportCsv
+
+            let oneRow, _ =
+                across
+                    tree
+                    ((usageInit ()).Dispatch(UsageDashboard.AggregateLoaded(Ok [ List.head many ])))
+                    UsageDashboard.ExportCsv
+
+            Expect.isTrue (built <= oneRow) (sprintf "built %d of %d (a one-row page builds %d)" built total oneRow)
+            Expect.isTrue (total > 500) (sprintf "the page holds the 100 rows (%d nodes)" total))
     ]
 
 // ─── The kit's own go-red proofs ─────────────────────────────────────
@@ -2912,6 +3085,8 @@ let tests =
         jobsTests
         statusTests
         migrationTests
+        usageTests
+        landingTests
         constructedTests
         goRedTests
         nameTests

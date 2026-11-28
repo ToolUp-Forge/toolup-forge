@@ -40,7 +40,7 @@
          the nupkg; Fable's package loader extracts and compiles source
          directly. Mirrors the Feliz / Fable.Elmish convention. -->
     <ItemGroup>
-        <Content Include="**\*.fsproj;**\*.fs;**\*.svg;**\*.png;**\TreeLoweringRuntime.js;**\TeamManagerTree.js;**\ModuleVisibilityAdminTree.js;**\PlatformAdminTree.js;**\CommandPaletteTree.js;**\SessionSecurityTree.js;**\PermissionsAdminTree.js;**\PlatformUsersTree.js;**\DataSubjectRequestAdminTree.js;**\AuditLogTree.js;**\ExternalContactManagerTree.js;**\HealthMonitorTree.js;**\JobsAdminTree.js;**\ServiceStatusBoardTree.js;**\MigrationStatusTree.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+        <Content Include="**\*.fsproj;**\*.fs;**\*.svg;**\*.png;**\TreeLoweringRuntime.js;**\TeamManagerTree.js;**\ModuleVisibilityAdminTree.js;**\PlatformAdminTree.js;**\CommandPaletteTree.js;**\SessionSecurityTree.js;**\PermissionsAdminTree.js;**\PlatformUsersTree.js;**\DataSubjectRequestAdminTree.js;**\AuditLogTree.js;**\ExternalContactManagerTree.js;**\HealthMonitorTree.js;**\JobsAdminTree.js;**\ServiceStatusBoardTree.js;**\MigrationStatusTree.js;**\UsageDashboardTree.js;**\NoActiveTeamLandingTree.js" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 11.C.2 closure: parent companion README packed into each tier's nupkg. -->
@@ -138,7 +138,7 @@
         <!-- Pure no-active-team landing config + gate-target precedence.
              Ahead of SDK.ClientTypes so the precedence helper carries no
              AgGrid / Icons / ClientConfig.defaults startup deps and stays
-             .NET-testable; the Feliz factory is NoActiveTeamLandingUI.fs. -->
+             .NET-testable; the module factory is NoActiveTeamLandingUI.fs. -->
         <Compile Include="Client\NoActiveTeamLanding.fs" />
         <!-- Phase 570 — the pure sidebar visibility fold (RBAC → admin
              role gate → per-module Visibility → no-team collapse) plus
@@ -434,6 +434,7 @@
         <Compile Include="Client\PermissionsAdminUI.fs" />
         <Compile Include="Client\PermissionsAdminTree.fs" />
         <Compile Include="Client\UsageDashboard.fs" />
+        <Compile Include="Client\UsageDashboardTree.fs" />
         <!-- Phase 529 - audit-trail viewer admin module over
              IAuditViewApi. Auto-injected in non-Anonymous modes unless
              ClientConfig.Slots.AuditViewer = SlotFill.Empty. -->
@@ -454,6 +455,7 @@
         <Compile Include="Client\AdminHome.fs" />
         <!-- Parameterized SDK built-in no-active-team landing module. -->
         <Compile Include="Client\NoActiveTeamLandingUI.fs" />
+        <Compile Include="Client\NoActiveTeamLandingTree.fs" />
         <!-- Phase 44 — the reusable BYOK provider-profile component over
              IProviderProfileApi. Composed by an embedding app (profile API +
              optional verify delegate + surface keys); not auto-injected, so a

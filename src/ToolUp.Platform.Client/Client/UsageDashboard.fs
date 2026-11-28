@@ -5,22 +5,20 @@ module UsageDashboard
 
 open Fuaran.MVU
 open System
-open Feliz
 open Browser
 open Browser.Types
 open Fable.Core
 open Fable.Core.JsInterop
-open Toolup.UIToolkit
 open ToolUp.Platform
 open ToolUp.Platform.Usage
 
 // ─── Usage admin module (client) ─────────────────────────────────
 //
 // Read-only Owner / Admin dashboard. Calls `IUsageQueryApi`
-// (`Aggregate` / `Query` / `ExportCsv`) and renders a date-range
-// picker, a grouping selector, an aggregated table, and a CSV export
-// button. Mirrors `HealthMonitorUI`'s shape — `_sdk.UsageDashboard`
-// reserved Id, `Admin` sidebar group.
+// (`Aggregate` / `ExportCsv`) and renders a grouping selector, an
+// aggregated table and a CSV export of the month to date, drawn by
+// `UsageDashboardTree`. Mirrors `HealthMonitorUI`'s shape —
+// `_sdk.UsageDashboard` reserved Id, `Admin` sidebar group.
 
 type Model = {
     Grouping: UsageGrouping
@@ -146,135 +144,31 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
 
 // ─── View ────────────────────────────────────────────────────────
 
-let private groupingLabel (msgs: UsageGroupingMessages) =
-    function
-    | ByDay -> msgs.ByDay
-    | ByMonth -> msgs.ByMonth
-    | ByResourceKind -> msgs.ByResourceKind
-    | ByUser -> msgs.ByUser
+/// What the deferred tree component takes.
+type internal SurfaceProps = {|
+    Model: Model
+    Dispatch: Msg -> unit
+    Messages: UsageDashboardMessages
+    Locale: string
+|}
 
-let private allGroupings = [ ByDay; ByMonth; ByResourceKind; ByUser ]
+[<Emit("$0.then(m => m.Surface)")>]
+let private surfaceOf (loaded: JS.Promise<obj>) : JS.Promise<obj> = jsNative
 
-let private formatQuantity (q: decimal) : string = if q = 0M then "0" else q.ToString "N2"
-
-let private renderRow (row: UsageAggregateRow) =
-    Html.tr [
-        Html.td [
-            prop.className "px-3 py-2 text-sm text-gray-700 font-mono"
-            prop.text row.Bucket
-        ]
-        Html.td [
-            prop.className "px-3 py-2 text-sm text-gray-700 text-right font-mono"
-            prop.text (formatQuantity row.Quantity)
-        ]
-    ]
-
-let private renderTable (msgs: UsageDashboardMessages) (rows: UsageAggregateRow list) =
-    if List.isEmpty rows then
-        Html.div [
-            prop.className "p-8 text-center text-sm text-gray-500"
-            prop.text msgs.NoRecords
-        ]
-    else
-        Html.table [
-            prop.className "min-w-full divide-y divide-gray-200 border border-gray-200 rounded"
-            prop.children [
-                Html.thead [
-                    prop.className "bg-gray-50"
-                    prop.children [
-                        Html.tr [
-                            Html.th [
-                                prop.className
-                                    "px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider"
-                                prop.text msgs.ColumnBucket
-                            ]
-                            Html.th [
-                                prop.className
-                                    "px-3 py-2 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider"
-                                prop.text msgs.ColumnQuantity
-                            ]
-                        ]
-                    ]
-                ]
-                Html.tbody [
-                    prop.className "bg-white divide-y divide-gray-200"
-                    prop.children (rows |> List.map renderRow)
-                ]
-            ]
-        ]
-
-let private renderControls (msgs: UsageDashboardMessages) (model: Model) (dispatch: Msg -> unit) =
-    // The visible <label> sits BESIDE the select rather than wrapping it, and
-    // this tier has no `for`/`id` pairing convention to associate them — so the
-    // select carries its own accessible name. Without it the control is an
-    // unnamed combo box: it looks labelled to anyone who can see the text, but
-    // a screen reader announces no name and voice control has nothing to say.
-    // Both read from one binding so the visible and announced names cannot drift.
-    let groupByLabel = msgs.GroupByLabel
-
-    Html.div [
-        prop.className "flex flex-wrap items-end gap-4 mb-4"
-        prop.children [
-            Html.div [
-                prop.className "flex flex-col"
-                prop.children [
-                    Html.label [ prop.className "text-xs text-gray-600 mb-1"; prop.text groupByLabel ]
-                    Html.select [
-                        prop.ariaLabel groupByLabel
-                        prop.className "border border-gray-300 rounded px-2 py-1 text-sm"
-                        prop.value (groupingLabel msgs.Grouping model.Grouping)
-                        prop.onChange (fun (v: string) ->
-                            allGroupings
-                            |> List.tryFind (fun g -> groupingLabel msgs.Grouping g = v)
-                            |> Option.iter (SetGrouping >> dispatch))
-                        prop.children (
-                            allGroupings
-                            |> List.map (fun g ->
-                                Html.option [
-                                    prop.value (groupingLabel msgs.Grouping g)
-                                    prop.text (groupingLabel msgs.Grouping g)
-                                ])
-                        )
-                    ]
-                ]
-            ]
-            Html.button [
-                prop.className "px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded"
-                prop.onClick (fun _ -> dispatch Refresh)
-                prop.text msgs.Refresh
-            ]
-            Html.button [
-                prop.className "px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
-                prop.disabled model.Exporting
-                prop.onClick (fun _ -> dispatch ExportCsv)
-                prop.text (if model.Exporting then msgs.Exporting else msgs.ExportCsv)
-            ]
-        ]
-    ]
-
-/// The module's page, over the catalog section the view hands it.
-let private body (msgs: UsageDashboardMessages) (model: Model) (dispatch: Msg -> unit) : ReactElement =
-    Html.div [
-        prop.className "p-4"
-        prop.children [
-            Html.h2 [
-                prop.className "text-lg font-semibold text-gray-800 mb-2"
-                prop.text msgs.Heading
-            ]
-            Html.p [ prop.className "text-sm text-gray-600 mb-4"; prop.text msgs.Subheading ]
-            renderControls msgs model dispatch
-
-            match model.Aggregate with
-            | Remote.NotAsked -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.ClickRefresh ]
-            | Remote.Loading
-            | Remote.Reloading _ -> Html.div [ prop.className "text-sm text-gray-500"; prop.text msgs.Loading ]
-            | Remote.Loaded rows -> renderTable msgs rows
-            | Remote.Failed err -> StateViews.noticeStatic (Notice.Problem err)
-        ]
-    ]
+/// The tree's file, fetched on demand with the node vocabulary and the
+/// renderer, so the shell's first load pays nothing for them.
+let private loadSurface () : JS.Promise<obj> =
+    surfaceOf (importDynamic "./UsageDashboardTree.fs")
 
 let view (model: Model) (ctx: RenderContext<Msg>) : PageContent =
-    PageContent.FullWidth(body ctx.Messages.UsageDashboard model ctx.Dispatch)
+    PageContent.FullWidth(
+        TreeSurface.deferred "UsageDashboardTree.Surface" loadSurface {|
+            Model = model
+            Dispatch = ctx.Dispatch
+            Messages = ctx.Messages.UsageDashboard
+            Locale = ctx.Locale
+        |}
+    )
 
 // ─── Module creation ─────────────────────────────────────────────
 
