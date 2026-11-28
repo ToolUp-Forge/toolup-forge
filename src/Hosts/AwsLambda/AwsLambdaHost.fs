@@ -17,7 +17,7 @@ open ToolUp.Platform.Compose
 
 // ─── ToolUp.Hosts.AwsLambda — AWS Lambda adapter ─────────────────────
 //
-// Phase 16 host-adapter companion. Bridges AWS Lambda invocations
+// Host-adapter companion. Bridges AWS Lambda invocations
 // through `IServerHost.Invoke` so a compose-built ToolUp deployment
 // runs on Lambda (API Gateway REST v1, HTTP API v2, ALB, or Lambda
 // Function URLs) without touching its handler code. Same code-path as
@@ -33,7 +33,14 @@ open ToolUp.Platform.Compose
 // shape so the consumer's Lambda handler doesn't have to box.
 //
 // **Usage in a consumer Lambda project.** A `Function.fs` with one
-// handler per event shape the deployment fronts:
+// handler per event shape the deployment fronts. `ServerApp` has no
+// compose-only entry point: `ServerApp.run` composes and then calls
+// `RunBlocking()`, which a Lambda handler must never do. The one call
+// that returns an `IServerHost` without running it is the low-level
+// `Server.compose`, over a `CompositionPlan`: start from
+// `CompositionPlan.ofConfig` with `ServerConfig.ServerlessHost =
+// ServerlessHost`, and set the plan's `Handlers` (and any other
+// registration field) to what the deployment serves.
 //
 //     module Function
 //
@@ -43,23 +50,22 @@ open ToolUp.Platform.Compose
 //     open Amazon.Lambda.Serialization.SystemTextJson
 //     open ToolUp.Hosts.AwsLambda
 //     open ToolUp.Platform
+//     open ToolUp.Platform.Compose
+//
+//     let config = {
+//         ServerConfig.defaults with
+//             Surfaces = Surfaces.anonymous
+//             ServerlessHost = ServerlessHost
+//             JobScheduler = NoJobScheduler
+//             Webhooks = FeatureMode.Disabled
+//             Notifications = NoNotificationsExplicit
+//             AuditLog = FeatureMode.Disabled
+//             UsageMetering = FeatureMode.Disabled
+//     }
 //
 //     // Compose the SDK once at cold-start; reused for every invocation.
-//     let serverHost: IServerHost =
-//         ServerApp.empty
-//         |> ServerApp.withConfig {
-//             ServerConfig.defaults with
-//                 Mode = Anonymous
-//                 ServerlessHost = ServerlessHost
-//                 JobScheduler = NoJobScheduler
-//                 Webhooks = FeatureMode.Disabled
-//                 Notifications = NoNotificationsExplicit
-//                 AuditLog = FeatureMode.Disabled
-//                 UsageMetering = FeatureMode.Disabled
-//                 HealthStateTracking = false
-//         }
-//         |> ServerApp.addModule (myModule.register ())
-//         |> ServerApp.composeOnly   // hypothetical helper returning IServerHost
+//     let plan = Server.CompositionPlan.ofConfig config
+//     let serverHost: IServerHost = Server.compose { plan with Handlers = myHandlers }
 //
 //     // Start the host once at cold-start (no-op when every
 //     // IHostedService is gated off, but ASP.NET Core internals need
