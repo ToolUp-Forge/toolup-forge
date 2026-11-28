@@ -22,11 +22,6 @@ open ToolUp.Platform
 open CompositionInspectorUI
 open KeepScoped
 
-/// The universal sortable form, written from the instant's components: the
-/// `"u"` format is not one Fable prints.
-let private universal (at: System.DateTime) =
-    sprintf "%04d-%02d-%02d %02d:%02d:%02dZ" at.Year at.Month at.Day at.Hour at.Minute at.Second
-
 let private sameMsgs (a: CompositionInspectorMessages) b = sameObject a b
 
 /// A data row whose cells each hold one line of text, in column order.

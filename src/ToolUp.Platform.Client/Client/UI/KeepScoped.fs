@@ -17,6 +17,12 @@ open Toolup.UIToolkit
 /// catalog section).
 let sameObject (a: 'T) (b: 'T) = obj.ReferenceEquals(box a, box b)
 
+/// An instant as the universal sortable form (`2026-01-02 03:04:05Z`), written
+/// from its components: the `"u"` format is not one Fable prints. The tree
+/// views that show an instant this way share it.
+let universal (at: System.DateTime) =
+    sprintf "%04d-%02d-%02d %02d:%02d:%02dZ" at.Year at.Month at.Day at.Hour at.Minute at.Second
+
 /// A `Keep` per context for rows: one table for the context last drawn,
 /// replaced when `same` says the context moved, so every row is rebuilt once
 /// when it does and only a replaced row record after that.

@@ -21,10 +21,6 @@ open ToolUp.Platform
 open HealthMonitorUI
 open KeepScoped
 
-/// An instant as the universal sortable form, from its components.
-let private universal (at: System.DateTime) =
-    sprintf "%04d-%02d-%02d %02d:%02d:%02dZ" at.Year at.Month at.Day at.Hour at.Minute at.Second
-
 let private badge (id: string) (variant: BadgeVariant) (label: string) : Node<'Msg> =
     Fuaran.badge id {
         Label = Nodes.literal label
