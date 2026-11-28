@@ -287,6 +287,7 @@ ToolUp.Platform.CodemodMigration.ClientConfigByConcern : ToolUp.Platform.Codemod
 ToolUp.Platform.CodemodMigration.CompanionOptions : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.ConnectorKernel : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.Deprecations : ToolUp.Platform.CodemodMigration { get }
+ToolUp.Platform.CodemodMigration.FactsComposeOptions : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.FailureAsData : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.IngestionAttempt : ToolUp.Platform.CodemodMigration { get }
 ToolUp.Platform.CodemodMigration.IsAccessContextRefuses : System.Boolean { get }
@@ -300,6 +301,7 @@ ToolUp.Platform.CodemodMigration.IsClientConfigByConcern : System.Boolean { get 
 ToolUp.Platform.CodemodMigration.IsCompanionOptions : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsConnectorKernel : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsDeprecations : System.Boolean { get }
+ToolUp.Platform.CodemodMigration.IsFactsComposeOptions : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsFailureAsData : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsIngestionAttempt : System.Boolean { get }
 ToolUp.Platform.CodemodMigration.IsJobOutcomes : System.Boolean { get }
@@ -355,6 +357,7 @@ ToolUp.Platform.CodemodMigration+Tags.ClientConfigByConcern : System.Int32 (lite
 ToolUp.Platform.CodemodMigration+Tags.CompanionOptions : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.ConnectorKernel : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.Deprecations : System.Int32 (literal)
+ToolUp.Platform.CodemodMigration+Tags.FactsComposeOptions : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.FailureAsData : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.IngestionAttempt : System.Int32 (literal)
 ToolUp.Platform.CodemodMigration+Tags.JobOutcomes : System.Int32 (literal)

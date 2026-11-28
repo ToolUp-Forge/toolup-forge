@@ -1017,12 +1017,12 @@ package among the assemblies the minimal deployment must not contain.
 ```fsharp skip=fragment
 ServerApp.empty
 |> ServerApp.withStorage blob
-|> FactsCompose.withFactStore
+|> FactsCompose.withOptions FactsComposeOptions.defaults
 |> PostgresFactStoreCompose.withPostgresFactStore connectionString PostgresFactStoreOptions.defaults
 |> ServerApp.run
 ```
 
-`FactsCompose.withFactStoreImplementation` is the seam underneath: it
+`FactsComposeOptions.StoreImplementation` is the seam underneath: it
 replaces the composed `IFactStore`, and every registration built over it —
 the evidence source, the disclosure gate, the resolver, the provenance
 graph, reactive recomputation, the fact tools — follows the replacement.
@@ -1066,7 +1066,7 @@ the live test arm; the same read enumerates the scope on the blob store
 below its index threshold).
 
 **The multi-replica guard.** With `ServerConfig.MultiInstance.ReplicaCount > 1` and the
-blob store composed, `FactsCompose.withFactStore` registers
+blob store composed, `FactsCompose.withOptions` registers
 `BlobFactStoreScaleValidator`: it counts each scope's fact census, warns
 above `BlobFactStoreScale.WarnAboveFacts` (50,000) facts in one scope, and
 warns again, in stronger terms, above `BlobFactStoreScale.RefuseAboveFacts`
@@ -1093,7 +1093,7 @@ application, runs the task and exits without binding a listener. The task is con
 ```fsharp skip=fragment
 ServerApp.empty
 |> ServerApp.withStorage blob
-|> FactsCompose.withFactStore
+|> FactsCompose.withOptions FactsComposeOptions.defaults
 |> PostgresFactStoreCompose.withPostgresFactStore connectionString PostgresFactStoreOptions.defaults
 |> FactStoreMigrationCompose.withFactsMigrateTask
 ```
@@ -1289,7 +1289,7 @@ Migration: [`1150-fact-table-descriptions.md`](../migrations/1150-fact-table-des
 
 A description is optional, and an optional field nobody is told about stays empty. A deployment that declares twenty
 metrics with no `Context` gets discovery tools that report names and units only, and nothing says so. Composing the fact
-store (`FactsCompose.withFactStore`) therefore registers one preflight validator, `fact-declarations-described`
+store (`FactsCompose.withOptions`) therefore registers one preflight validator, `fact-declarations-described`
 (`FactDeclarationsValidator`), that names what is undescribed:
 
 - **Three kinds, one finding.** Each registered metric without `Context`, each declared fact table without a
@@ -1406,7 +1406,7 @@ the facts would come from outside the store, and the id form is the only
 sound one. That is also why it is not a member of `IFactDisclosureGate`,
 which sits below the `Fact` type and has a dozen implementers.
 
-**How a door reaches it.** `FactsCompose.withFactStore` registers
+**How a door reaches it.** `FactsCompose.withOptions` registers
 `IHeldFactDisclosureGate` as `FactDisclosureGate.held` over the composed
 `IFactDisclosureGate` — resolved, not registered beside it, so the two cannot
 disagree and `withTeamOutputVisibility`'s replacement gate is the one judged.
@@ -1480,6 +1480,53 @@ built. The move from the Feliz pages:
 
 ## Composition
 
+### A root states its facts configuration once
+
+A composition root states everything the fact tier composes as one `FactsComposeOptions` value, and
+`FactsCompose.withOptions` composes it: the fact store (where `ServerConfig.Stores.FactStore` enables it, or where
+`EnableStore = true` turns it on), and every field over it. `FactsComposeOptions.defaults` composes the store alone,
+and every field defaults to absent.
+
+```fsharp skip=fragment
+ServerApp.empty
+|> ServerApp.withStorage blob
+|> ServerApp.addModules [ salesModule ]
+|> FactsCompose.withOptions {
+    FactsComposeOptions.defaults with
+        FactTableWriter = true
+        DelegateFacts = [ "sku-sales" ]
+        ToleranceTriggers = [ revenueMoved ]
+        TeamOutputVisibility = Some(TeamOutputVisibilityDeclaration.create TeamVisible [ TeamVisible; TeamAdmins ])
+        PipelineProfile = Some profile
+        Methods = Some methods
+}
+|> ServerApp.run
+```
+
+The value is the whole configuration, so a test can construct it, compare it and assert on it, and three things follow
+from composing it once:
+
+- **The order is fixed.** The fields apply in one order whatever order the record is written in: the store and its
+  replacement (`StoreImplementation`), the gate's facets (`DisclosurePurposes`, `DeclassificationBudgets`,
+  `DisclosureFanOut`), the table writer, the decorations over the store and the writer (`DelegateFacts`,
+  `CoverageNarratives`, `DeliveryTrigger`, `ToleranceTriggers`, `TeamOutputVisibility`), the services over them
+  (`FactPublication`, `FactImport`, `CoherenceChecks`), the tools (`NarrativeCalculations`, `PipelineProfile`,
+  `SpecTools`, `Methods`, `DatasetModels`, `FactTables`), the `WithholdingSurfaces`, and the `GroundingEnvelopeSeal`
+  last, so the seal covers everything the options compose. No field has to be "inserted after" another.
+- **A contradiction is refused once, by name.** `FactsComposeOptions.refusals` reads the record as a whole: a
+  `DeliveryTrigger` or `ToleranceTriggers` with no table writer (`FactTableWriter` or `DelegateFacts`), a malformed
+  tolerance trigger or visibility declaration, a tool declared twice. `withOptions` raises the first, as a typed
+  `CompositionRefused` naming the field (`FactsComposeOptions.DeliveryTrigger`), before anything composes. A
+  deployment without the fact store composes nothing and refuses nothing.
+- **The store composes once.** A later `withOptions` composes only its own fields over the store an earlier one
+  composed, and reads what that one composed (a writer it bound admits a later trigger). That is how a companion
+  builder adds to a root's options: `PostgresFactStoreCompose.withPostgresFactStore` sets `StoreImplementation`, and
+  `PresentationCompose` names its `WithholdingSurfaces`.
+
+The `FactsCompose.with*` functions each set one field and are obsolete;
+[`docs/migrations/1159-factscompose-options.md`](../migrations/1159-factscompose-options.md) has the map and the codemod
+that rewrites a chain.
+
 `ServerConfig.Stores.FactStore` (default `FeatureMode.Disabled`) is the introspectable
 slot the composition manifest / composable-surface descriptor report as
 the resolved fact-store kind. Compose the store today via
@@ -1520,7 +1567,7 @@ refuses every question, so the push door is dormant.
 `list_metric_coverage` reports by metric. `list_fact_tables(table?)` reports by table: which metrics sit together, in
 which hierarchy, at which level and grain, refreshed how often and when last. A model asked for "the top four countries
 for orders" learns from it, before it plans, whether any table holds orders at the country level. It is declared by the
-same knob as the other fact tools (`FactsCompose.withFactStore`, through `NarrativeGrounding.factTools`, the one list
+same knob as the other fact tools (the fact store `FactsCompose.withOptions` composes, through `NarrativeGrounding.factTools`, the one list
 the grounded narrative also offers), server-resident, declaring `ReadFacts`.
 
 - **What it returns per table.** The id and description; the hierarchy, the level and the path of levels from the
@@ -1540,7 +1587,7 @@ the grounded narrative also offers), server-resident, declaring `ReadFacts`.
   committed rows carry no value that could be checked is withheld, saying so; a table with no committed row has
   nothing to withhold and is described. The sample is a floor, not a proof, as coverage's probe is.
 - **A small level names its members.** The level a table's rows sit at lists its members' names when it holds at most a
-  declared cap of distinct members; a deployment declares the cap with `FactsCompose.withFactTablesOptions` after `withFactStore` (default 20,
+  declared cap of distinct members; a deployment declares the cap as `FactsComposeOptions.FactTables` (default 20,
   `MemberCap = 0` turns it off, `FactTablesOptions.membersOff`); the options are captured at composition, never read from
   the container per request. On that level's entry of `path` the result carries a
   `members` block: `listed: true` with `names` (ordinal-sorted), `count` and `unlisted`, or `listed: false` with the
@@ -1558,7 +1605,7 @@ the grounded narrative also offers), server-resident, declaring `ReadFacts`.
 
 The model never adds figures itself. `aggregate_metric(metric, subject_hierarchy, group_by_level, path_prefix?,
 period_from?, period_to?, as_of?)` sums one metric by group, on the server, from facts the disclosure gate admitted.
-It is declared by the same knob as the other fact tools (`FactsCompose.withFactStore`, through
+It is declared by the same knob as the other fact tools (the fact store `FactsCompose.withOptions` composes, through
 `NarrativeGrounding.factTools`, which the grounded narrative offers too), server-resident, declaring `ReadFacts`, and
 built on `FactTool.define`.
 
@@ -1730,7 +1777,9 @@ let profile =
     | Ok registered -> registered
     | Error refusals -> failwithf "%A" (refusals |> List.map PipelineProfileRefusal.describe)
 
-let app = app |> FactsCompose.withPipelineProfile profile
+let app =
+    app
+    |> FactsCompose.withOptions { FactsComposeOptions.defaults with PipelineProfile = Some profile }
 
 let prompt =
     SystemPromptBuilder.promptFragments
@@ -1884,7 +1933,7 @@ budget is the definition's, applied by the AI tool registry like every tool's.
 validator found in one call. The door's own refusals are `SpecDoorRefusal`. `PipelineRefusal`
 implements the interface, and its door cases read exactly as they did.
 
-`FactsCompose.withSpecTool tool` declares a tool beside the fact tools, as a string-returning tool on
+`SpecTools = [ FactsComposeOptions.specTool tool ]` declares a tool beside the fact tools, as a string-returning tool on
 `ServerApp.AITools`; it arms where the AI companion is composed and refuses a second tool of the
 same name. `evaluate_pipeline` is `PipelineTool.specToolUnder profile`, behaviour-preserving: its
 refusal text, summary, block part and asserted facts are unchanged.
@@ -1942,7 +1991,7 @@ What registration generates for each card, so nothing is written twice:
   fragment nor callable.
 - **`describe_method`**, which answers a card's full text on demand, the examples included.
 
-Compose it with `FactsCompose.withMethods profile`, which declares every tool beside the fact tools
+Compose it as `FactsComposeOptions.Methods`, which declares every tool beside the fact tools
 and refuses a name already declared, and serve the fragment through the AI tier's fragment seam, whose
 builder reports its size at boot:
 
@@ -1952,7 +2001,8 @@ let methods =
     | Ok profile -> profile
     | Error refusals -> failwith (refusals |> List.map MethodRegistrationRefusal.describe |> String.concat "; ")
 
-app |> FactsCompose.withMethods methods
+app
+|> FactsCompose.withOptions { FactsComposeOptions.defaults with Methods = Some methods }
 
 SystemPromptBuilder.promptFragments (Some logger) [ PromptFragment.create methods.Description methods.Fragment ]
 ```
@@ -1971,7 +2021,7 @@ the text-answering form; a deployment composing the presentation tier's block-an
 The planner takes its compiler from the first of these that the
 composition provides:
 
-1. **An explicit choice** — `FactsCompose.withQuestionCompiler compiler`.
+1. **An explicit choice** — `FactsComposeOptions.QuestionCompiler = Some compiler`.
 2. **A registered `IAIProvider`** — the structured-output compiler over it.
 3. **The AI tier's `IAIProviderFactory`** — the registration every AI or
    RAG composition makes. The compiler resolves a provider per plan, as the
@@ -1986,7 +2036,7 @@ With none of them, the planner refuses every question, and a startup
 warning — validator `fact-question-compiler` — says so and names the
 remedies. To keep the push door off deliberately, and silence the warning,
 choose the no-op compiler:
-`FactsCompose.withQuestionCompiler AnswerPlanner.noQuestionCompiler`.
+`QuestionCompiler = Some AnswerPlanner.noQuestionCompiler`.
 `RagOptions.withFactClausePlanning false` instead stops a RAG app from
 consulting the planner at all.
 
@@ -2027,7 +2077,7 @@ configuration. A reader who sees no withheld-point note on a chart, table or nar
 nothing was withheld, which under `CannotWithhold` is the only thing that could have happened.
 
 When a builder arms a withholding surface (`withRenderTools` asks at `ToolResult`, `withPageRequests` at `Browse`) it
-registers it with `FactsCompose.withWithholdingSurface`, and the fact tier's preflight check `fact-disclosure-reach`
+registers it as `FactsComposeOptions.WithholdingSurfaces`, and the fact tier's preflight check `fact-disclosure-reach`
 reports `FACTS-DISCLOSURE-CANNOT-TAINT` when the reach at the composed surfaces is `CannotWithhold`. It names each
 policy, its mode and what it permits. It is a report, never a refusal: a Warning when the deployment requires
 authentication, an Info line in the log otherwise. `TOOLUP_ACCEPT_PLAIN_DISCLOSURE=1` acknowledges a plain
@@ -2044,15 +2094,21 @@ and still withholds at the rest.
 ServerApp.empty
 |> RAGCompose.withRAG (
     RagOptions.create factory providerProfile embedder
-    |> RagOptions.withFacts FactsCompose.withFactTier
+    |> RagOptions.withFacts (
+        FactsCompose.withOptions {
+            FactsComposeOptions.defaults with
+                EnableStore = true
+                FactTableWriter = true
+        }
+    )
 )
 |> ServerApp.withConfig config
 |> ServerApp.run
 ```
 
-`FactsCompose.withFactTier` switches `ServerConfig.Stores.FactStore` on and
-applies `withFactStore` and `withFactTableWriter`. `RagOptions.withFacts`
-applies it to the deployment when the RAG tier is **composed**, at resolve,
+`EnableStore = true` switches `ServerConfig.Stores.FactStore` on, and
+`FactTableWriter = true` composes the default writer. `RagOptions.withFacts`
+applies the composition to the deployment when the RAG tier is **composed**, at resolve,
 so `withRAG` may sit on either side of `withConfig` — which replaces the
 whole `ServerConfig`, fact-store knob included. Because a RAG app always
 composes the AI tier, this one call arms both doors: the tools through the
