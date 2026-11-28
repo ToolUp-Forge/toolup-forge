@@ -1407,7 +1407,7 @@ type ServerApp = {
     /// Set it with `ServerApp.withModelExecution`.
     ModelExecutionCompose: ComposeModelExecution.ModelExecutionComposeOptions option
     /// The team output-visibility declaration (default level and
-    /// allowed set), recorded by `FactsCompose.withTeamOutputVisibility` so
+    /// allowed set), recorded by `FactsComposeOptions.TeamOutputVisibility` so
     /// `compositionManifest` can project it. `None` — the default — means
     /// team output visibility is not composed, and the manifest carries no
     /// knob for it (byte-identical to before this field).

@@ -497,7 +497,7 @@ let buildRouteHandlers
     // Phase 936 — TeamOutputVisibilityApi mount. Always-on, like the user
     // directory above: a team-settings client resolves it in every
     // deployment, and until team output visibility is composed
-    // (`FactsCompose.withTeamOutputVisibility`) it answers "not enabled"
+    // (`FactsComposeOptions.TeamOutputVisibility`) it answers "not enabled"
     // and refuses a change. Moved here from the AI companion, which
     // mounted it only in deployments that composed the assistant.
     let teamOutputVisibilityApiHandler: HttpHandler list = [ makeApi TeamPolicyStore.teamOutputVisibilityApi ]
