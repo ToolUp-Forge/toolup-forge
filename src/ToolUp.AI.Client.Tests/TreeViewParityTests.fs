@@ -2409,6 +2409,217 @@ let private landingTests =
             atParity (landingStates ()) landingFeliz landingTree [] (fun _ -> false) (fun _ -> false))
     ]
 
+// ─── The subject: the composition inspector ──────────────────────────
+
+let private inspectorMsgs = MessageCatalog.english.CompositionInspector
+
+let private inspectorFeliz
+    (panel: InspectorPanel)
+    (model: CompositionInspectorUI.Model)
+    (dispatch: CompositionInspectorUI.Msg -> unit)
+    : Feliz.ReactElement =
+    FelizReferenceViews.CompositionInspector.page inspectorMsgs panel model dispatch
+
+/// One panel's page as its deferred surface draws it.
+let inspectorTree
+    (panel: InspectorPanel)
+    (model: CompositionInspectorUI.Model)
+    (dispatch: CompositionInspectorUI.Msg -> unit)
+    : Feliz.ReactElement =
+    lowerTree dispatch (CompositionInspectorTree.tree inspectorMsgs panel model)
+
+let inspectorPanels = [
+    CompositionPanel
+    SurfacesPanel
+    RulesPanel
+    DisclosurePanel
+    ProvenancePanel
+]
+
+let inspectedComponent (id: string) (impl: string option) : InspectedComponent = {
+    Id = id
+    Kind = "module"
+    Label = id + " label"
+    Impl = impl
+}
+
+let private composition: CompositionView = {
+    SchemaVersion = 1
+    Modules = [
+        inspectedComponent "HelloWorld" None
+        inspectedComponent "_sdk.TeamManager" (Some "built-in")
+    ]
+    CompanionSlots = []
+    DataTypes = [ inspectedComponent "HelloWorldGreeting" None ]
+    Tools = []
+    Metrics = []
+    Subjects = []
+    Purposes = []
+    ConfigKnobs = [ { Name = "Surfaces"; Value = "team" } ]
+    CanonicalMethods = []
+}
+
+let private surfaces: SurfacesView = {
+    Descriptors = [
+        {
+            Family = "page"
+            Subject = "home"
+            Json = """{"route":"/"}"""
+        }
+    ]
+    Note = None
+}
+
+let private rules: RulesView = {
+    Rules = [
+        {
+            Code = "RM-1"
+            Severity = "Error"
+            RuleClass = "structural"
+            Description = "every module declares a route"
+        }
+    ]
+    Defects = [
+        {
+            Code = "RM-1"
+            Severity = "Error"
+            Message = "a module declares no route"
+        }
+    ]
+    CapturedAtUtc = System.DateTime(2026, 11, 28, 9, 30, 0, System.DateTimeKind.Utc)
+}
+
+let private disclosure: DisclosureView = {
+    SchemaVersion = 1
+    Declarations = [
+        {
+            Facet = "processing"
+            Subject = "greeting"
+            Value = "stored for the session"
+        }
+    ]
+    Digest = "sha256:0123456789abcdef"
+}
+
+let private provenance: ProvenanceView = {
+    GraphComposed = true
+    FactEvidenceComposed = false
+    ArtifactProvenanceComposed = false
+}
+
+let inspectorInit () =
+    fromUnitInit CompositionInspectorUI.init CompositionInspectorUI.update
+
+let inspectorLoaded () =
+    (inspectorInit ())
+        .Dispatch(CompositionInspectorUI.CompositionLoaded(Ok composition))
+        .Dispatch(CompositionInspectorUI.SurfacesLoaded(Ok surfaces))
+        .Dispatch(CompositionInspectorUI.RulesLoaded(Ok rules))
+        .Dispatch(CompositionInspectorUI.DisclosureLoaded(Ok disclosure))
+        .Dispatch(CompositionInspectorUI.ProvenanceLoaded(Ok provenance))
+
+/// Every panel declaring nothing: the empty arm of each list.
+let private inspectorEmpty () =
+    (inspectorInit ())
+        .Dispatch(
+            CompositionInspectorUI.CompositionLoaded(
+                Ok {
+                    composition with
+                        Modules = []
+                        DataTypes = []
+                        ConfigKnobs = []
+                }
+            )
+        )
+        .Dispatch(
+            CompositionInspectorUI.SurfacesLoaded(
+                Ok {
+                    Descriptors = []
+                    Note = Some "no surfaces registered"
+                }
+            )
+        )
+        .Dispatch(CompositionInspectorUI.RulesLoaded(Ok { rules with Rules = []; Defects = [] }))
+        .Dispatch(CompositionInspectorUI.DisclosureLoaded(Ok { disclosure with Declarations = [] }))
+        .Dispatch(CompositionInspectorUI.ProvenanceLoaded(Ok provenance))
+
+let private inspectorFailed () =
+    let failed = "no composition snapshot was recorded"
+
+    (inspectorInit ())
+        .Dispatch(CompositionInspectorUI.CompositionLoaded(Error failed))
+        .Dispatch(CompositionInspectorUI.SurfacesLoaded(Error failed))
+        .Dispatch(CompositionInspectorUI.RulesLoaded(Error failed))
+        .Dispatch(CompositionInspectorUI.DisclosureLoaded(Error failed))
+        .Dispatch(CompositionInspectorUI.ProvenanceLoaded(Error failed))
+
+/// The states each panel is held to, each reached through `update`; the
+/// export states export the panel the page draws.
+let inspectorStates (panel: InspectorPanel) = [
+    "every panel loading", inspectorInit ()
+    "every panel read", inspectorLoaded ()
+    "every panel declaring none", inspectorEmpty ()
+    "every read refused", inspectorFailed ()
+    "this panel's export in flight", (inspectorLoaded ()).Dispatch(CompositionInspectorUI.ExportRequested panel)
+    "this panel's export refused",
+    (inspectorLoaded ())
+        .Dispatch(CompositionInspectorUI.ExportRequested panel)
+        .Dispatch(CompositionInspectorUI.ExportComplete(panel, Error "the export was refused"))
+]
+
+/// The Rules page's states with a read: the Feliz page threw drawing the
+/// capture instant ("u" is not a date format Fable prints).
+let private rulesReadStates = [
+    "every panel read"
+    "every panel declaring none"
+    "this panel's export in flight"
+    "this panel's export refused"
+]
+
+let private inspectorTests =
+    testList "the composition inspector as trees" [
+
+        testCase "assertion 1: every panel's tree passes the Strict floor in every state" (fun () ->
+            for panel in inspectorPanels do
+                strictInEvery
+                    [
+                        for name, harness in inspectorStates panel -> sprintf "%A, %s" panel name, harness
+                    ]
+                    (inspectorTree panel))
+
+        testCase "assertion 2: a panel's export and refresh reach update" (fun () ->
+            (inspectorLoaded ())
+                .Interact(ViewMount.mountAndInteract, inspectorTree RulesPanel, Drive.click inspectorMsgs.ExportJson)
+                .AssertModelWith("Export JSON exports the page's panel", fun m -> m.Exporting = Some RulesPanel)
+            |> ignore
+
+            (inspectorLoaded ())
+                .Interact(ViewMount.mountAndInteract, inspectorTree SurfacesPanel, Drive.click inspectorMsgs.Refresh)
+                .AssertModelWith(
+                    "Refresh reads every panel again",
+                    fun m -> m.Composition = CompositionInspectorUI.PanelLoading
+                )
+            |> ignore)
+
+        // No difference but the tab order is judged. The Rules page's states
+        // with a read are held to throwing on the Feliz side and compared no
+        // further: the tree draws the capture instant from its components.
+        testCase "assertion 3: every panel at parity with its Feliz page" (fun () ->
+            for panel in inspectorPanels do
+                let throws = if panel = RulesPanel then rulesReadStates else []
+
+                try
+                    atParity
+                        (inspectorStates panel)
+                        (inspectorFeliz panel)
+                        (inspectorTree panel)
+                        throws
+                        tabOrderOnly
+                        (fun _ -> false)
+                with e ->
+                    failwithf "%A: %s" panel e.Message)
+    ]
+
 // ─── What a dispatch constructs ──────────────────────────────────────
 
 /// Of the nodes of `after`, how many are new objects, built for this dispatch,
@@ -2857,6 +3068,29 @@ let private constructedTests =
 
             Expect.isTrue (built <= oneRow) (sprintf "built %d of %d (a one-row page builds %d)" built total oneRow)
             Expect.isTrue (total > 500) (sprintf "the page holds the 100 rows (%d nodes)" total))
+
+        testCase "the composition inspector: an export started over 100 modules builds no row" (fun () ->
+            let withModules count =
+                (inspectorLoaded ())
+                    .Dispatch(
+                        CompositionInspectorUI.CompositionLoaded(
+                            Ok {
+                                composition with
+                                    Modules =
+                                        List.init count (fun i -> inspectedComponent (sprintf "module-%03d" i) None)
+                            }
+                        )
+                    )
+
+            let tree m =
+                CompositionInspectorTree.tree inspectorMsgs CompositionPanel m
+
+            let export = CompositionInspectorUI.ExportRequested CompositionPanel
+            let built, total = across tree (withModules 100) export
+            let oneRow, _ = across tree (withModules 1) export
+
+            Expect.isTrue (built <= oneRow) (sprintf "built %d of %d (a one-row page builds %d)" built total oneRow)
+            Expect.isTrue (total > 900) (sprintf "the page holds the 100 rows (%d nodes)" total))
     ]
 
 // ─── The kit's own go-red proofs ─────────────────────────────────────
@@ -3087,6 +3321,7 @@ let tests =
         migrationTests
         usageTests
         landingTests
+        inspectorTests
         constructedTests
         goRedTests
         nameTests

@@ -406,6 +406,12 @@ let private treeSurfaceTests =
         testCase "every no-active-team landing state passes the Strict floor as a tree" (fun () ->
             TreeViewParityTests.strictInEvery (TreeViewParityTests.landingStates ()) TreeViewParityTests.landingTree)
 
+        testCase "every composition-inspector page passes the Strict floor as a tree in every state" (fun () ->
+            for panel in TreeViewParityTests.inspectorPanels do
+                TreeViewParityTests.strictInEvery
+                    (TreeViewParityTests.inspectorStates panel)
+                    (TreeViewParityTests.inspectorTree panel))
+
         testCase "the palette's tree, its overlay an island, passes the Strict floor" (fun () ->
             let html = ViewMount.mount (Components.CommandPaletteTree.Surface paletteProps)
             let node = Accessibility.ofHtml html
@@ -598,6 +604,9 @@ let private treeSurfaceTests =
                     (ToolUp.Platform.NoActiveTeamLandingUI.builtIn landing).View
                     (TreeViewParityTests.landingInit ()).Model,
                 landing.Body
+                "the composition inspector's five pages",
+                render CompositionInspectorUI.builtIn.View (TreeViewParityTests.inspectorLoaded ()).Model,
+                MessageCatalog.english.CompositionInspector.Subheading
             ]
 
             for name, rendered, text in pages do

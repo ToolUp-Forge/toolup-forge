@@ -4843,3 +4843,294 @@ module NoActiveTeamLanding =
                 ]
             ]
         ]
+
+/// The composition inspector's pages as Feliz (`CompositionInspectorUI`'s pages before their tree).
+module CompositionInspector =
+    open Browser
+    open CompositionInspectorUI
+
+    // ─── View helpers ────────────────────────────────────────────────────
+
+    /// A table column: identifiers and values in monospace, prose plain.
+    let private column (header: string) (cell: 'row -> string) : Data.Column<'row> = {
+        Header = header
+        Align = Data.Left
+        Cell = fun row -> Html.span [ prop.className "font-mono break-all"; prop.text (cell row) ]
+    }
+
+    let private proseColumn (header: string) (cell: 'row -> string) : Data.Column<'row> = {
+        Header = header
+        Align = Data.Left
+        Cell = fun row -> Html.span [ prop.text (cell row) ]
+    }
+
+    let private emptyNote (text: string) =
+        Html.p [ prop.className ("text-sm italic " + Tokens.Text.muted); prop.text text ]
+
+    let private sectionHeading (text: string) =
+        Html.h3 [
+            prop.className ("text-sm font-semibold mt-5 mb-2 " + Tokens.Text.primary)
+            prop.text text
+        ]
+
+    /// A component group: heading with its count, then the table or the
+    /// group's own "declares none" line. The count is in the heading rather
+    /// than only in the table because a reviewer scanning the page needs the
+    /// zero to be as visible as the seven.
+    let private componentSection
+        (msgs: CompositionInspectorMessages)
+        (name: string)
+        (entries: InspectedComponent list)
+        =
+        Html.div [
+            prop.children [
+                sectionHeading (msgs.SectionCount name (List.length entries))
+                if List.isEmpty entries then
+                    emptyNote (msgs.NoneDeclared name)
+                else
+                    Data.table
+                        [
+                            column msgs.ColumnId (fun (e: InspectedComponent) -> e.Id)
+                            column msgs.ColumnKind _.Kind
+                            proseColumn msgs.ColumnLabel _.Label
+                            column msgs.ColumnImpl (fun e -> e.Impl |> Option.defaultValue "—")
+                        ]
+                        entries
+            ]
+        ]
+
+    /// The per-panel export control, plus any failure it produced. Rendered
+    /// at the head of every panel so the affordance sits in the same place
+    /// on all five.
+    let private exportBar (msgs: CompositionInspectorMessages) (panel: InspectorPanel) (model: Model) dispatch =
+        let inFlight = model.Exporting = Some panel
+
+        Html.div [
+            prop.className "flex items-center gap-3 mb-3"
+            prop.children [
+                Forms.Button.secondaryWith
+                    (Forms.Button.stateOf inFlight msgs.Exporting false)
+                    msgs.ExportJson
+                    (fun () -> dispatch (ExportRequested panel))
+                Forms.Button.secondaryWith Forms.Button.Enabled msgs.Refresh (fun () -> dispatch Refresh)
+                match model.ExportError with
+                | Some(failed, err) when failed = panel ->
+                    Html.span [ prop.className "text-sm text-red-700"; prop.text err ]
+                | _ -> Html.none
+            ]
+        ]
+
+    /// Wrap one panel's body in its load state. The failure arm renders the
+    /// handler's own sentence verbatim — those messages distinguish "you may
+    /// not read this", "no snapshot was recorded" and a transport failure,
+    /// and paraphrasing them client-side would collapse the distinction.
+    let private panelBody (msgs: CompositionInspectorMessages) (data: PanelData<'T>) (render: 'T -> ReactElement) =
+        match data with
+        | PanelLoading -> Html.div [ prop.className ("text-sm " + Tokens.Text.muted); prop.text msgs.Loading ]
+        | PanelFailed err ->
+            Html.div [
+                prop.className "p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
+                prop.text err
+            ]
+        | PanelLoaded value -> render value
+
+    /// One panel's page: the inspector's heading, the panel's title and export
+    /// bar, then the panel's body.
+    let private inspectorPage
+        (msgs: CompositionInspectorMessages)
+        (panel: InspectorPanel)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        (renderBody: CompositionInspectorMessages -> Model -> ReactElement)
+        : ReactElement =
+
+        let title =
+            match panel with
+            | CompositionPanel -> msgs.CompositionTitle
+            | SurfacesPanel -> msgs.SurfacesTitle
+            | RulesPanel -> msgs.RulesTitle
+            | DisclosurePanel -> msgs.DisclosureTitle
+            | ProvenancePanel -> msgs.ProvenanceTitle
+
+        Html.div [
+            prop.className "p-4"
+            prop.children [
+                Html.h2 [
+                    prop.className ("text-lg font-semibold mb-1 " + Tokens.Text.primary)
+                    prop.text msgs.Heading
+                ]
+                Html.p [
+                    prop.className ("text-sm mb-3 " + Tokens.Text.secondary)
+                    prop.text msgs.Subheading
+                ]
+                Html.h3 [
+                    prop.className ("text-base font-semibold mb-2 " + Tokens.Text.primary)
+                    prop.text title
+                ]
+                exportBar msgs panel model dispatch
+                renderBody msgs model
+            ]
+        ]
+
+    // ─── Panels ──────────────────────────────────────────────────────────
+
+    let private compositionBody (msgs: CompositionInspectorMessages) (model: Model) =
+        panelBody msgs model.Composition (fun view ->
+            Html.div [
+                prop.children [
+                    componentSection msgs msgs.Modules view.Modules
+                    componentSection msgs msgs.CompanionSlots view.CompanionSlots
+                    componentSection msgs msgs.DataTypes view.DataTypes
+                    componentSection msgs msgs.Tools view.Tools
+                    componentSection msgs msgs.Metrics view.Metrics
+                    componentSection msgs msgs.Subjects view.Subjects
+                    componentSection msgs msgs.Purposes view.Purposes
+
+                    sectionHeading (msgs.SectionCount msgs.ConfigKnobs (List.length view.ConfigKnobs))
+
+                    if List.isEmpty view.ConfigKnobs then
+                        emptyNote (msgs.NoneDeclared msgs.ConfigKnobs)
+                    else
+                        Data.table
+                            [
+                                column msgs.ColumnName (fun (k: InspectedKnob) -> k.Name)
+                                column msgs.ColumnValue _.Value
+                            ]
+                            view.ConfigKnobs
+
+                    sectionHeading (msgs.SectionCount msgs.CanonicalMethods (List.length view.CanonicalMethods))
+
+                    if List.isEmpty view.CanonicalMethods then
+                        emptyNote (msgs.NoneDeclared msgs.CanonicalMethods)
+                    else
+                        Data.table
+                            [
+                                column msgs.ColumnName (fun (m: InspectedCanonicalMethod) -> m.MetricId)
+                                column msgs.ColumnValue _.Selector
+                            ]
+                            view.CanonicalMethods
+                ]
+            ])
+
+    let private surfacesBody (msgs: CompositionInspectorMessages) (model: Model) =
+        panelBody msgs model.Surfaces (fun view ->
+            Html.div [
+                prop.children [
+                    if List.isEmpty view.Descriptors then
+                        match view.Note with
+                        | Some note -> emptyNote note
+                        | None -> emptyNote (msgs.NoneDeclared msgs.SurfacesTitle)
+                    else
+                        Html.div [
+                            prop.children [
+                                for descriptor in view.Descriptors ->
+                                    Html.div [
+                                        prop.key (descriptor.Family + ":" + descriptor.Subject)
+                                        prop.children [
+                                            sectionHeading (descriptor.Family + " — " + descriptor.Subject)
+                                            Html.pre [
+                                                prop.className
+                                                    "p-3 bg-gray-50 border border-gray-200 rounded text-xs font-mono overflow-x-auto"
+                                                prop.text descriptor.Json
+                                            ]
+                                        ]
+                                    ]
+                            ]
+                        ]
+                ]
+            ])
+
+    let private rulesBody (msgs: CompositionInspectorMessages) (model: Model) =
+        panelBody msgs model.Rules (fun view ->
+            Html.div [
+                prop.children [
+                    Html.p [
+                        prop.className ("text-xs mb-2 " + Tokens.Text.muted)
+                        prop.text (msgs.CapturedAt(view.CapturedAtUtc.ToString "u"))
+                    ]
+
+                    sectionHeading (msgs.SectionCount msgs.RuleManifest (List.length view.Rules))
+
+                    if List.isEmpty view.Rules then
+                        emptyNote (msgs.NoneDeclared msgs.RuleManifest)
+                    else
+                        Data.table
+                            [
+                                column msgs.ColumnCode (fun (r: InspectedRule) -> r.Code)
+                                column msgs.ColumnSeverity _.Severity
+                                column msgs.ColumnClass _.RuleClass
+                                proseColumn msgs.ColumnDescription _.Description
+                            ]
+                            view.Rules
+
+                    sectionHeading (msgs.SectionCount msgs.PreflightFindings (List.length view.Defects))
+
+                    // The pass state is its own sentence, not an empty
+                    // table: "nothing failed" and "nothing ran" look
+                    // identical as a blank, and only one of them is a
+                    // guarantee.
+                    if List.isEmpty view.Defects then
+                        emptyNote msgs.AllRulesPassed
+                    else
+                        Data.table
+                            [
+                                column msgs.ColumnCode (fun (d: InspectedDefect) -> d.Code)
+                                column msgs.ColumnSeverity _.Severity
+                                proseColumn msgs.ColumnMessage _.Message
+                            ]
+                            view.Defects
+                ]
+            ])
+
+    let private disclosureBody (msgs: CompositionInspectorMessages) (model: Model) =
+        panelBody msgs model.Disclosure (fun view ->
+            Html.div [
+                prop.children [
+                    Html.p [
+                        prop.className ("text-xs font-mono break-all mb-3 " + Tokens.Text.muted)
+                        prop.text (msgs.EnvelopeDigest + ": " + view.Digest)
+                    ]
+
+                    if List.isEmpty view.Declarations then
+                        emptyNote msgs.NoDeclarations
+                    else
+                        Data.table
+                            [
+                                column msgs.ColumnFacet (fun (d: InspectedDeclaration) -> d.Facet)
+                                column msgs.ColumnSubject _.Subject
+                                proseColumn msgs.ColumnValue _.Value
+                            ]
+                            view.Declarations
+                ]
+            ])
+
+    let private provenanceBody (msgs: CompositionInspectorMessages) (model: Model) =
+        panelBody msgs model.Provenance (fun view ->
+            let stateOf composed =
+                if composed then msgs.Composed else msgs.NotComposed
+
+            Html.div [
+                prop.children [
+                    Data.table [ proseColumn msgs.ColumnName fst; column msgs.ColumnValue (snd >> stateOf) ] [
+                        msgs.ProvenanceGraph, view.GraphComposed
+                        msgs.ProvenanceFactEvidence, view.FactEvidenceComposed
+                        msgs.ProvenanceArtifacts, view.ArtifactProvenanceComposed
+                    ]
+                    Html.p [
+                        prop.className ("text-sm mt-3 " + Tokens.Text.secondary)
+                        prop.text msgs.ProvenanceWalkNote
+                    ]
+                ]
+            ])
+
+    /// The page of `panel`, as its Feliz page drew it.
+    let page (msgs: CompositionInspectorMessages) (panel: InspectorPanel) (model: Model) (dispatch: Msg -> unit) =
+        let render =
+            match panel with
+            | CompositionPanel -> compositionBody
+            | SurfacesPanel -> surfacesBody
+            | RulesPanel -> rulesBody
+            | DisclosurePanel -> disclosureBody
+            | ProvenancePanel -> provenanceBody
+
+        inspectorPage msgs panel model dispatch render
