@@ -619,6 +619,114 @@ let private scenarios = [
             })
     })
 
+    shellScenario "the health monitor opens from the rail and a refresh reads the probes again" (fun page -> async {
+        do! openFromRail page "Observability" "_sdk.HealthMonitor"
+
+        do!
+            wait "the health tree to read the probes" (fun () -> async {
+                let! probes = count page (node "health-probes")
+                return probes = 1
+            })
+
+        let! before = innerTextOf page (node "health-live-generated")
+
+        // The generated instant is to the second: a refresh within the same
+        // second would read the same.
+        do! Async.Sleep 1100
+
+        do!
+            page.Locator(node "health-live-header-refresh" + " button").ClickAsync()
+            |> Async.AwaitTask
+
+        do!
+            wait "the server's new snapshot" (fun () -> async {
+                let! probes = count page (node "health-probes")
+                let! after = innerTextOf page (node "health-live-generated")
+                return probes = 1 && after <> "" && after <> before
+            })
+    })
+
+    shellScenario
+        "the service status board opens from the rail, collapses a section and reads the board again"
+        (fun page -> async {
+            do! openFromRail page "Platform Management" "_sdk.ServiceStatusBoard"
+
+            do!
+                wait "the status tree to read the board" (fun () -> async {
+                    let! sections = count page (node "status-sections")
+                    return sections = 1
+                })
+
+            let toggle = node "status-section-Health-toggle" + " button"
+            do! page.Locator(toggle).ClickAsync() |> Async.AwaitTask
+
+            do!
+                wait "the health section collapsed" (fun () -> async {
+                    let! expanded = page.Locator(toggle).GetAttributeAsync "aria-expanded" |> Async.AwaitTask
+                    let! headline = count page (node "status-section-Health-headline")
+                    return expanded = "false" && headline = 0
+                })
+
+            let! before = innerTextOf page (node "status-generated")
+            do! Async.Sleep 1100
+
+            do!
+                page.Locator(node "status-refresh-all" + " button").ClickAsync()
+                |> Async.AwaitTask
+
+            do!
+                wait "the server's new board" (fun () -> async {
+                    let! after = innerTextOf page (node "status-generated")
+                    return after <> "" && after <> before
+                })
+        })
+
+    shellScenario "background jobs open from the rail and a confirmed re-run lands" (fun page -> async {
+        do! openFromRail page "Team Management" "_sdk.Jobs"
+
+        do!
+            wait "the jobs tree, with the sample's job" (fun () -> async {
+                let! table = count page (node "jobs-table")
+                return table = 1
+            })
+
+        do!
+            page.Locator("[data-fuaran-node-id^='jobs-job-'][data-fuaran-node-id$='-rerun'] button").First.ClickAsync()
+            |> Async.AwaitTask
+
+        do!
+            page.Locator(node "jobs-rerun-confirm" + " button").ClickAsync()
+            |> Async.AwaitTask
+
+        do!
+            wait "the re-run's attempt, polled from the server" (fun () -> async {
+                let! text = innerTextOf page (node "jobs-table")
+                return text.Contains "Re-run finished"
+            })
+    })
+
+    shellScenario "data migrations open from the rail and a pass is run" (fun page -> async {
+        do! openFromRail page "Platform Management" "_sdk.DataMigrations"
+
+        do!
+            wait "the migrations tree, with the sample's data type" (fun () -> async {
+                let! text = innerTextOf page (node "migration-table")
+                return text.Contains "Not yet run"
+            })
+
+        do!
+            page
+                .Locator("[data-fuaran-node-id^='migration-type-'][data-fuaran-node-id$='-migrate'] button")
+                .First.ClickAsync()
+            |> Async.AwaitTask
+
+        do!
+            wait "the server's answer: the type is up to date" (fun () -> async {
+                let! text = innerTextOf page (node "migration-table")
+                return text.Contains "Up to date"
+            })
+    })
+
     shellScenario "the command palette opens on Ctrl+K, narrows on a query and navigates" (fun page -> async {
         let input = "[data-toolup-palette='input']"
         let rows = "[data-toolup-palette='results'] [data-toolup-palette-index]"
