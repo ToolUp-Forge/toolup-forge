@@ -162,10 +162,12 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
     | RefreshLive ->
         // Refresh both panels on the Live tab in one click — scheduler
         // telemetry is a pull off an in-memory counter (cheap) so
-        // re-fetching alongside the probe sweep is free.
+        // re-fetching alongside the probe sweep is free. The live reading
+        // is kept while the sweep is in flight: the answer is compared
+        // with it to mark the probes whose status changed.
         {
             model with
-                Live = Remote.Loading
+                Live = Remote.reload model.Live
                 SchedulerTelemetry = Remote.Loading
                 Degraded = Remote.Loading
                 AIDenials = Remote.Loading

@@ -158,7 +158,14 @@ let private flippedSections
 /// The transitions, with their remote calls as values.
 let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list =
     match msg with
-    | RefreshAll -> { model with Snapshot = Remote.Loading }, loadSnapshot ()
+    // The board is kept while the refresh is in flight: the answer is
+    // compared with it to mark the sections whose status changed.
+    | RefreshAll ->
+        {
+            model with
+                Snapshot = Remote.reload model.Snapshot
+        },
+        loadSnapshot ()
 
     | SnapshotLoaded(Ok snap) ->
         let flipped = flippedSections model.Messages (Remote.toOption model.Snapshot) snap
@@ -221,9 +228,16 @@ let update (msg: Msg) (model: Model) : Model * Step<Msg, RemoteEffect<Msg>> list
                 else
                     model.RecentlyFlipped
 
+            // A section answering while Refresh all is in flight keeps the
+            // board in flight.
+            let snapshot =
+                match model.Snapshot with
+                | Remote.Reloading _ -> Remote.Reloading withOverall
+                | _ -> Remote.Loaded withOverall
+
             {
                 model with
-                    Snapshot = Remote.Loaded withOverall
+                    Snapshot = snapshot
                     Refreshing = nextRefreshing
                     RecentlyFlipped = recentlyFlipped
             },

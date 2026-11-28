@@ -1818,6 +1818,55 @@ let private healthTests =
                 .AssertModelWith("Re-fetch reads the preflight snapshot again", fun m -> Remote.isLoading m.Preflight)
             |> ignore)
 
+        testCase "a refresh keeps the previous reading in flight, so the changed probe is marked" (fun () ->
+            let refreshing = (healthLoaded ()).Dispatch HealthMonitorUI.RefreshLive
+
+            refreshing.AssertModelWith(
+                "the refresh is in flight and still holds the previous reading",
+                fun m -> Remote.isLoading m.Live && (Remote.toOption m.Live).IsSome
+            )
+            |> ignore
+
+            refreshing
+                .Dispatch(
+                    HealthMonitorUI.LiveLoaded(
+                        Ok(snapshotOf [ probe "blob_storage" "Healthy"; probe "event_store" "Healthy" ])
+                    )
+                )
+                .AssertModelWith(
+                    "the probe whose status changed is marked",
+                    fun m -> m.RecentlyFlipped = Set.singleton "event_store"
+                )
+            |> ignore)
+
+        testCase "a refreshed reading draws the changed probe as changed" (fun () ->
+            let refreshing = (healthLoaded ()).Dispatch HealthMonitorUI.RefreshLive
+
+            Expect.isTrue
+                (refreshing.RenderViewHtml(ViewMount.mount, healthTree).Contains healthMsgs.Refreshing)
+                "the refresh shows that it is in flight"
+
+            let refreshed =
+                refreshing.Dispatch(
+                    HealthMonitorUI.LiveLoaded(
+                        Ok(snapshotOf [ probe "blob_storage" "Healthy"; probe "event_store" "Healthy" ])
+                    )
+                )
+
+            let unmarked =
+                ViewMount.mount (
+                    healthTree
+                        {
+                            refreshed.Model with
+                                RecentlyFlipped = Set.empty
+                        }
+                        ignore
+                )
+
+            Expect.isFalse
+                (refreshed.RenderViewHtml(ViewMount.mount, healthTree) = unmarked)
+                "the changed probe's status is drawn as changed")
+
         // One difference, judged, and nothing else: the tabs are one tab stop
         // with the active tab's panel after it. The buttons and their order
         // match. The two states with a scheduler are not compared: the Feliz
@@ -2073,6 +2122,15 @@ let private statusSnapshot () : ServiceStatusSnapshot =
         SmokeTest = smoke
     }
 
+/// The board read again with its health section failed.
+let private statusHealthFailed () : ServiceStatusSnapshot =
+    let read = statusSnapshot ()
+
+    {
+        read with
+            Health = section StatusSeverity.Error "1 of 4 probes unhealthy" [ "event_store: unhealthy" ]
+    }
+
 let statusInit () =
     fromUnitInit (fun () -> ServiceStatusBoardUI.init ClientModuleContext.empty) ServiceStatusBoardUI.update
 
@@ -2127,6 +2185,47 @@ let private statusTests =
                 .Interact(ViewMount.mountAndInteract, statusTree, Drive.click statusMsgs.RefreshAll)
                 .AssertModelWith("Refresh all reads the board again", fun m -> Remote.isLoading m.Snapshot)
             |> ignore)
+
+        testCase "Refresh all keeps the previous board in flight, so the changed section is marked" (fun () ->
+            let refreshing = (statusLoaded ()).Dispatch ServiceStatusBoardUI.RefreshAll
+
+            refreshing.AssertModelWith(
+                "the refresh is in flight and still holds the previous board",
+                fun m -> Remote.isLoading m.Snapshot && (Remote.toOption m.Snapshot).IsSome
+            )
+            |> ignore
+
+            refreshing
+                .Dispatch(ServiceStatusBoardUI.SnapshotLoaded(Ok(statusHealthFailed ())))
+                .AssertModelWith(
+                    "the section whose severity changed is marked",
+                    fun m -> m.RecentlyFlipped = Set.singleton ServiceStatusSnapshot.HealthSection
+                )
+            |> ignore)
+
+        testCase "a refreshed board draws the changed section as changed" (fun () ->
+            let refreshing = (statusLoaded ()).Dispatch ServiceStatusBoardUI.RefreshAll
+
+            Expect.isTrue
+                (refreshing.RenderViewHtml(ViewMount.mount, statusTree).Contains statusMsgs.Refreshing)
+                "the refresh shows that it is in flight"
+
+            let refreshed =
+                refreshing.Dispatch(ServiceStatusBoardUI.SnapshotLoaded(Ok(statusHealthFailed ())))
+
+            let unmarked =
+                ViewMount.mount (
+                    statusTree
+                        {
+                            refreshed.Model with
+                                RecentlyFlipped = Set.empty
+                        }
+                        ignore
+                )
+
+            Expect.isFalse
+                (refreshed.RenderViewHtml(ViewMount.mount, statusTree) = unmarked)
+                "the changed section's status is drawn as changed")
 
         // Nothing judged but the tab order. Only the board's loading and failed
         // states are compared: the Feliz page threw drawing a read board's
