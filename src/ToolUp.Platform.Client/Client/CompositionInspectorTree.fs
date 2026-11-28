@@ -120,8 +120,8 @@ let private section
     (name: string)
     (entries: 'Row list)
     (table: unit -> Node<Msg>)
-    : Node<Msg> list =
-    [
+    : Node<Msg> =
+    Nodes.Layout.column id [
         sectionHeading (Nodes.Ids.child id "heading") (msgs.SectionCount name (List.length entries))
         if List.isEmpty entries then
             note (Nodes.Ids.child id "none") (msgs.NoneDeclared name)
@@ -129,34 +129,40 @@ let private section
             table ()
     ]
 
+/// A panel's sections, set further apart than a section's own lines so each
+/// heading reads with the table under it.
+let private sections (id: string) (children: Node<Msg> list) : Node<Msg> =
+    Fuaran.box id {
+        Defaults.box with
+            Layout = BoxLayout.Flex(Orientation.Vertical, false, Some 28)
+            Children = children
+    }
+
 let private compositionBody (msgs: CompositionInspectorMessages) (view: CompositionView) : Node<Msg> =
-    Nodes.Layout.column "inspector-composition" [
+    sections "inspector-composition" [
         for key, name, entries in groups msgs view do
             let id = "inspector-" + key
 
-            yield!
-                section id msgs name entries (fun () ->
-                    Nodes.Table.table
-                        (Nodes.Ids.child id "table")
-                        name
-                        (componentColumns msgs)
-                        (componentRows[key].List msgs entries))
-
-        yield!
-            section "inspector-knobs" msgs msgs.ConfigKnobs view.ConfigKnobs (fun () ->
+            section id msgs name entries (fun () ->
                 Nodes.Table.table
-                    "inspector-knobs-table"
-                    msgs.ConfigKnobs
-                    (nameValueColumns msgs)
-                    (knobRows.List msgs view.ConfigKnobs))
+                    (Nodes.Ids.child id "table")
+                    name
+                    (componentColumns msgs)
+                    (componentRows[key].List msgs entries))
 
-        yield!
-            section "inspector-methods" msgs msgs.CanonicalMethods view.CanonicalMethods (fun () ->
-                Nodes.Table.table
-                    "inspector-methods-table"
-                    msgs.CanonicalMethods
-                    (nameValueColumns msgs)
-                    (methodRows.List msgs view.CanonicalMethods))
+        section "inspector-knobs" msgs msgs.ConfigKnobs view.ConfigKnobs (fun () ->
+            Nodes.Table.table
+                "inspector-knobs-table"
+                msgs.ConfigKnobs
+                (nameValueColumns msgs)
+                (knobRows.List msgs view.ConfigKnobs))
+
+        section "inspector-methods" msgs msgs.CanonicalMethods view.CanonicalMethods (fun () ->
+            Nodes.Table.table
+                "inspector-methods-table"
+                msgs.CanonicalMethods
+                (nameValueColumns msgs)
+                (methodRows.List msgs view.CanonicalMethods))
     ]
 
 // ─── Surfaces ────────────────────────────────────────────────────────
@@ -234,30 +240,31 @@ let private defectRows =
     )
 
 let private rulesBody (msgs: CompositionInspectorMessages) (view: RulesView) : Node<Msg> =
-    Nodes.Layout.column "inspector-rules" [
+    sections "inspector-rules" [
         Nodes.text "inspector-captured" (msgs.CapturedAt(universal view.CapturedAtUtc))
-        yield!
-            section "inspector-rule-manifest" msgs msgs.RuleManifest view.Rules (fun () ->
-                Nodes.Table.table
-                    "inspector-rules-table"
-                    msgs.RuleManifest
-                    (ruleColumns msgs)
-                    (ruleRows.List msgs view.Rules))
+        section "inspector-rule-manifest" msgs msgs.RuleManifest view.Rules (fun () ->
+            Nodes.Table.table
+                "inspector-rules-table"
+                msgs.RuleManifest
+                (ruleColumns msgs)
+                (ruleRows.List msgs view.Rules))
 
         // The pass state is its own sentence, not an empty table: "nothing
         // failed" and "nothing ran" look identical as a blank, and only one
         // of them is a guarantee.
-        sectionHeading
-            "inspector-findings-heading"
-            (msgs.SectionCount msgs.PreflightFindings (List.length view.Defects))
-        if List.isEmpty view.Defects then
-            note "inspector-findings-none" msgs.AllRulesPassed
-        else
-            Nodes.Table.table
-                "inspector-findings-table"
-                msgs.PreflightFindings
-                (defectColumns msgs)
-                (defectRows.List msgs view.Defects)
+        Nodes.Layout.column "inspector-findings" [
+            sectionHeading
+                "inspector-findings-heading"
+                (msgs.SectionCount msgs.PreflightFindings (List.length view.Defects))
+            if List.isEmpty view.Defects then
+                note "inspector-findings-none" msgs.AllRulesPassed
+            else
+                Nodes.Table.table
+                    "inspector-findings-table"
+                    msgs.PreflightFindings
+                    (defectColumns msgs)
+                    (defectRows.List msgs view.Defects)
+        ]
     ]
 
 // ─── Disclosure ──────────────────────────────────────────────────────
